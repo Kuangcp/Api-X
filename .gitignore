@@ -7,6 +7,9 @@ build/
 gradle/
 gradlew
 gradlew.bat
+git-report/
+
+update.sh
 
 ### IntelliJ IDEA ###
 .idea/modules.xml

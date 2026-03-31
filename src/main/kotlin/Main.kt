@@ -490,7 +490,7 @@ private fun tokenizeShellCommand(command: String): List<String> {
 }
 
 fun main() = application {
-    Window(onCloseRequest = ::exitApplication) {
+    Window(title = "Api-X", onCloseRequest = ::exitApplication) {
         App()
     }
 }
