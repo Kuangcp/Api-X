@@ -5,13 +5,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Button
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -21,6 +22,7 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -54,12 +56,13 @@ fun App() {
         )
     }
     var bodyText by remember { mutableStateOf("{\n  \"name\": \"api-x\"\n}") }
-    var responseText by remember { mutableStateOf("响应结果会显示在这里") }
+    var responseLines by remember { mutableStateOf(mutableStateListOf("响应结果会显示在这里")) }
+    var responsePartialLine by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var isSseResponse by remember { mutableStateOf(false) }
     var activeRequestControl by remember { mutableStateOf<RequestControl?>(null) }
     var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
-    val responseScrollState = rememberScrollState()
+    val responseListState = rememberLazyListState()
 
     MaterialTheme {
         Column(
@@ -75,7 +78,8 @@ fun App() {
             ) {
                 Button(
                     onClick = {
-                        responseText = "设置功能待实现"
+                        setSingleResponseMessage(responseLines, "设置功能待实现")
+                        responsePartialLine = null
                     },
                     enabled = !isLoading
                 ) {
@@ -90,9 +94,11 @@ fun App() {
                             url = parsed.url.ifBlank { url }
                             headersText = parsed.headers.joinToString("\n")
                             bodyText = parsed.body
-                            responseText = "已从剪贴板导入 cURL"
+                            setSingleResponseMessage(responseLines, "已从剪贴板导入 cURL")
+                            responsePartialLine = null
                         } catch (e: Exception) {
-                            responseText = "导入 cURL 失败: ${e.message}"
+                            setSingleResponseMessage(responseLines, "导入 cURL 失败: ${e.message}")
+                            responsePartialLine = null
                         }
                     },
                     enabled = !isLoading
@@ -144,7 +150,31 @@ fun App() {
                             val control = RequestControl()
                             activeRequestControl = control
                             isLoading = true
-                            responseText = "请求中...\n"
+                            responseLines = mutableStateListOf()
+                            responsePartialLine = null
+                            control.lineBuffer.append("请求中...\n")
+                            applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) {
+                                responsePartialLine = it
+                            }
+                            val flusher = thread(isDaemon = true) {
+                                while (!control.finished && !control.cancelled) {
+                                    try {
+                                        Thread.sleep(UI_REFRESH_INTERVAL_MS)
+                                    } catch (_: InterruptedException) {
+                                        break
+                                    }
+                                    if (activeRequestControl !== control) break
+                                    val update = control.lineBuffer.drainUpdate()
+                                    if (!update.hasChanges()) continue
+                                    EventQueue.invokeLater {
+                                        if (activeRequestControl === control) {
+                                            applyBufferUpdate(update, responseLines) { partial ->
+                                                responsePartialLine = partial
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                             val worker = thread {
                                 sendRequestStreaming(
                                     method = method,
@@ -158,21 +188,24 @@ fun App() {
                                         }
                                     },
                                     onChunk = { chunk ->
-                                        EventQueue.invokeLater {
-                                            if (activeRequestControl === control && !control.cancelled) {
-                                                responseText = appendWithLimit(responseText, chunk)
-                                            }
+                                        if (activeRequestControl === control && !control.cancelled) {
+                                            control.lineBuffer.append(chunk)
                                         }
                                     }
                                 )
                                 EventQueue.invokeLater {
                                     if (activeRequestControl === control) {
+                                        control.finished = true
+                                        applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
+                                            responsePartialLine = partial
+                                        }
                                         isLoading = false
                                         isSseResponse = false
                                         activeRequestControl = null
                                         activeRequestThread = null
                                     }
                                 }
+                                flusher.interrupt()
                             }
                             activeRequestThread = worker
                         } else {
@@ -180,9 +213,12 @@ fun App() {
                             if (control != null) {
                                 control.cancelled = true
                                 closeQuietly(control.activeInput)
+                                control.lineBuffer.append("\n[请求已取消]\n")
+                                applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
+                                    responsePartialLine = partial
+                                }
                             }
                             activeRequestThread?.interrupt()
-                            responseText = appendWithLimit(responseText, "\n[请求已取消]\n")
                             isLoading = false
                             isSseResponse = false
                             activeRequestControl = null
@@ -225,31 +261,41 @@ fun App() {
                         .background(Color.White)
                         .padding(12.dp)
                 ) {
-                    Text(
-                        text = responseText,
+                    LazyColumn(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(end = 12.dp)
-                            .verticalScroll(responseScrollState)
-                    )
+                            .padding(end = 12.dp),
+                        state = responseListState
+                    ) {
+                        items(responseLines) { line ->
+                            Text(line)
+                        }
+                        responsePartialLine?.let { partial ->
+                            item("partial") {
+                                Text(partial)
+                            }
+                        }
+                    }
                     VerticalScrollbar(
                         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                        adapter = rememberScrollbarAdapter(responseScrollState)
+                        adapter = rememberScrollbarAdapter(responseListState)
                     )
                 }
             }
         }
     }
 
-    LaunchedEffect(responseText, isSseResponse) {
+    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse) {
         if (isSseResponse) {
-            responseScrollState.scrollTo(responseScrollState.maxValue)
+            val total = responseLines.size + if (responsePartialLine != null) 1 else 0
+            if (total > 0) {
+                responseListState.scrollToItem(total - 1)
+            }
         }
     }
 }
 
-private const val MAX_RESPONSE_CHARS = 200_000
-private const val TRUNCATE_HINT = "\n[响应过长，已自动截断旧内容]\n"
+private const val UI_REFRESH_INTERVAL_MS = 100L
 private val HTTP_METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
 
 private fun sendRequestStreaming(
@@ -361,12 +407,49 @@ private fun hexToColorCode(hex: String): ULong {
     return ("0x$argb").removePrefix("0x").toULong(16)
 }
 
-private fun appendWithLimit(current: String, incoming: String): String {
-    val merged = current + incoming
-    if (merged.length <= MAX_RESPONSE_CHARS) return merged
+private data class BufferUpdate(
+    val newLines: List<String>,
+    val partialLine: String?
+) {
+    fun hasChanges(): Boolean = newLines.isNotEmpty() || partialLine != null
+}
 
-    val tail = merged.takeLast(MAX_RESPONSE_CHARS - TRUNCATE_HINT.length)
-    return TRUNCATE_HINT + tail
+private class ResponseLineBuffer {
+    private val pendingLines = mutableListOf<String>()
+    private val currentLine = StringBuilder()
+    private var emittedPartial: String? = null
+
+    @Synchronized
+    fun append(text: String) {
+        var start = 0
+        while (start < text.length) {
+            val index = text.indexOf('\n', start)
+            if (index == -1) {
+                currentLine.append(text, start, text.length)
+                break
+            }
+            currentLine.append(text, start, index)
+            pendingLines += currentLine.toString()
+            currentLine.setLength(0)
+            start = index + 1
+        }
+    }
+
+    @Synchronized
+    fun drainUpdate(): BufferUpdate {
+        val newLines = if (pendingLines.isNotEmpty()) pendingLines.toList() else emptyList()
+        pendingLines.clear()
+
+        val current = currentLine.toString()
+        val partial = current.takeIf { it.isNotEmpty() }
+        val partialChanged = partial != emittedPartial
+        emittedPartial = partial
+
+        return BufferUpdate(
+            newLines = newLines,
+            partialLine = if (partialChanged) partial else null
+        )
+    }
 }
 
 private data class CurlRequest(
@@ -382,6 +465,29 @@ private class RequestControl {
 
     @Volatile
     var activeInput: InputStream? = null
+
+    @Volatile
+    var finished: Boolean = false
+
+    val lineBuffer = ResponseLineBuffer()
+}
+
+private fun applyBufferUpdate(
+    update: BufferUpdate,
+    responseLines: MutableList<String>,
+    setPartial: (String?) -> Unit
+) {
+    if (update.newLines.isNotEmpty()) {
+        responseLines.addAll(update.newLines)
+    }
+    if (update.partialLine != null || update.newLines.isNotEmpty()) {
+        setPartial(update.partialLine)
+    }
+}
+
+private fun setSingleResponseMessage(responseLines: MutableList<String>, message: String) {
+    responseLines.clear()
+    responseLines += message
 }
 
 private fun closeQuietly(input: InputStream?) {

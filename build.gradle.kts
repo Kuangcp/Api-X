@@ -26,8 +26,10 @@ compose.desktop {
     application {
         mainClass = "MainKt"
         jvmArgs += listOf(
-            "-Xms64m",
-            "-Xmx600m",
+            "-Xms256m",
+            "-Xmx700m",
+            "-Xss512k",
+            "-XX:MaxDirectMemorySize=512M",
             "-XX:+UseG1GC"
         )
 
