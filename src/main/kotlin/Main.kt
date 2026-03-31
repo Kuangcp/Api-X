@@ -1,18 +1,24 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.Button
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
@@ -28,8 +34,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import java.awt.EventQueue
@@ -42,6 +52,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import kotlin.concurrent.thread
 
 @Composable
@@ -60,8 +71,14 @@ fun App() {
     var responsePartialLine by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var isSseResponse by remember { mutableStateOf(false) }
+    var statusCodeText by remember { mutableStateOf("-") }
+    var responseTimeText by remember { mutableStateOf("-") }
+    var responseSizeText by remember { mutableStateOf("0 B") }
     var activeRequestControl by remember { mutableStateOf<RequestControl?>(null) }
     var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
+    var splitRatio by remember { mutableStateOf(0.5f) }
+    var contentRowWidthPx by remember { mutableStateOf(1f) }
+    var leftTabIndex by remember { mutableStateOf(0) }
     val responseListState = rememberLazyListState()
 
     MaterialTheme {
@@ -80,6 +97,9 @@ fun App() {
                     onClick = {
                         setSingleResponseMessage(responseLines, "设置功能待实现")
                         responsePartialLine = null
+                        statusCodeText = "-"
+                        responseTimeText = "-"
+                        responseSizeText = "0 B"
                     },
                     enabled = !isLoading
                 ) {
@@ -96,6 +116,9 @@ fun App() {
                             bodyText = parsed.body
                             setSingleResponseMessage(responseLines, "已从剪贴板导入 cURL")
                             responsePartialLine = null
+                            statusCodeText = "-"
+                            responseTimeText = "-"
+                            responseSizeText = "0 B"
                         } catch (e: Exception) {
                             setSingleResponseMessage(responseLines, "导入 cURL 失败: ${e.message}")
                             responsePartialLine = null
@@ -152,6 +175,9 @@ fun App() {
                             isLoading = true
                             responseLines = mutableStateListOf()
                             responsePartialLine = null
+                            statusCodeText = "-"
+                            responseTimeText = "-"
+                            responseSizeText = "0 B"
                             control.lineBuffer.append("请求中...\n")
                             applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) {
                                 responsePartialLine = it
@@ -187,6 +213,25 @@ fun App() {
                                             if (activeRequestControl === control) isSseResponse = isSse
                                         }
                                     },
+                                    onStatusCode = { code ->
+                                        EventQueue.invokeLater {
+                                            if (activeRequestControl === control) statusCodeText = code.toString()
+                                        }
+                                    },
+                                    onResponseTime = { elapsedMs ->
+                                        EventQueue.invokeLater {
+                                            if (activeRequestControl === control) {
+                                                responseTimeText = formatDuration(elapsedMs)
+                                            }
+                                        }
+                                    },
+                                    onProgress = { bytes ->
+                                        EventQueue.invokeLater {
+                                            if (activeRequestControl === control) {
+                                                responseSizeText = formatBytes(bytes)
+                                            }
+                                        }
+                                    },
                                     onChunk = { chunk ->
                                         if (activeRequestControl === control && !control.cancelled) {
                                             control.lineBuffer.append(chunk)
@@ -217,6 +262,7 @@ fun App() {
                                 applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
                                     responsePartialLine = partial
                                 }
+                                responseTimeText = formatDuration(System.currentTimeMillis() - control.startTimeMs)
                             }
                             activeRequestThread?.interrupt()
                             isLoading = false
@@ -232,54 +278,155 @@ fun App() {
             }
 
             Row(
-                modifier = Modifier.fillMaxSize(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { contentRowWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             ) {
                 Column(
-                    modifier = Modifier.weight(1f).fillMaxHeight(),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    modifier = Modifier.weight(splitRatio).fillMaxHeight().padding(end = 6.dp)
                 ) {
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        value = headersText,
-                        onValueChange = { headersText = it },
-                        label = { Text("Headers（每行：Key: Value）") },
-                        enabled = !isLoading
-                    )
-                    OutlinedTextField(
-                        modifier = Modifier.fillMaxWidth().weight(1f),
-                        value = bodyText,
-                        onValueChange = { bodyText = it },
-                        label = { Text("Body（POST 时生效）") },
-                        enabled = !isLoading
-                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(24.dp)
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(Color(0xFFE8E8E8))
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .background(
+                                    if (leftTabIndex == 0) {
+                                        MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                                    } else {
+                                        Color.Transparent
+                                    }
+                                )
+                                .clickable(enabled = !isLoading) { leftTabIndex = 0 },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Headers",
+                                fontSize = 12.sp,
+                                color = if (leftTabIndex == 0) {
+                                    MaterialTheme.colors.primary
+                                } else {
+                                    Color(0xFF9E9E9E)
+                                }
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .background(
+                                    if (leftTabIndex == 1) {
+                                        MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                                    } else {
+                                        Color.Transparent
+                                    }
+                                )
+                                .clickable(enabled = !isLoading) { leftTabIndex = 1 },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Body",
+                                fontSize = 12.sp,
+                                color = if (leftTabIndex == 1) {
+                                    MaterialTheme.colors.primary
+                                } else {
+                                    Color(0xFF9E9E9E)
+                                }
+                            )
+                        }
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    ) {
+                        when (leftTabIndex) {
+                            0 -> OutlinedTextField(
+                                modifier = Modifier.fillMaxSize(),
+                                value = headersText,
+                                onValueChange = { headersText = it },
+                                label = { Text("每行：Key: Value") },
+                                enabled = !isLoading
+                            )
+                            else -> OutlinedTextField(
+                                modifier = Modifier.fillMaxSize(),
+                                value = bodyText,
+                                onValueChange = { bodyText = it },
+                                label = { Text("Body（POST 时生效）") },
+                                enabled = !isLoading
+                            )
+                        }
+                    }
                 }
                 Box(
                     modifier = Modifier
-                        .weight(1f)
+                        .width(8.dp)
                         .fillMaxHeight()
-                        .background(Color.White)
-                        .padding(12.dp)
-                ) {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(end = 12.dp),
-                        state = responseListState
-                    ) {
-                        items(responseLines) { line ->
-                            Text(line)
-                        }
-                        responsePartialLine?.let { partial ->
-                            item("partial") {
-                                Text(partial)
+                        .background(Color(0x33000000))
+                        .pointerInput(contentRowWidthPx) {
+                            detectDragGestures { change, dragAmount ->
+                                change.consume()
+                                val next = splitRatio + (dragAmount.x / contentRowWidthPx)
+                                splitRatio = next.coerceIn(0.2f, 0.8f)
                             }
                         }
-                    }
-                    VerticalScrollbar(
-                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                        adapter = rememberScrollbarAdapter(responseListState)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(2.dp)
+                            .fillMaxHeight()
+                            .align(Alignment.Center)
+                            .background(Color(0x55000000))
                     )
+                }
+                Column(
+                    modifier = Modifier.weight(1f - splitRatio).fillMaxHeight().padding(start = 6.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text("$statusCodeText ")
+                        Text("$responseTimeText ")
+                        Text("$responseSizeText")
+                    }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .background(Color.White)
+                            .padding(12.dp)
+                    ) {
+                        SelectionContainer {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(end = 12.dp),
+                                state = responseListState
+                            ) {
+                                items(responseLines) { line ->
+                                    Text(line, fontSize = 12.sp)
+                                }
+                                responsePartialLine?.let { partial ->
+                                    item("partial") {
+                                        Text(partial, fontSize = 12.sp)
+                                    }
+                                }
+                            }
+                        }
+                        VerticalScrollbar(
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            adapter = rememberScrollbarAdapter(responseListState)
+                        )
+                    }
                 }
             }
         }
@@ -297,6 +444,13 @@ fun App() {
 
 private const val UI_REFRESH_INTERVAL_MS = 100L
 private val HTTP_METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
+private val RESTRICTED_HEADERS = setOf(
+    "connection",
+    "content-length",
+    "expect",
+    "host",
+    "upgrade"
+)
 
 private fun sendRequestStreaming(
     method: String,
@@ -305,14 +459,21 @@ private fun sendRequestStreaming(
     headersText: String,
     control: RequestControl,
     onSseDetected: (Boolean) -> Unit,
+    onStatusCode: (Int) -> Unit,
+    onResponseTime: (Long) -> Unit,
+    onProgress: (Long) -> Unit,
     onChunk: (String) -> Unit
 ) {
     try {
         if (control.cancelled) return
+        control.startTimeMs = System.currentTimeMillis()
         val client = HttpClient.newHttpClient()
         val builder = HttpRequest.newBuilder().uri(URI.create(url.trim()))
 
-        parseHeaders(headersText).forEach { (name, value) ->
+        val allowedHeaders = parseHeaders(headersText).filterNot { (name, _) ->
+            name.lowercase() in RESTRICTED_HEADERS
+        }
+        allowedHeaders.forEach { (name, value) ->
             builder.header(name, value)
         }
 
@@ -323,9 +484,14 @@ private fun sendRequestStreaming(
 
         if (control.cancelled) return
         val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
+        control.totalBytes = 0
         val contentType = response.headers().firstValue("Content-Type").orElse("")
         val isSse = contentType.contains("text/event-stream", ignoreCase = true)
         onSseDetected(isSse)
+        onStatusCode(response.statusCode())
+        if (!isSse) {
+            onResponseTime(System.currentTimeMillis() - control.startTimeMs)
+        }
         onChunk("状态码: ${response.statusCode()}\n")
         onChunk("Content-Type: $contentType\n\n")
 
@@ -333,11 +499,18 @@ private fun sendRequestStreaming(
             control.activeInput = input
             if (isSse) {
                 onChunk("SSE 流式响应中...\n\n")
+                var firstSseEventArrived = false
                 BufferedReader(InputStreamReader(input)).use { reader ->
                     while (true) {
                         if (control.cancelled || Thread.currentThread().isInterrupted) break
                         val line = reader.readLine() ?: break
+                        if (!firstSseEventArrived && line.isNotBlank()) {
+                            firstSseEventArrived = true
+                            onResponseTime(System.currentTimeMillis() - control.startTimeMs)
+                        }
                         onChunk("$line\n")
+                        control.totalBytes += (line + "\n").toByteArray(StandardCharsets.UTF_8).size.toLong()
+                        onProgress(control.totalBytes)
                     }
                 }
                 if (!control.cancelled) onChunk("\n[SSE 连接已结束]")
@@ -348,7 +521,10 @@ private fun sendRequestStreaming(
                     if (control.cancelled || Thread.currentThread().isInterrupted) break
                     val readCount = reader.read(buffer)
                     if (readCount <= 0) break
-                    onChunk(String(buffer, 0, readCount))
+                    val chunk = String(buffer, 0, readCount)
+                    onChunk(chunk)
+                    control.totalBytes += chunk.toByteArray(StandardCharsets.UTF_8).size.toLong()
+                    onProgress(control.totalBytes)
                 }
             }
         }
@@ -468,6 +644,8 @@ private class RequestControl {
 
     @Volatile
     var finished: Boolean = false
+    var startTimeMs: Long = 0
+    var totalBytes: Long = 0
 
     val lineBuffer = ResponseLineBuffer()
 }
@@ -488,6 +666,24 @@ private fun applyBufferUpdate(
 private fun setSingleResponseMessage(responseLines: MutableList<String>, message: String) {
     responseLines.clear()
     responseLines += message
+}
+
+private fun formatDuration(ms: Long): String {
+    return when {
+        ms < 10_000 -> "${ms}ms"
+        ms < 80_000 -> String.format("%.1fS", ms / 1000.0)
+        else -> String.format("%.1fmin", ms / 60_000.0)
+    }
+}
+
+private fun formatBytes(bytes: Long): String {
+    val b = bytes.toDouble()
+    return when {
+        bytes < 1024 -> "$bytes B"
+        bytes < 1024 * 1024 -> String.format("%.2f KB", b / 1024.0)
+        bytes < 1024L * 1024 * 1024 -> String.format("%.2f MB", b / (1024.0 * 1024.0))
+        else -> String.format("%.2f GB", b / (1024.0 * 1024.0 * 1024.0))
+    }
 }
 
 private fun closeQuietly(input: InputStream?) {
