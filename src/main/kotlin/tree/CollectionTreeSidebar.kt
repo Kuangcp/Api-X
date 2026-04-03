@@ -46,6 +46,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -384,10 +385,14 @@ private fun RequestTreeRow(
         depth = depth,
         icon = {
             Text(
-                req.method,
-                fontSize = 10.sp,
+                req.method.uppercase(),
+                fontSize = 9.sp,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.Center,
                 color = MaterialTheme.colors.primary.copy(alpha = 0.95f),
-                modifier = Modifier.width(36.dp)
+                modifier = Modifier.fillMaxWidth()
             )
         },
         expandIcon = { Spacer(Modifier.width(18.dp)) },
@@ -422,7 +427,7 @@ private fun TreeRow(
         Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
             expandIcon()
         }
-        Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
             icon()
         }
         Text(

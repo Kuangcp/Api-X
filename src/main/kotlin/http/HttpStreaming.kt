@@ -60,7 +60,6 @@ fun sendRequestStreaming(
 ) {
     try {
         if (control.cancelled) return
-        control.startTimeMs = System.currentTimeMillis()
         val client = HttpClient.newHttpClient()
         val builder = HttpRequest.newBuilder().uri(URI.create(url.trim()))
 

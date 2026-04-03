@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -176,10 +177,26 @@ fun App() {
         }
     }
 
+    val loadingRef = rememberUpdatedState(isLoading)
+    val liveTimerControlRef = rememberUpdatedState(activeRequestControl)
+    LaunchedEffect(isLoading, activeRequestControl) {
+        if (!isLoading) return@LaunchedEffect
+        val control = activeRequestControl ?: return@LaunchedEffect
+        while (isActive) {
+            if (liveTimerControlRef.value !== control) break
+            if (!loadingRef.value) break
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            val sec = (elapsed / 1000L).toInt().coerceAtLeast(0)
+            responseTimeText = "${sec}S"
+            delay(1000)
+        }
+    }
+
     fun startRequest() {
         if (isLoading) return
         saveEditorIfBound()
         val control = RequestControl()
+        control.startTimeMs = System.currentTimeMillis()
         activeRequestControl = control
         isLoading = true
         responseLines = mutableStateListOf()
@@ -227,13 +244,7 @@ fun App() {
                         if (activeRequestControl === control) statusCodeText = code.toString()
                     }
                 },
-                onResponseTime = { elapsedMs ->
-                    EventQueue.invokeLater {
-                        if (activeRequestControl === control) {
-                            responseTimeText = formatDuration(elapsedMs)
-                        }
-                    }
-                },
+                onResponseTime = { },
                 onProgress = { bytes ->
                     EventQueue.invokeLater {
                         if (activeRequestControl === control) {
@@ -262,6 +273,8 @@ fun App() {
                     applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
                         responsePartialLine = partial
                     }
+                    responseTimeText =
+                        formatDuration(System.currentTimeMillis() - control.startTimeMs)
                     isLoading = false
                     isSseResponse = false
                     activeRequestControl = null
