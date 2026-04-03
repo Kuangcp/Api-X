@@ -4,6 +4,7 @@ import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +26,8 @@ import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
@@ -46,10 +49,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -196,6 +205,10 @@ fun CollectionTreeSidebar(
                         onToggleCollection = onToggleCollection,
                         onToggleFolder = onToggleFolder,
                         onSelectNode = onSelectNode,
+                        onRequestRename = { id, name ->
+                            renameTarget = TreeSelection.Request(id)
+                            renameText = name
+                        },
                         onExportRequestAsCurl = onExportRequestAsCurl,
                         onDuplicateRequestBelow = onDuplicateRequestBelow,
                     )
@@ -205,6 +218,13 @@ fun CollectionTreeSidebar(
     }
 
     renameTarget?.let { target ->
+        val commitRename = {
+            val t = renameText.trim()
+            if (t.isNotEmpty()) {
+                onRename(target, t)
+            }
+            renameTarget = null
+        }
         AlertDialog(
             onDismissRequest = { renameTarget = null },
             title = { Text("重命名", fontSize = 16.sp) },
@@ -213,19 +233,21 @@ fun CollectionTreeSidebar(
                     value = renameText,
                     onValueChange = { renameText = it },
                     singleLine = true,
-                    label = { Text("名称") }
+                    label = { Text("名称") },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { commitRename() }),
+                    modifier = Modifier.onPreviewKeyEvent { ev ->
+                        if (ev.type == KeyEventType.KeyDown && ev.key == Key.Enter) {
+                            commitRename()
+                            true
+                        } else {
+                            false
+                        }
+                    }
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = {
-                        val t = renameText.trim()
-                        if (t.isNotEmpty()) {
-                            onRename(target, t)
-                        }
-                        renameTarget = null
-                    }
-                ) { Text("确定") }
+                TextButton(onClick = commitRename) { Text("确定") }
             },
             dismissButton = {
                 TextButton(onClick = { renameTarget = null }) { Text("取消") }
@@ -265,6 +287,7 @@ private fun CollectionTreeBlock(
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onRequestRename: (String, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
 ) {
@@ -302,6 +325,7 @@ private fun CollectionTreeBlock(
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
+                onRequestRename = onRequestRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -313,6 +337,7 @@ private fun CollectionTreeBlock(
                 selectedNode = selectedNode,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
+                onRequestRename = onRequestRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -329,6 +354,7 @@ private fun FolderTreeBlock(
     expandedFolderIds: Set<String>,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onRequestRename: (String, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
 ) {
@@ -371,6 +397,7 @@ private fun FolderTreeBlock(
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
+                onRequestRename = onRequestRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -382,6 +409,7 @@ private fun FolderTreeBlock(
                 selectedNode = selectedNode,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
+                onRequestRename = onRequestRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -396,6 +424,7 @@ private fun RequestTreeRow(
     selectedNode: TreeSelection?,
     editorBoundRequestId: String?,
     onSelectNode: (TreeSelection) -> Unit,
+    onRequestRename: (String, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
 ) {
@@ -431,6 +460,10 @@ private fun RequestTreeRow(
             label = req.name,
             selected = isTreeSelected || (editingThis && !isTreeSelected),
             onClick = { onSelectNode(TreeSelection.Request(req.id)) },
+            onDoubleClick = {
+                onSelectNode(TreeSelection.Request(req.id))
+                onRequestRename(req.id, req.name)
+            },
         )
     }
 }
@@ -443,16 +476,22 @@ private fun TreeRow(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    onDoubleClick: (() -> Unit)? = null,
 ) {
+    val rowModifier = Modifier
+        .fillMaxWidth()
+        .clip(RoundedCornerShape(4.dp))
+        .background(
+            if (selected) MaterialTheme.colors.primary.copy(alpha = 0.16f)
+            else Color.Transparent
+        )
+    val clickableModifier = if (onDoubleClick != null) {
+        rowModifier.combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick)
+    } else {
+        rowModifier.clickable(onClick = onClick)
+    }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(4.dp))
-            .background(
-                if (selected) MaterialTheme.colors.primary.copy(alpha = 0.16f)
-                else Color.Transparent
-            )
-            .clickable(onClick = onClick)
+        modifier = clickableModifier
             .padding(vertical = 4.dp, horizontal = 2.dp)
             .padding(start = (depth * 10).dp),
         verticalAlignment = Alignment.CenterVertically
