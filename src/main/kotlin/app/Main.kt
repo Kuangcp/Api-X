@@ -144,6 +144,29 @@ fun App() {
             else -> treeSelection = sel
         }
     }
+
+    fun addFolderAt(at: TreeSelection) {
+        val target = repository.newFolderTarget(at) ?: return
+        val (cid, pid) = target
+        repository.createFolder(cid, pid, "新文件夹").let { fid ->
+            refreshTree()
+            expandedCollectionIds = expandedCollectionIds + cid
+            if (pid != null) expandedFolderIds = expandedFolderIds + pid
+            treeSelection = TreeSelection.Folder(fid)
+        }
+    }
+
+    fun addRequestAt(at: TreeSelection) {
+        val target = repository.newRequestTarget(at) ?: return
+        val (cid, fid) = target
+        saveEditorIfBound()
+        val rid = repository.createRequest(cid, fid, "新请求")
+        refreshTree()
+        expandedCollectionIds = expandedCollectionIds + cid
+        if (fid != null) expandedFolderIds = expandedFolderIds + fid
+        applyRequestToEditor(rid)
+        treeSelection = TreeSelection.Request(rid)
+    }
     var responseLines by remember { mutableStateOf(mutableStateListOf("响应结果会显示在这里")) }
     var responsePartialLine by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
@@ -420,27 +443,10 @@ fun App() {
                         expandedCollectionIds = expandedCollectionIds + id
                         treeSelection = TreeSelection.Collection(id)
                     },
-                    onAddFolder = {
-                        val target = repository.newFolderTarget(treeSelection) ?: return@CollectionTreeSidebar
-                        val (cid, pid) = target
-                        repository.createFolder(cid, pid, "新文件夹").let { fid ->
-                            refreshTree()
-                            expandedCollectionIds = expandedCollectionIds + cid
-                            if (pid != null) expandedFolderIds = expandedFolderIds + pid
-                            treeSelection = TreeSelection.Folder(fid)
-                        }
-                    },
-                    onAddRequest = {
-                        val target = repository.newRequestTarget(treeSelection) ?: return@CollectionTreeSidebar
-                        val (cid, fid) = target
-                        saveEditorIfBound()
-                        val rid = repository.createRequest(cid, fid, "新请求")
-                        refreshTree()
-                        expandedCollectionIds = expandedCollectionIds + cid
-                        if (fid != null) expandedFolderIds = expandedFolderIds + fid
-                        applyRequestToEditor(rid)
-                        treeSelection = TreeSelection.Request(rid)
-                    },
+                    onAddFolder = { treeSelection?.let { addFolderAt(it) } },
+                    onAddRequest = { treeSelection?.let { addRequestAt(it) } },
+                    onContextAddFolder = { addFolderAt(it) },
+                    onContextAddRequest = { addRequestAt(it) },
                     onRename = { sel, newName ->
                         when (sel) {
                             is TreeSelection.Collection -> repository.renameCollection(sel.id, newName)

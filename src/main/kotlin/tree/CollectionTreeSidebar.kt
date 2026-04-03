@@ -17,7 +17,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
@@ -151,6 +153,9 @@ fun CollectionTreeSidebar(
     onAddCollection: () -> Unit,
     onAddFolder: () -> Unit,
     onAddRequest: () -> Unit,
+    /** 右键菜单：在指定集合或文件夹下新建（[TreeSelection] 为 Collection / Folder）。 */
+    onContextAddFolder: (TreeSelection) -> Unit,
+    onContextAddRequest: (TreeSelection) -> Unit,
     onRename: (TreeSelection, String) -> Unit,
     onDelete: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
@@ -272,57 +277,70 @@ fun CollectionTreeSidebar(
         )
         val scroll = rememberScrollState()
         val scrollWhileNotDragging = treeDragPayload == null
-        Column(
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(scroll, enabled = scrollWhileNotDragging)
         ) {
-            if (tree.isEmpty()) {
-                Text(
-                    "暂无集合",
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                    modifier = Modifier.padding(6.dp)
-                )
-            } else {
-                tree.forEach { coll ->
-                    CollectionTreeBlock(
-                        collection = coll,
-                        depth = 0,
-                        selectedNode = selectedNode,
-                        editorBoundRequestId = editorBoundRequestId,
-                        expandedCollectionIds = expandedCollectionIds,
-                        expandedFolderIds = expandedFolderIds,
-                        onToggleCollection = onToggleCollection,
-                        onToggleFolder = onToggleFolder,
-                        onSelectNode = onSelectNode,
-                        onBeginTreeRename = { sel, name ->
-                            renameTarget = sel
-                            renameText = name
-                        },
-                        onExportRequestAsCurl = onExportRequestAsCurl,
-                        onDuplicateRequestBelow = onDuplicateRequestBelow,
-                        dragging = treeDragPayload,
-                        dropRegistry = dropRegistry,
-                        hoveredDropTarget = hoveredDropTarget,
-                        onTreeDragStart = { payload, rootPos ->
-                            treeDragPayload = payload
-                            treeDragPointerRoot = rootPos
-                        },
-                        onTreeDragMove = { rootPos -> treeDragPointerRoot = rootPos },
-                        onTreeDragEnd = {
-                            val p = treeDragPayload
-                            val hit = bestDropTarget(dropRegistry.zones, treeDragPointerRoot)
-                            treeDragPayload = null
-                            dropRegistry.zones.clear()
-                            if (p != null && hit != null) {
-                                onApplyTreeDrop(p, hit)
-                            }
-                        },
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(scroll, enabled = scrollWhileNotDragging)
+            ) {
+                if (tree.isEmpty()) {
+                    Text(
+                        "暂无集合",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        modifier = Modifier.padding(6.dp)
                     )
+                } else {
+                    tree.forEach { coll ->
+                        CollectionTreeBlock(
+                            collection = coll,
+                            depth = 0,
+                            selectedNode = selectedNode,
+                            editorBoundRequestId = editorBoundRequestId,
+                            expandedCollectionIds = expandedCollectionIds,
+                            expandedFolderIds = expandedFolderIds,
+                            onToggleCollection = onToggleCollection,
+                            onToggleFolder = onToggleFolder,
+                            onSelectNode = onSelectNode,
+                            onBeginTreeRename = { sel, name ->
+                                renameTarget = sel
+                                renameText = name
+                            },
+                            onContextAddFolder = onContextAddFolder,
+                            onContextAddRequest = onContextAddRequest,
+                            onExportRequestAsCurl = onExportRequestAsCurl,
+                            onDuplicateRequestBelow = onDuplicateRequestBelow,
+                            dragging = treeDragPayload,
+                            dropRegistry = dropRegistry,
+                            hoveredDropTarget = hoveredDropTarget,
+                            onTreeDragStart = { payload, rootPos ->
+                                treeDragPayload = payload
+                                treeDragPointerRoot = rootPos
+                            },
+                            onTreeDragMove = { rootPos -> treeDragPointerRoot = rootPos },
+                            onTreeDragEnd = {
+                                val p = treeDragPayload
+                                val hit = bestDropTarget(dropRegistry.zones, treeDragPointerRoot)
+                                treeDragPayload = null
+                                dropRegistry.zones.clear()
+                                if (p != null && hit != null) {
+                                    onApplyTreeDrop(p, hit)
+                                }
+                            },
+                        )
+                    }
                 }
             }
+            VerticalScrollbar(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .fillMaxHeight(),
+                adapter = rememberScrollbarAdapter(scroll)
+            )
         }
     }
 
@@ -403,6 +421,8 @@ private fun CollectionTreeBlock(
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
+    onContextAddFolder: (TreeSelection) -> Unit,
+    onContextAddRequest: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
@@ -434,33 +454,43 @@ private fun CollectionTreeBlock(
                 }
             )
     ) {
-        TreeRow(
-            depth = depth,
-            icon = {
-                Icon(
-                    Icons.Filled.LibraryBooks,
-                    contentDescription = null,
-                    modifier = Modifier.size(19.dp),
-                    tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
+        val collSel = TreeSelection.Collection(collection.id)
+        ContextMenuArea(
+            items = {
+                listOf(
+                    ContextMenuItem("新建文件夹") { onContextAddFolder(collSel) },
+                    ContextMenuItem("新建请求") { onContextAddRequest(collSel) },
                 )
-            },
-            expandIcon = {
-                Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
-                    contentDescription = if (expanded) "折叠" else "展开",
-                    modifier = Modifier.size(20.dp).clickable { onToggleCollection(collection.id) },
-                    tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                )
-            },
-            label = collection.name,
-            selected = isSelected,
-            onClick = { onSelectNode(TreeSelection.Collection(collection.id)) },
-            onDoubleClick = {
-                onSelectNode(TreeSelection.Collection(collection.id))
-                onBeginTreeRename(TreeSelection.Collection(collection.id), collection.name)
-            },
-            dropTargetHighlight = intoCollHighlight,
-        )
+            }
+        ) {
+            TreeRow(
+                depth = depth,
+                icon = {
+                    Icon(
+                        Icons.Filled.LibraryBooks,
+                        contentDescription = null,
+                        modifier = Modifier.size(19.dp),
+                        tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
+                    )
+                },
+                expandIcon = {
+                    Icon(
+                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                        contentDescription = if (expanded) "折叠" else "展开",
+                        modifier = Modifier.size(20.dp).clickable { onToggleCollection(collection.id) },
+                        tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                    )
+                },
+                label = collection.name,
+                selected = isSelected,
+                onClick = { onSelectNode(collSel) },
+                onDoubleClick = {
+                    onSelectNode(collSel)
+                    onBeginTreeRename(collSel, collection.name)
+                },
+                dropTargetHighlight = intoCollHighlight,
+            )
+        }
     }
     if (expanded) {
         val cid = collection.id
@@ -482,6 +512,8 @@ private fun CollectionTreeBlock(
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
+                onContextAddFolder = onContextAddFolder,
+                onContextAddRequest = onContextAddRequest,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 dragging = dragging,
@@ -542,6 +574,8 @@ private fun FolderTreeBlock(
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
+    onContextAddFolder: (TreeSelection) -> Unit,
+    onContextAddRequest: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
@@ -562,57 +596,67 @@ private fun FolderTreeBlock(
         if (!dragActive) dropRegistry.removeKey(intoKey)
     }
     val payload = TreeDragPayload.Folder(folder.id)
-    TreeRow(
-        depth = depth,
-        icon = {
-            Icon(
-                if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
-                contentDescription = null,
-                modifier = Modifier.size(19.dp),
-                tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+    val folderSel = TreeSelection.Folder(folder.id)
+    ContextMenuArea(
+        items = {
+            listOf(
+                ContextMenuItem("新建文件夹") { onContextAddFolder(folderSel) },
+                ContextMenuItem("新建请求") { onContextAddRequest(folderSel) },
             )
-        },
-        expandIcon = {
-            val hasChildren = folder.children.isNotEmpty() || folder.requests.isNotEmpty()
-            if (hasChildren) {
+        }
+    ) {
+        TreeRow(
+            depth = depth,
+            icon = {
                 Icon(
-                    if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
-                    contentDescription = if (expanded) "折叠" else "展开",
-                    modifier = Modifier.size(20.dp).clickable { onToggleFolder(folder.id) },
+                    if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
+                    contentDescription = null,
+                    modifier = Modifier.size(19.dp),
                     tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                 )
-            } else {
-                Spacer(Modifier.width(20.dp))
-            }
-        },
-        label = folder.name,
-        selected = isSelected,
-        onClick = { onSelectNode(TreeSelection.Folder(folder.id)) },
-        onDoubleClick = {
-            onSelectNode(TreeSelection.Folder(folder.id))
-            onBeginTreeRename(TreeSelection.Folder(folder.id), folder.name)
-        },
-        rowExtraModifier = Modifier.onGloballyPositioned { lc ->
-            rowLc.coords = lc
-            if (dragActive) {
-                dropRegistry.sync(intoKey, true, lc.boundsInRoot(), intoTarget)
-            }
-        },
-        dragModifier = Modifier.pointerInput(payload) {
-            detectDragGestures(
-                onDragStart = { offset ->
-                    rowLc.coords?.localToRoot(offset)?.let { onTreeDragStart(payload, it) }
-                },
-                onDrag = { change, _ ->
-                    change.consume()
-                    rowLc.coords?.localToRoot(change.position)?.let(onTreeDragMove)
-                },
-                onDragEnd = { onTreeDragEnd() },
-                onDragCancel = { onTreeDragEnd() },
-            )
-        },
-        dropTargetHighlight = intoHighlight,
-    )
+            },
+            expandIcon = {
+                val hasChildren = folder.children.isNotEmpty() || folder.requests.isNotEmpty()
+                if (hasChildren) {
+                    Icon(
+                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                        contentDescription = if (expanded) "折叠" else "展开",
+                        modifier = Modifier.size(20.dp).clickable { onToggleFolder(folder.id) },
+                        tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                    )
+                } else {
+                    Spacer(Modifier.width(20.dp))
+                }
+            },
+            label = folder.name,
+            selected = isSelected,
+            onClick = { onSelectNode(folderSel) },
+            onDoubleClick = {
+                onSelectNode(folderSel)
+                onBeginTreeRename(folderSel, folder.name)
+            },
+            rowExtraModifier = Modifier.onGloballyPositioned { lc ->
+                rowLc.coords = lc
+                if (dragActive) {
+                    dropRegistry.sync(intoKey, true, lc.boundsInRoot(), intoTarget)
+                }
+            },
+            dragModifier = Modifier.pointerInput(payload) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        rowLc.coords?.localToRoot(offset)?.let { onTreeDragStart(payload, it) }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        rowLc.coords?.localToRoot(change.position)?.let(onTreeDragMove)
+                    },
+                    onDragEnd = { onTreeDragEnd() },
+                    onDragCancel = { onTreeDragEnd() },
+                )
+            },
+            dropTargetHighlight = intoHighlight,
+        )
+    }
     if (expanded) {
         val fid = folder.id
         TreeDropGap(
@@ -633,6 +677,8 @@ private fun FolderTreeBlock(
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
+                onContextAddFolder = onContextAddFolder,
+                onContextAddRequest = onContextAddRequest,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 dragging = dragging,
