@@ -21,6 +21,7 @@ private val RESTRICTED_HEADERS = setOf(
 fun formatHttpResponseHeaders(headers: HttpHeaders): List<String> {
     val out = mutableListOf<String>()
     for ((name, values) in headers.map().entries.sortedBy { it.key.lowercase() }) {
+        if (name.equals(":status", ignoreCase = true)) continue
         for (value in values) {
             out += "$name: $value"
         }
