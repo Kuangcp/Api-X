@@ -3,11 +3,14 @@ package db
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.Types
 import java.util.UUID
 import tree.PortableCollection
 import tree.PortableFolder
 import tree.PortableRequest
 import tree.StoredHttpRequest
+import tree.TreeDragPayload
+import tree.TreeDropTarget
 import tree.TreeSelection
 import tree.UiCollection
 import tree.UiFolder
@@ -309,6 +312,248 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
+    /**
+     * 在同一集合内移动文件夹：调整 [parent_folder_id] 与同级 [sort_order]。
+     * 不可将文件夹拖入自身或其子孙下。
+     */
+    fun moveFolder(folderId: String, newParentFolderId: String?, insertIndex: Int): Boolean {
+        val info = getFolderMoveInfo(folderId) ?: return false
+        if (newParentFolderId != null) {
+            if (newParentFolderId == folderId) return false
+            if (getFolderCollectionId(newParentFolderId) != info.collectionId) return false
+            if (isFolderStrictDescendantOf(newParentFolderId, folderId)) return false
+        }
+        val oldParent = info.parentFolderId
+        val coll = info.collectionId
+        if (oldParent == newParentFolderId) {
+            val s = loadOrderedFolderIds(coll, oldParent).toMutableList()
+            if (!s.remove(folderId)) return false
+            val idx = insertIndex.coerceIn(0, s.size)
+            s.add(idx, folderId)
+            reorderFolderChildren(coll, oldParent, s)
+            return true
+        }
+        val oldAutoCommit = conn.autoCommit
+        return try {
+            conn.autoCommit = false
+            val newS = loadOrderedFolderIds(coll, newParentFolderId).toMutableList()
+            newS.remove(folderId)
+            val idx = insertIndex.coerceIn(0, newS.size)
+            newS.add(idx, folderId)
+            reorderFolderChildren(coll, newParentFolderId, newS)
+
+            val oldS = loadOrderedFolderIds(coll, oldParent).toMutableList()
+            oldS.remove(folderId)
+            reorderFolderChildren(coll, oldParent, oldS)
+
+            conn.commit()
+            true
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = oldAutoCommit
+        }
+    }
+
+    /** 在同一集合内移动请求（根下 folder_id IS NULL 或某文件夹下）。 */
+    fun moveRequest(requestId: String, newFolderId: String?, insertIndex: Int): Boolean {
+        val info = getRequestMoveInfo(requestId) ?: return false
+        if (newFolderId != null && getFolderCollectionId(newFolderId) != info.collectionId) return false
+        val oldFolder = info.folderId
+        val coll = info.collectionId
+        if (oldFolder == newFolderId) {
+            val s = loadOrderedRequestIds(coll, oldFolder).toMutableList()
+            if (!s.remove(requestId)) return false
+            val idx = insertIndex.coerceIn(0, s.size)
+            s.add(idx, requestId)
+            reorderRequestChildren(coll, oldFolder, s)
+            return true
+        }
+        val oldAutoCommit = conn.autoCommit
+        return try {
+            conn.autoCommit = false
+            val newS = loadOrderedRequestIds(coll, newFolderId).toMutableList()
+            newS.remove(requestId)
+            val idx = insertIndex.coerceIn(0, newS.size)
+            newS.add(idx, requestId)
+            reorderRequestChildren(coll, newFolderId, newS)
+
+            val oldS = loadOrderedRequestIds(coll, oldFolder).toMutableList()
+            oldS.remove(requestId)
+            reorderRequestChildren(coll, oldFolder, oldS)
+
+            conn.commit()
+            true
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = oldAutoCommit
+        }
+    }
+
+    fun applyTreeDrop(payload: TreeDragPayload, target: TreeDropTarget): Boolean {
+        return when (payload) {
+            is TreeDragPayload.Folder -> when (target) {
+                is TreeDropTarget.FolderSlot ->
+                    moveFolder(payload.id, target.parentFolderId, target.insertIndex)
+                is TreeDropTarget.IntoFolder -> {
+                    val n = loadOrderedFolderIds(target.collectionId, target.folderId).size
+                    moveFolder(payload.id, target.folderId, n)
+                }
+                is TreeDropTarget.IntoCollection -> {
+                    val info = getFolderMoveInfo(payload.id) ?: return false
+                    if (info.collectionId != target.collectionId) return false
+                    val n = loadOrderedFolderIds(target.collectionId, null).size
+                    moveFolder(payload.id, null, n)
+                }
+                is TreeDropTarget.RequestSlot -> false
+            }
+            is TreeDragPayload.Request -> when (target) {
+                is TreeDropTarget.RequestSlot ->
+                    moveRequest(payload.id, target.folderId, target.insertIndex)
+                is TreeDropTarget.IntoFolder -> {
+                    val n = loadOrderedRequestIds(target.collectionId, target.folderId).size
+                    moveRequest(payload.id, target.folderId, n)
+                }
+                is TreeDropTarget.IntoCollection -> {
+                    val info = getRequestMoveInfo(payload.id) ?: return false
+                    if (info.collectionId != target.collectionId) return false
+                    val n = loadOrderedRequestIds(target.collectionId, null).size
+                    moveRequest(payload.id, null, n)
+                }
+                is TreeDropTarget.FolderSlot -> false
+            }
+        }
+    }
+
+    private data class FolderMoveInfo(val collectionId: String, val parentFolderId: String?)
+
+    private data class RequestMoveInfo(val collectionId: String, val folderId: String?)
+
+    private fun getFolderMoveInfo(folderId: String): FolderMoveInfo? {
+        conn.prepareStatement(
+            "SELECT collection_id, parent_folder_id FROM folders WHERE id = ?"
+        ).use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                val cid = rs.getString("collection_id")
+                val pid = rs.getString("parent_folder_id").takeUnless { rs.wasNull() }
+                return FolderMoveInfo(cid, pid)
+            }
+        }
+    }
+
+    private fun getRequestMoveInfo(requestId: String): RequestMoveInfo? {
+        conn.prepareStatement(
+            "SELECT collection_id, folder_id FROM requests WHERE id = ?"
+        ).use { ps ->
+            ps.setString(1, requestId)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                val cid = rs.getString("collection_id")
+                val fid = rs.getString("folder_id").takeUnless { rs.wasNull() }
+                return RequestMoveInfo(cid, fid)
+            }
+        }
+    }
+
+    /** [ancestorFolderId] 是否是 [folderId] 的子孙（不含自身）。 */
+    private fun isFolderStrictDescendantOf(descendantCandidateId: String, ancestorFolderId: String): Boolean {
+        var cur: String? = descendantCandidateId
+        while (cur != null) {
+            if (cur == ancestorFolderId) return true
+            cur = getFolderParentFolderId(cur)
+        }
+        return false
+    }
+
+    private fun getFolderParentFolderId(folderId: String): String? {
+        conn.prepareStatement("SELECT parent_folder_id FROM folders WHERE id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                return rs.getString("parent_folder_id").takeUnless { rs.wasNull() }
+            }
+        }
+    }
+
+    private fun loadOrderedFolderIds(collectionId: String, parentFolderId: String?): List<String> {
+        val sql = if (parentFolderId == null) {
+            "SELECT id FROM folders WHERE collection_id = ? AND parent_folder_id IS NULL ORDER BY sort_order ASC, name ASC"
+        } else {
+            "SELECT id FROM folders WHERE collection_id = ? AND parent_folder_id = ? ORDER BY sort_order ASC, name ASC"
+        }
+        val out = mutableListOf<String>()
+        conn.prepareStatement(sql).use { ps ->
+            ps.setString(1, collectionId)
+            if (parentFolderId != null) ps.setString(2, parentFolderId)
+            ps.executeQuery().use { rs ->
+                while (rs.next()) out += rs.getString("id")
+            }
+        }
+        return out
+    }
+
+    private fun loadOrderedRequestIds(collectionId: String, folderId: String?): List<String> {
+        val sql = if (folderId == null) {
+            "SELECT id FROM requests WHERE collection_id = ? AND folder_id IS NULL ORDER BY sort_order ASC, name ASC"
+        } else {
+            "SELECT id FROM requests WHERE collection_id = ? AND folder_id = ? ORDER BY sort_order ASC, name ASC"
+        }
+        val out = mutableListOf<String>()
+        conn.prepareStatement(sql).use { ps ->
+            ps.setString(1, collectionId)
+            if (folderId != null) ps.setString(2, folderId)
+            ps.executeQuery().use { rs ->
+                while (rs.next()) out += rs.getString("id")
+            }
+        }
+        return out
+    }
+
+    private fun reorderFolderChildren(collectionId: String, parentFolderId: String?, orderedIds: List<String>) {
+        val now = System.currentTimeMillis()
+        for ((i, id) in orderedIds.withIndex()) {
+            conn.prepareStatement(
+                """
+                UPDATE folders SET parent_folder_id = ?, sort_order = ?, updated_at = ?
+                WHERE id = ? AND collection_id = ?
+                """.trimIndent()
+            ).use { ps ->
+                if (parentFolderId == null) ps.setNull(1, Types.VARCHAR)
+                else ps.setString(1, parentFolderId)
+                ps.setInt(2, i)
+                ps.setLong(3, now)
+                ps.setString(4, id)
+                ps.setString(5, collectionId)
+                ps.executeUpdate()
+            }
+        }
+    }
+
+    private fun reorderRequestChildren(collectionId: String, folderId: String?, orderedIds: List<String>) {
+        val now = System.currentTimeMillis()
+        for ((i, id) in orderedIds.withIndex()) {
+            conn.prepareStatement(
+                """
+                UPDATE requests SET folder_id = ?, sort_order = ?, updated_at = ?
+                WHERE id = ? AND collection_id = ?
+                """.trimIndent()
+            ).use { ps ->
+                if (folderId == null) ps.setNull(1, Types.VARCHAR)
+                else ps.setString(1, folderId)
+                ps.setInt(2, i)
+                ps.setLong(3, now)
+                ps.setString(4, id)
+                ps.setString(5, collectionId)
+                ps.executeUpdate()
+            }
+        }
+    }
+
     fun resolveFolderContext(selection: TreeSelection): Pair<String, String?>? {
         return when (selection) {
             is TreeSelection.Collection -> selection.id to null
@@ -356,16 +601,6 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             ps.executeQuery().use { rs ->
                 if (!rs.next()) return null
                 return rs.getString("collection_id")
-            }
-        }
-    }
-
-    private fun getFolderParentFolderId(folderId: String): String? {
-        conn.prepareStatement("SELECT parent_folder_id FROM folders WHERE id = ?").use { ps ->
-            ps.setString(1, folderId)
-            ps.executeQuery().use { rs ->
-                if (!rs.next()) return null
-                return rs.getString("parent_folder_id").takeUnless { rs.wasNull() }
             }
         }
     }

@@ -64,6 +64,7 @@ import http.parseCurlCommand
 import http.requestToCurlCommand
 import http.sendRequestStreaming
 import tree.CollectionTreeSidebar
+import tree.TreeDropTarget
 import tree.TreeSelection
 import tree.collectAllFolderIds
 import tree.firstRequestSelection
@@ -478,6 +479,34 @@ fun App() {
                         }
                         applyRequestToEditor(newId)
                         treeSelection = TreeSelection.Request(newId)
+                    },
+                    onApplyTreeDrop = { payload, target ->
+                        val ok = repository.applyTreeDrop(payload, target)
+                        if (ok) {
+                            refreshTree()
+                            when (target) {
+                                is TreeDropTarget.IntoFolder -> {
+                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
+                                    expandedFolderIds = expandedFolderIds + target.folderId
+                                }
+                                is TreeDropTarget.IntoCollection -> {
+                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
+                                }
+                                is TreeDropTarget.FolderSlot -> {
+                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
+                                    target.parentFolderId?.let { pid ->
+                                        expandedFolderIds = expandedFolderIds + pid
+                                    }
+                                }
+                                is TreeDropTarget.RequestSlot -> {
+                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
+                                    target.folderId?.let { fid ->
+                                        expandedFolderIds = expandedFolderIds + fid
+                                    }
+                                }
+                            }
+                        }
+                        ok
                     },
                 )
                 Box(

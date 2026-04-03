@@ -4,7 +4,7 @@ import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -44,12 +44,16 @@ import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -57,13 +61,80 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalViewConfiguration
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.LayoutCoordinates
+
+private class DropZoneRegistry {
+    val zones = mutableStateMapOf<String, Pair<Rect, TreeDropTarget>>()
+    fun sync(key: String, active: Boolean, bounds: Rect, target: TreeDropTarget) {
+        if (active) zones[key] = bounds to target
+        else zones.remove(key)
+    }
+    fun removeKey(key: String) {
+        zones.remove(key)
+    }
+}
+
+/** 仅给 pointerInput 读坐标用，不触发 Compose 重组（避免每帧 onGloballyPositioned 卡 UI） */
+private class LayoutCoordsHolder {
+    var coords: LayoutCoordinates? = null
+}
+
+private fun bestDropTarget(
+    zones: Map<String, Pair<Rect, TreeDropTarget>>,
+    point: Offset,
+): TreeDropTarget? {
+    return zones.values
+        .filter { it.first.contains(point) }
+        .minByOrNull { it.first.width * it.first.height }
+        ?.second
+}
+
+@Composable
+private fun TreeDropGap(
+    active: Boolean,
+    zoneKey: String,
+    target: TreeDropTarget,
+    dropRegistry: DropZoneRegistry,
+    hovered: TreeDropTarget?,
+    modifier: Modifier = Modifier,
+) {
+    val highlight = active && hovered == target
+    LaunchedEffect(active, zoneKey) {
+        if (!active) dropRegistry.removeKey(zoneKey)
+    }
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .then(
+                if (active) {
+                    Modifier.onGloballyPositioned { lc ->
+                        dropRegistry.sync(zoneKey, true, lc.boundsInRoot(), target)
+                    }
+                } else {
+                    Modifier
+                }
+            )
+            .background(
+                when {
+                    !active -> Color.Transparent
+                    highlight -> MaterialTheme.colors.primary.copy(alpha = 0.38f)
+                    else -> MaterialTheme.colors.onSurface.copy(alpha = 0.07f)
+                }
+            )
+    )
+}
 
 @Composable
 fun CollectionTreeSidebar(
@@ -82,6 +153,7 @@ fun CollectionTreeSidebar(
     onDelete: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    onApplyTreeDrop: (TreeDragPayload, TreeDropTarget) -> Boolean,
     folderAddEnabled: Boolean,
     requestAddEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -89,6 +161,20 @@ fun CollectionTreeSidebar(
     var renameTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var renameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<TreeSelection?>(null) }
+
+    val dropRegistry = remember { DropZoneRegistry() }
+    var treeDragPayload by remember { mutableStateOf<TreeDragPayload?>(null) }
+    var treeDragPointerRoot by remember { mutableStateOf(Offset.Zero) }
+    val hoveredDropTarget by remember {
+        derivedStateOf {
+            if (treeDragPayload == null) null
+            else bestDropTarget(dropRegistry.zones, treeDragPointerRoot)
+        }
+    }
+
+    LaunchedEffect(treeDragPayload) {
+        if (treeDragPayload == null) dropRegistry.zones.clear()
+    }
 
     Column(
         modifier = modifier
@@ -183,11 +269,12 @@ fun CollectionTreeSidebar(
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
         )
         val scroll = rememberScrollState()
+        val scrollWhileNotDragging = treeDragPayload == null
         Column(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .verticalScroll(scroll)
+                .verticalScroll(scroll, enabled = scrollWhileNotDragging)
         ) {
             if (tree.isEmpty()) {
                 Text(
@@ -214,6 +301,23 @@ fun CollectionTreeSidebar(
                         },
                         onExportRequestAsCurl = onExportRequestAsCurl,
                         onDuplicateRequestBelow = onDuplicateRequestBelow,
+                        dragging = treeDragPayload,
+                        dropRegistry = dropRegistry,
+                        hoveredDropTarget = hoveredDropTarget,
+                        onTreeDragStart = { payload, rootPos ->
+                            treeDragPayload = payload
+                            treeDragPointerRoot = rootPos
+                        },
+                        onTreeDragMove = { rootPos -> treeDragPointerRoot = rootPos },
+                        onTreeDragEnd = {
+                            val p = treeDragPayload
+                            val hit = bestDropTarget(dropRegistry.zones, treeDragPointerRoot)
+                            treeDragPayload = null
+                            dropRegistry.zones.clear()
+                            if (p != null && hit != null) {
+                                onApplyTreeDrop(p, hit)
+                            }
+                        },
                     )
                 }
             }
@@ -299,38 +403,75 @@ private fun CollectionTreeBlock(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    dragging: TreeDragPayload?,
+    dropRegistry: DropZoneRegistry,
+    hoveredDropTarget: TreeDropTarget?,
+    onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
+    onTreeDragMove: (Offset) -> Unit,
+    onTreeDragEnd: () -> Unit,
 ) {
     val expanded = expandedCollectionIds.contains(collection.id)
     val isSelected = selectedNode is TreeSelection.Collection && selectedNode.id == collection.id
-    TreeRow(
-        depth = depth,
-        icon = {
-            Icon(
-                Icons.Filled.LibraryBooks,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
+    val dragActive = dragging != null
+    val intoCollTarget = TreeDropTarget.IntoCollection(collection.id)
+    val intoCollHighlight = dragActive && hoveredDropTarget == intoCollTarget
+    val intoCollKey = "into-coll-${collection.id}"
+    LaunchedEffect(dragActive, collection.id) {
+        if (!dragActive) dropRegistry.removeKey(intoCollKey)
+    }
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .then(
+                if (dragActive) {
+                    Modifier.onGloballyPositioned { lc ->
+                        dropRegistry.sync(intoCollKey, true, lc.boundsInRoot(), intoCollTarget)
+                    }
+                } else {
+                    Modifier
+                }
             )
-        },
-        expandIcon = {
-            Icon(
-                if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = if (expanded) "折叠" else "展开",
-                modifier = Modifier.size(18.dp).clickable { onToggleCollection(collection.id) },
-                tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-            )
-        },
-        label = collection.name,
-        selected = isSelected,
-        onClick = { onSelectNode(TreeSelection.Collection(collection.id)) },
-        onDoubleClick = {
-            onSelectNode(TreeSelection.Collection(collection.id))
-            onBeginTreeRename(TreeSelection.Collection(collection.id), collection.name)
-        },
-    )
+    ) {
+        TreeRow(
+            depth = depth,
+            icon = {
+                Icon(
+                    Icons.Filled.LibraryBooks,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
+                )
+            },
+            expandIcon = {
+                Icon(
+                    if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                    contentDescription = if (expanded) "折叠" else "展开",
+                    modifier = Modifier.size(18.dp).clickable { onToggleCollection(collection.id) },
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                )
+            },
+            label = collection.name,
+            selected = isSelected,
+            onClick = { onSelectNode(TreeSelection.Collection(collection.id)) },
+            onDoubleClick = {
+                onSelectNode(TreeSelection.Collection(collection.id))
+                onBeginTreeRename(TreeSelection.Collection(collection.id), collection.name)
+            },
+            dropTargetHighlight = intoCollHighlight,
+        )
+    }
     if (expanded) {
-        collection.folders.forEach { folder ->
+        val cid = collection.id
+        TreeDropGap(
+            active = dragActive,
+            zoneKey = "fs-$cid-root-0",
+            target = TreeDropTarget.FolderSlot(cid, null, 0),
+            dropRegistry = dropRegistry,
+            hovered = hoveredDropTarget,
+        )
+        collection.folders.forEachIndexed { i, folder ->
             FolderTreeBlock(
+                collectionId = cid,
                 folder = folder,
                 depth = depth + 1,
                 selectedNode = selectedNode,
@@ -341,9 +482,29 @@ private fun CollectionTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                dragging = dragging,
+                dropRegistry = dropRegistry,
+                hoveredDropTarget = hoveredDropTarget,
+                onTreeDragStart = onTreeDragStart,
+                onTreeDragMove = onTreeDragMove,
+                onTreeDragEnd = onTreeDragEnd,
+            )
+            TreeDropGap(
+                active = dragActive,
+                zoneKey = "fs-$cid-root-${i + 1}",
+                target = TreeDropTarget.FolderSlot(cid, null, i + 1),
+                dropRegistry = dropRegistry,
+                hovered = hoveredDropTarget,
             )
         }
-        collection.rootRequests.forEach { req ->
+        TreeDropGap(
+            active = dragActive,
+            zoneKey = "rs-$cid-root-0",
+            target = TreeDropTarget.RequestSlot(cid, null, 0),
+            dropRegistry = dropRegistry,
+            hovered = hoveredDropTarget,
+        )
+        collection.rootRequests.forEachIndexed { i, req ->
             RequestTreeRow(
                 req = req,
                 depth = depth + 1,
@@ -353,6 +514,16 @@ private fun CollectionTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onTreeDragStart = onTreeDragStart,
+                onTreeDragMove = onTreeDragMove,
+                onTreeDragEnd = onTreeDragEnd,
+            )
+            TreeDropGap(
+                active = dragActive,
+                zoneKey = "rs-$cid-root-${i + 1}",
+                target = TreeDropTarget.RequestSlot(cid, null, i + 1),
+                dropRegistry = dropRegistry,
+                hovered = hoveredDropTarget,
             )
         }
     }
@@ -360,6 +531,7 @@ private fun CollectionTreeBlock(
 
 @Composable
 private fun FolderTreeBlock(
+    collectionId: String,
     folder: UiFolder,
     depth: Int,
     selectedNode: TreeSelection?,
@@ -370,9 +542,24 @@ private fun FolderTreeBlock(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    dragging: TreeDragPayload?,
+    dropRegistry: DropZoneRegistry,
+    hoveredDropTarget: TreeDropTarget?,
+    onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
+    onTreeDragMove: (Offset) -> Unit,
+    onTreeDragEnd: () -> Unit,
 ) {
     val expanded = expandedFolderIds.contains(folder.id)
     val isSelected = selectedNode is TreeSelection.Folder && selectedNode.id == folder.id
+    val dragActive = dragging != null
+    val intoTarget = TreeDropTarget.IntoFolder(collectionId, folder.id)
+    val intoHighlight = dragActive && hoveredDropTarget == intoTarget
+    val intoKey = "into-${folder.id}"
+    val rowLc = remember(folder.id) { LayoutCoordsHolder() }
+    LaunchedEffect(dragActive, folder.id) {
+        if (!dragActive) dropRegistry.removeKey(intoKey)
+    }
+    val payload = TreeDragPayload.Folder(folder.id)
     TreeRow(
         depth = depth,
         icon = {
@@ -403,10 +590,39 @@ private fun FolderTreeBlock(
             onSelectNode(TreeSelection.Folder(folder.id))
             onBeginTreeRename(TreeSelection.Folder(folder.id), folder.name)
         },
+        rowExtraModifier = Modifier.onGloballyPositioned { lc ->
+            rowLc.coords = lc
+            if (dragActive) {
+                dropRegistry.sync(intoKey, true, lc.boundsInRoot(), intoTarget)
+            }
+        },
+        dragModifier = Modifier.pointerInput(payload) {
+            detectDragGestures(
+                onDragStart = { offset ->
+                    rowLc.coords?.localToRoot(offset)?.let { onTreeDragStart(payload, it) }
+                },
+                onDrag = { change, _ ->
+                    change.consume()
+                    rowLc.coords?.localToRoot(change.position)?.let(onTreeDragMove)
+                },
+                onDragEnd = { onTreeDragEnd() },
+                onDragCancel = { onTreeDragEnd() },
+            )
+        },
+        dropTargetHighlight = intoHighlight,
     )
     if (expanded) {
-        folder.children.forEach { child ->
+        val fid = folder.id
+        TreeDropGap(
+            active = dragActive,
+            zoneKey = "fs-$collectionId-$fid-0",
+            target = TreeDropTarget.FolderSlot(collectionId, fid, 0),
+            dropRegistry = dropRegistry,
+            hovered = hoveredDropTarget,
+        )
+        folder.children.forEachIndexed { i, child ->
             FolderTreeBlock(
+                collectionId = collectionId,
                 folder = child,
                 depth = depth + 1,
                 selectedNode = selectedNode,
@@ -417,9 +633,29 @@ private fun FolderTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                dragging = dragging,
+                dropRegistry = dropRegistry,
+                hoveredDropTarget = hoveredDropTarget,
+                onTreeDragStart = onTreeDragStart,
+                onTreeDragMove = onTreeDragMove,
+                onTreeDragEnd = onTreeDragEnd,
+            )
+            TreeDropGap(
+                active = dragActive,
+                zoneKey = "fs-$collectionId-$fid-${i + 1}",
+                target = TreeDropTarget.FolderSlot(collectionId, fid, i + 1),
+                dropRegistry = dropRegistry,
+                hovered = hoveredDropTarget,
             )
         }
-        folder.requests.forEach { req ->
+        TreeDropGap(
+            active = dragActive,
+            zoneKey = "rs-$collectionId-$fid-0",
+            target = TreeDropTarget.RequestSlot(collectionId, fid, 0),
+            dropRegistry = dropRegistry,
+            hovered = hoveredDropTarget,
+        )
+        folder.requests.forEachIndexed { i, req ->
             RequestTreeRow(
                 req = req,
                 depth = depth + 1,
@@ -429,6 +665,16 @@ private fun FolderTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onTreeDragStart = onTreeDragStart,
+                onTreeDragMove = onTreeDragMove,
+                onTreeDragEnd = onTreeDragEnd,
+            )
+            TreeDropGap(
+                active = dragActive,
+                zoneKey = "rs-$collectionId-$fid-${i + 1}",
+                target = TreeDropTarget.RequestSlot(collectionId, fid, i + 1),
+                dropRegistry = dropRegistry,
+                hovered = hoveredDropTarget,
             )
         }
     }
@@ -444,9 +690,14 @@ private fun RequestTreeRow(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
+    onTreeDragMove: (Offset) -> Unit,
+    onTreeDragEnd: () -> Unit,
 ) {
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
+    val rowLc = remember(req.id) { LayoutCoordsHolder() }
+    val payload = TreeDragPayload.Request(req.id)
     ContextMenuArea(
         items = {
             listOf(
@@ -455,7 +706,10 @@ private fun RequestTreeRow(
                 },
                 ContextMenuItem("复制") {
                     onDuplicateRequestBelow(req.id)
-                }
+                },
+                ContextMenuItem("重命名") {
+                    onBeginTreeRename(TreeSelection.Request(req.id), req.name)
+                },
             )
         }
     ) {
@@ -481,6 +735,20 @@ private fun RequestTreeRow(
                 onSelectNode(TreeSelection.Request(req.id))
                 onBeginTreeRename(TreeSelection.Request(req.id), req.name)
             },
+            rowExtraModifier = Modifier.onGloballyPositioned { rowLc.coords = it },
+            dragModifier = Modifier.pointerInput(payload) {
+                detectDragGestures(
+                    onDragStart = { offset ->
+                        rowLc.coords?.localToRoot(offset)?.let { onTreeDragStart(payload, it) }
+                    },
+                    onDrag = { change, _ ->
+                        change.consume()
+                        rowLc.coords?.localToRoot(change.position)?.let(onTreeDragMove)
+                    },
+                    onDragEnd = { onTreeDragEnd() },
+                    onDragCancel = { onTreeDragEnd() },
+                )
+            },
         )
     }
 }
@@ -493,22 +761,46 @@ private fun TreeRow(
     label: String,
     selected: Boolean,
     onClick: () -> Unit,
+    /** 第二次点击落在系统双击间隔内触发，不阻塞第一次单击（避免 combinedClickable 的延迟） */
     onDoubleClick: (() -> Unit)? = null,
+    rowExtraModifier: Modifier = Modifier,
+    /**
+     * 在内侧、[clickable] 外侧：先收到指针，便于拖动手势。
+     */
+    dragModifier: Modifier = Modifier,
+    dropTargetHighlight: Boolean = false,
 ) {
+    val doubleTapMs = LocalViewConfiguration.current.doubleTapTimeoutMillis
+    var lastClickMs by remember { mutableStateOf(0L) }
     val rowModifier = Modifier
         .fillMaxWidth()
         .clip(RoundedCornerShape(4.dp))
         .background(
-            if (selected) MaterialTheme.colors.primary.copy(alpha = 0.16f)
-            else Color.Transparent
+            when {
+                dropTargetHighlight -> MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                selected -> MaterialTheme.colors.primary.copy(alpha = 0.16f)
+                else -> Color.Transparent
+            }
         )
     val clickableModifier = if (onDoubleClick != null) {
-        rowModifier.combinedClickable(onClick = onClick, onDoubleClick = onDoubleClick)
+        val onDbl = onDoubleClick
+        rowModifier.clickable(onClick = {
+            val now = System.currentTimeMillis()
+            if (lastClickMs != 0L && now - lastClickMs < doubleTapMs) {
+                onDbl()
+                lastClickMs = 0L
+            } else {
+                onClick()
+                lastClickMs = now
+            }
+        })
     } else {
         rowModifier.clickable(onClick = onClick)
     }
     Row(
-        modifier = clickableModifier
+        modifier = rowExtraModifier
+            .then(clickableModifier)
+            .then(dragModifier)
             .padding(vertical = 4.dp, horizontal = 2.dp)
             .padding(start = (depth * 10).dp),
         verticalAlignment = Alignment.CenterVertically
