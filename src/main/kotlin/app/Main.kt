@@ -50,6 +50,7 @@ import androidx.compose.ui.window.rememberWindowState
 import java.awt.EventQueue
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
+import java.awt.datatransfer.StringSelection
 import kotlin.concurrent.thread
 import db.AppPaths
 import db.CollectionRepository
@@ -60,6 +61,7 @@ import http.RequestTopBar
 import http.ResponsePanel
 import http.closeQuietly
 import http.parseCurlCommand
+import http.requestToCurlCommand
 import http.sendRequestStreaming
 import tree.CollectionTreeSidebar
 import tree.TreeSelection
@@ -457,6 +459,14 @@ fun App() {
                     },
                     folderAddEnabled = repository.newFolderTarget(treeSelection) != null,
                     requestAddEnabled = repository.newRequestTarget(treeSelection) != null,
+                    onExportRequestAsCurl = { rid ->
+                        val r = repository.getRequest(rid) ?: return@CollectionTreeSidebar
+                        writeClipboardText(
+                            requestToCurlCommand(r.method, r.url, r.headersText, r.bodyText)
+                        )
+                        setSingleResponseMessage(responseLines, "已复制 cURL 到剪贴板")
+                        responsePartialLine = null
+                    },
                 )
                 Box(
                     modifier = Modifier
@@ -622,6 +632,10 @@ private fun readClipboardText(): String {
     val data = clipboard.getData(DataFlavor.stringFlavor) as? String ?: ""
     if (data.isBlank()) throw IllegalArgumentException("剪贴板为空")
     return data.trim()
+}
+
+private fun writeClipboardText(text: String) {
+    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }
 
 fun main() = application {

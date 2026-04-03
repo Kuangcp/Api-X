@@ -1,5 +1,7 @@
 package tree
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -66,6 +68,7 @@ fun CollectionTreeSidebar(
     onAddRequest: () -> Unit,
     onRename: (TreeSelection, String) -> Unit,
     onDelete: (TreeSelection) -> Unit,
+    onExportRequestAsCurl: (String) -> Unit,
     folderAddEnabled: Boolean,
     requestAddEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -192,6 +195,7 @@ fun CollectionTreeSidebar(
                         onToggleCollection = onToggleCollection,
                         onToggleFolder = onToggleFolder,
                         onSelectNode = onSelectNode,
+                        onExportRequestAsCurl = onExportRequestAsCurl,
                     )
                 }
             }
@@ -259,6 +263,7 @@ private fun CollectionTreeBlock(
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onExportRequestAsCurl: (String) -> Unit,
 ) {
     val expanded = expandedCollectionIds.contains(collection.id)
     val isSelected = selectedNode is TreeSelection.Collection && selectedNode.id == collection.id
@@ -294,6 +299,7 @@ private fun CollectionTreeBlock(
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
+                onExportRequestAsCurl = onExportRequestAsCurl,
             )
         }
         collection.rootRequests.forEach { req ->
@@ -303,6 +309,7 @@ private fun CollectionTreeBlock(
                 selectedNode = selectedNode,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
+                onExportRequestAsCurl = onExportRequestAsCurl,
             )
         }
     }
@@ -317,6 +324,7 @@ private fun FolderTreeBlock(
     expandedFolderIds: Set<String>,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onExportRequestAsCurl: (String) -> Unit,
 ) {
     val expanded = expandedFolderIds.contains(folder.id)
     val isSelected = selectedNode is TreeSelection.Folder && selectedNode.id == folder.id
@@ -357,6 +365,7 @@ private fun FolderTreeBlock(
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
+                onExportRequestAsCurl = onExportRequestAsCurl,
             )
         }
         folder.requests.forEach { req ->
@@ -366,6 +375,7 @@ private fun FolderTreeBlock(
                 selectedNode = selectedNode,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
+                onExportRequestAsCurl = onExportRequestAsCurl,
             )
         }
     }
@@ -378,28 +388,39 @@ private fun RequestTreeRow(
     selectedNode: TreeSelection?,
     editorBoundRequestId: String?,
     onSelectNode: (TreeSelection) -> Unit,
+    onExportRequestAsCurl: (String) -> Unit,
 ) {
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
-    TreeRow(
-        depth = depth,
-        icon = {
-            Text(
-                req.method.uppercase(),
-                fontSize = 9.sp,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colors.primary.copy(alpha = 0.95f),
-                modifier = Modifier.fillMaxWidth()
+    ContextMenuArea(
+        items = {
+            listOf(
+                ContextMenuItem("导出为 cURL") {
+                    onExportRequestAsCurl(req.id)
+                }
             )
-        },
-        expandIcon = { Spacer(Modifier.width(18.dp)) },
-        label = req.name,
-        selected = isTreeSelected || (editingThis && !isTreeSelected),
-        onClick = { onSelectNode(TreeSelection.Request(req.id)) },
-    )
+        }
+    ) {
+        TreeRow(
+            depth = depth,
+            icon = {
+                Text(
+                    req.method.uppercase(),
+                    fontSize = 9.sp,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    textAlign = TextAlign.Center,
+                    color = MaterialTheme.colors.primary.copy(alpha = 0.95f),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            expandIcon = { Spacer(Modifier.width(18.dp)) },
+            label = req.name,
+            selected = isTreeSelected || (editingThis && !isTreeSelected),
+            onClick = { onSelectNode(TreeSelection.Request(req.id)) },
+        )
+    }
 }
 
 @Composable
