@@ -43,12 +43,15 @@ import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.LibraryBooks
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
@@ -205,8 +208,8 @@ fun CollectionTreeSidebar(
                         onToggleCollection = onToggleCollection,
                         onToggleFolder = onToggleFolder,
                         onSelectNode = onSelectNode,
-                        onRequestRename = { id, name ->
-                            renameTarget = TreeSelection.Request(id)
+                        onBeginTreeRename = { sel, name ->
+                            renameTarget = sel
                             renameText = name
                         },
                         onExportRequestAsCurl = onExportRequestAsCurl,
@@ -225,6 +228,10 @@ fun CollectionTreeSidebar(
             }
             renameTarget = null
         }
+        val renameFieldFocus = remember { FocusRequester() }
+        LaunchedEffect(target) {
+            renameFieldFocus.requestFocus()
+        }
         AlertDialog(
             onDismissRequest = { renameTarget = null },
             title = { Text("重命名", fontSize = 16.sp) },
@@ -236,14 +243,16 @@ fun CollectionTreeSidebar(
                     label = { Text("名称") },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { commitRename() }),
-                    modifier = Modifier.onPreviewKeyEvent { ev ->
-                        if (ev.type == KeyEventType.KeyDown && ev.key == Key.Enter) {
-                            commitRename()
-                            true
-                        } else {
-                            false
+                    modifier = Modifier
+                        .focusRequester(renameFieldFocus)
+                        .onPreviewKeyEvent { ev ->
+                            if (ev.type == KeyEventType.KeyDown && ev.key == Key.Enter) {
+                                commitRename()
+                                true
+                            } else {
+                                false
+                            }
                         }
-                    }
                 )
             },
             confirmButton = {
@@ -287,7 +296,7 @@ private fun CollectionTreeBlock(
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
-    onRequestRename: (String, String) -> Unit,
+    onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
 ) {
@@ -314,6 +323,10 @@ private fun CollectionTreeBlock(
         label = collection.name,
         selected = isSelected,
         onClick = { onSelectNode(TreeSelection.Collection(collection.id)) },
+        onDoubleClick = {
+            onSelectNode(TreeSelection.Collection(collection.id))
+            onBeginTreeRename(TreeSelection.Collection(collection.id), collection.name)
+        },
     )
     if (expanded) {
         collection.folders.forEach { folder ->
@@ -325,7 +338,7 @@ private fun CollectionTreeBlock(
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
-                onRequestRename = onRequestRename,
+                onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -337,7 +350,7 @@ private fun CollectionTreeBlock(
                 selectedNode = selectedNode,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
-                onRequestRename = onRequestRename,
+                onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -354,7 +367,7 @@ private fun FolderTreeBlock(
     expandedFolderIds: Set<String>,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
-    onRequestRename: (String, String) -> Unit,
+    onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
 ) {
@@ -386,6 +399,10 @@ private fun FolderTreeBlock(
         label = folder.name,
         selected = isSelected,
         onClick = { onSelectNode(TreeSelection.Folder(folder.id)) },
+        onDoubleClick = {
+            onSelectNode(TreeSelection.Folder(folder.id))
+            onBeginTreeRename(TreeSelection.Folder(folder.id), folder.name)
+        },
     )
     if (expanded) {
         folder.children.forEach { child ->
@@ -397,7 +414,7 @@ private fun FolderTreeBlock(
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
-                onRequestRename = onRequestRename,
+                onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -409,7 +426,7 @@ private fun FolderTreeBlock(
                 selectedNode = selectedNode,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
-                onRequestRename = onRequestRename,
+                onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
@@ -424,7 +441,7 @@ private fun RequestTreeRow(
     selectedNode: TreeSelection?,
     editorBoundRequestId: String?,
     onSelectNode: (TreeSelection) -> Unit,
-    onRequestRename: (String, String) -> Unit,
+    onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
 ) {
@@ -462,7 +479,7 @@ private fun RequestTreeRow(
             onClick = { onSelectNode(TreeSelection.Request(req.id)) },
             onDoubleClick = {
                 onSelectNode(TreeSelection.Request(req.id))
-                onRequestRename(req.id, req.name)
+                onBeginTreeRename(TreeSelection.Request(req.id), req.name)
             },
         )
     }
