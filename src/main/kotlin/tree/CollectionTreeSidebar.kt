@@ -67,6 +67,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
@@ -116,7 +118,7 @@ private fun TreeDropGap(
     Box(
         modifier
             .fillMaxWidth()
-            .height(8.dp)
+            .height(if (active) 4.dp else 0.dp)
             .then(
                 if (active) {
                     Modifier.onGloballyPositioned { lc ->
@@ -181,7 +183,7 @@ fun CollectionTreeSidebar(
             .fillMaxHeight()
             .clip(RoundedCornerShape(6.dp))
             .background(MaterialTheme.colors.surface.copy(alpha = 0.45f))
-            .padding(horizontal = 6.dp, vertical = 6.dp)
+            .padding(horizontal = 5.dp, vertical = 5.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -265,7 +267,7 @@ fun CollectionTreeSidebar(
             }
         }
         Divider(
-            modifier = Modifier.padding(vertical = 4.dp),
+            modifier = Modifier.padding(vertical = 2.dp),
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
         )
         val scroll = rememberScrollState()
@@ -279,9 +281,9 @@ fun CollectionTreeSidebar(
             if (tree.isEmpty()) {
                 Text(
                     "暂无集合",
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                    modifier = Modifier.padding(8.dp)
+                    modifier = Modifier.padding(6.dp)
                 )
             } else {
                 tree.forEach { coll ->
@@ -438,7 +440,7 @@ private fun CollectionTreeBlock(
                 Icon(
                     Icons.Filled.LibraryBooks,
                     contentDescription = null,
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(19.dp),
                     tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
                 )
             },
@@ -446,7 +448,7 @@ private fun CollectionTreeBlock(
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = if (expanded) "折叠" else "展开",
-                    modifier = Modifier.size(18.dp).clickable { onToggleCollection(collection.id) },
+                    modifier = Modifier.size(20.dp).clickable { onToggleCollection(collection.id) },
                     tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                 )
             },
@@ -566,7 +568,7 @@ private fun FolderTreeBlock(
             Icon(
                 if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
                 contentDescription = null,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(19.dp),
                 tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
             )
         },
@@ -576,11 +578,11 @@ private fun FolderTreeBlock(
                 Icon(
                     if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
                     contentDescription = null,
-                    modifier = Modifier.size(18.dp).clickable { onToggleFolder(folder.id) },
+                    modifier = Modifier.size(20.dp).clickable { onToggleFolder(folder.id) },
                     tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                 )
             } else {
-                Spacer(Modifier.width(18.dp))
+                Spacer(Modifier.width(20.dp))
             }
         },
         label = folder.name,
@@ -701,7 +703,7 @@ private fun RequestTreeRow(
     ContextMenuArea(
         items = {
             listOf(
-                ContextMenuItem("导出为 cURL") {
+                ContextMenuItem("cURL") {
                     onExportRequestAsCurl(req.id)
                 },
                 ContextMenuItem("复制") {
@@ -718,7 +720,14 @@ private fun RequestTreeRow(
             icon = {
                 Text(
                     req.method.uppercase(),
-                    fontSize = 9.sp,
+                    style = TextStyle(
+                        fontSize = 12.sp,
+                        lineHeight = 13.sp,
+                        lineHeightStyle = LineHeightStyle(
+                            alignment = LineHeightStyle.Alignment.Center,
+                            trim = LineHeightStyle.Trim.Both,
+                        ),
+                    ),
                     maxLines = 1,
                     softWrap = false,
                     overflow = TextOverflow.Clip,
@@ -727,7 +736,7 @@ private fun RequestTreeRow(
                     modifier = Modifier.fillMaxWidth()
                 )
             },
-            expandIcon = { Spacer(Modifier.width(18.dp)) },
+            expandIcon = { Spacer(Modifier.width(20.dp)) },
             label = req.name,
             selected = isTreeSelected || (editingThis && !isTreeSelected),
             onClick = { onSelectNode(TreeSelection.Request(req.id)) },
@@ -774,7 +783,7 @@ private fun TreeRow(
     var lastClickMs by remember { mutableStateOf(0L) }
     val rowModifier = Modifier
         .fillMaxWidth()
-        .clip(RoundedCornerShape(4.dp))
+        .clip(RoundedCornerShape(2.dp))
         .background(
             when {
                 dropTargetHighlight -> MaterialTheme.colors.primary.copy(alpha = 0.14f)
@@ -801,19 +810,26 @@ private fun TreeRow(
         modifier = rowExtraModifier
             .then(clickableModifier)
             .then(dragModifier)
-            .padding(vertical = 4.dp, horizontal = 2.dp)
-            .padding(start = (depth * 10).dp),
+            .padding(vertical = 1.dp, horizontal = 0.dp)
+            .padding(start = (depth * 6).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.width(22.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(23.dp), contentAlignment = Alignment.Center) {
             expandIcon()
         }
-        Box(Modifier.width(44.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) {
             icon()
         }
         Text(
             label,
-            fontSize = 12.sp,
+            style = TextStyle(
+                fontSize = 15.sp,
+                lineHeight = 16.sp,
+                lineHeightStyle = LineHeightStyle(
+                    alignment = LineHeightStyle.Alignment.Center,
+                    trim = LineHeightStyle.Trim.Both,
+                ),
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = MaterialTheme.colors.onSurface,
