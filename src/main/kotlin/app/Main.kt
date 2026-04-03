@@ -87,8 +87,11 @@ fun App() {
     var tree by remember { mutableStateOf(repository.loadTree()) }
     var treeSelection by remember { mutableStateOf<TreeSelection?>(null) }
     var editorRequestId by remember { mutableStateOf<String?>(null) }
-    var expandedCollectionIds by remember { mutableStateOf(setOf<String>()) }
-    var expandedFolderIds by remember { mutableStateOf(setOf<String>()) }
+    val expandLoaded = remember { TreeExpandPrefs.load() }
+    var expandedCollectionIds by remember { mutableStateOf(expandLoaded.collectionIds) }
+    var expandedFolderIds by remember { mutableStateOf(expandLoaded.folderIds) }
+    var persistTreeExpand by remember { mutableStateOf(expandLoaded.fromSavedFile) }
+    var didApplyDefaultTreeExpand by remember { mutableStateOf(false) }
     var treeSplitRatio by remember { mutableStateOf(0.2f) }
     var didPickInitialRequest by remember { mutableStateOf(false) }
 
@@ -167,10 +170,17 @@ fun App() {
 
     LaunchedEffect(tree) {
         if (tree.isEmpty()) return@LaunchedEffect
-        if (expandedCollectionIds.isEmpty()) {
-            expandedCollectionIds = tree.map { it.id }.toSet()
-            expandedFolderIds = collectAllFolderIds(tree)
+        if (!didApplyDefaultTreeExpand) {
+            didApplyDefaultTreeExpand = true
+            if (!expandLoaded.fromSavedFile &&
+                expandedCollectionIds.isEmpty() &&
+                expandedFolderIds.isEmpty()
+            ) {
+                expandedCollectionIds = tree.map { it.id }.toSet()
+                expandedFolderIds = collectAllFolderIds(tree)
+            }
         }
+        persistTreeExpand = true
         if (!didPickInitialRequest) {
             didPickInitialRequest = true
             firstRequestSelection(tree)?.let { sel ->
@@ -178,6 +188,11 @@ fun App() {
                 treeSelection = sel
             }
         }
+    }
+
+    LaunchedEffect(expandedCollectionIds, expandedFolderIds, persistTreeExpand) {
+        if (!persistTreeExpand) return@LaunchedEffect
+        TreeExpandPrefs.save(expandedCollectionIds, expandedFolderIds)
     }
 
     val loadingRef = rememberUpdatedState(isLoading)
