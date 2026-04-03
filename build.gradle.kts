@@ -41,7 +41,8 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "api-x"
             packageVersion = "1.0.0"
-            modules("java.net.http")
+            // java.sql：SQLite JDBC 需要 DriverManager 等（jlink 默认运行时未包含）
+            modules("java.net.http", "java.sql")
         }
     }
 }
