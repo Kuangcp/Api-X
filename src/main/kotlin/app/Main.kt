@@ -480,6 +480,7 @@ fun App() {
                 }
                 RequestSidePanel(
                     modifier = Modifier.weight(middleFraction * splitRatio),
+                    editorRequestId = editorRequestId,
                     isLoading = isLoading,
                     method = method,
                     methodMenuExpanded = methodMenuExpanded,

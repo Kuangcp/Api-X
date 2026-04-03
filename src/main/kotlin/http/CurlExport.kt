@@ -9,14 +9,7 @@ fun requestToCurlCommand(method: String, url: String, headersText: String, bodyT
         sb.append(" -X ").append(shellSingleQuote(m))
     }
     sb.append(" ").append(shellSingleQuote(u))
-    for (raw in headersText.lineSequence()) {
-        val line = raw.trim()
-        if (line.isEmpty()) continue
-        val colon = line.indexOf(':')
-        if (colon <= 0) continue
-        val name = line.substring(0, colon).trim()
-        val value = line.substring(colon + 1).trim()
-        if (name.isEmpty()) continue
+    for ((name, value) in parseHeaders(headersText)) {
         sb.append(" -H ").append(shellSingleQuote("$name: $value"))
     }
     if (bodyText.isNotBlank() && m in CURL_BODY_METHODS) {

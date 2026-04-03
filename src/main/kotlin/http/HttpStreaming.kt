@@ -29,21 +29,51 @@ fun formatHttpResponseHeaders(headers: HttpHeaders): List<String> {
     return out
 }
 
-fun parseHeaders(headersText: String): List<Pair<String, String>> {
-    return headersText
+/**
+ * 单行合法 Header：`Name: Value`，Name 非空；允许 Value 为空（如 `Authorization: `）。
+ * 不含冒号、或冒号前无名称的行返回 null（发送请求时不采用）。
+ */
+fun parseHeaderLine(line: String): Pair<String, String>? {
+    val trimmed = line.trim()
+    if (trimmed.isEmpty()) return null
+    val splitIndex = trimmed.indexOf(':')
+    if (splitIndex <= 0) return null
+    val name = trimmed.substring(0, splitIndex).trim()
+    val value = trimmed.substring(splitIndex + 1).trim()
+    if (name.isEmpty()) return null
+    return name to value
+}
+
+fun parseHeaders(headersText: String): List<Pair<String, String>> =
+    headersText
         .lines()
         .map { it.trim() }
         .filter { it.isNotEmpty() }
-        .mapNotNull { line ->
-            val splitIndex = line.indexOf(':')
-            if (splitIndex <= 0 || splitIndex == line.lastIndex) {
-                null
-            } else {
-                val name = line.substring(0, splitIndex).trim()
-                val value = line.substring(splitIndex + 1).trim()
-                if (name.isNotEmpty() && value.isNotEmpty()) name to value else null
-            }
-        }
+        .mapNotNull { parseHeaderLine(it) }
+
+/** 拆成可进表单的合法行，与无法解析的行（切换表单时不生成行，发送时也不带）。 */
+fun splitHeadersForEditor(headersText: String): Pair<List<Pair<String, String>>, List<String>> {
+    val valid = mutableListOf<Pair<String, String>>()
+    val invalid = mutableListOf<String>()
+    for (raw in headersText.lines()) {
+        val trimmed = raw.trim().trimEnd('\r')
+        if (trimmed.isEmpty()) continue
+        val parsed = parseHeaderLine(trimmed)
+        if (parsed != null) valid.add(parsed)
+        else invalid.add(trimmed)
+    }
+    return valid to invalid
+}
+
+fun joinHeadersEditor(validRows: List<Pair<String, String>>, orphanLines: List<String>): String {
+    val rowsPart = validRows.filter { it.first.isNotBlank() }.joinToString("\n") { "${it.first}: ${it.second}" }
+    val orphanPart = orphanLines.filter { it.isNotBlank() }.joinToString("\n")
+    return when {
+        rowsPart.isEmpty() && orphanPart.isEmpty() -> ""
+        rowsPart.isEmpty() -> orphanPart
+        orphanPart.isEmpty() -> rowsPart
+        else -> "$rowsPart\n$orphanPart"
+    }
 }
 
 fun sendRequestStreaming(
