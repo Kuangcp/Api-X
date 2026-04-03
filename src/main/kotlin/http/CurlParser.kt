@@ -1,3 +1,5 @@
+package http
+
 private val HTTP_METHODS = setOf("GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS")
 
 data class CurlRequest(

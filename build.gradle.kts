@@ -28,7 +28,7 @@ dependencies {
 
 compose.desktop {
     application {
-        mainClass = "MainKt"
+        mainClass = "app.MainKt"
         jvmArgs += listOf(
             "-Xms256m",
             "-Xmx700m",

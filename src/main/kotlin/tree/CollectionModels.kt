@@ -1,3 +1,5 @@
+package tree
+
 /** 侧边栏树节点（集合 → 文件夹* → 请求*） */
 data class UiCollection(
     val id: String,

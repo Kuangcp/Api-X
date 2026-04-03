@@ -1,3 +1,5 @@
+package tree
+
 /**
  * 与具体数据库表解耦的中间模型，便于日后对接：
  * - Postman Collection v2.1（item / folder 嵌套、request 对象）

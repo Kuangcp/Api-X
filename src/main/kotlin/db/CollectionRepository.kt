@@ -1,7 +1,17 @@
+package db
+
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
 import java.util.UUID
+import tree.PortableCollection
+import tree.PortableFolder
+import tree.PortableRequest
+import tree.StoredHttpRequest
+import tree.TreeSelection
+import tree.UiCollection
+import tree.UiFolder
+import tree.UiRequestSummary
 
 class CollectionRepository(dbPath: Path) : AutoCloseable {
 

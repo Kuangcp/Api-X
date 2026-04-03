@@ -1,3 +1,5 @@
+package app
+
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -37,12 +39,31 @@ import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
 import java.awt.EventQueue
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import kotlin.concurrent.thread
+import db.AppPaths
+import db.CollectionRepository
+import http.BufferUpdate
+import http.RequestControl
+import http.RequestSidePanel
+import http.RequestTopBar
+import http.ResponsePanel
+import http.closeQuietly
+import http.parseCurlCommand
+import http.sendRequestStreaming
+import tree.CollectionTreeSidebar
+import tree.TreeSelection
+import tree.collectAllFolderIds
+import tree.firstRequestSelection
 
 @Composable
 @Preview
@@ -590,7 +611,37 @@ private fun readClipboardText(): String {
 }
 
 fun main() = application {
-    Window(title = "Api-X", onCloseRequest = ::exitApplication) {
+    val loaded = remember { WindowPrefs.load() }
+    val windowState = rememberWindowState(
+        position = if (loaded.xDp != null && loaded.yDp != null) {
+            WindowPosition.Absolute(loaded.xDp.dp, loaded.yDp.dp)
+        } else {
+            WindowPosition.PlatformDefault
+        },
+        width = loaded.widthDp.dp,
+        height = loaded.heightDp.dp,
+    )
+    Window(
+        title = "Api-X",
+        state = windowState,
+        onCloseRequest = {
+            persistWindowGeometry(windowState)
+            exitApplication()
+        },
+    ) {
         App()
     }
+}
+
+private fun persistWindowGeometry(state: WindowState) {
+    if (state.placement != WindowPlacement.Floating) return
+    val pos = state.position
+    if (pos !is WindowPosition.Absolute) return
+    if (!state.size.isSpecified) return
+    WindowPrefs.save(
+        xDp = pos.x.value,
+        yDp = pos.y.value,
+        widthDp = state.size.width.value,
+        heightDp = state.size.height.value,
+    )
 }
