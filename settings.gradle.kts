@@ -6,9 +6,13 @@ pluginManagement {
         mavenCentral()
     }
 
+    val kotlinVersion = providers.gradleProperty("kotlin.version").get()
+    val composeVersion = providers.gradleProperty("compose.version").get()
+
     plugins {
-        kotlin("jvm").version(extra["kotlin.version"] as String)
-        id("org.jetbrains.compose").version(extra["compose.version"] as String)
+        kotlin("jvm").version(kotlinVersion)
+        id("org.jetbrains.kotlin.plugin.compose").version(kotlinVersion)
+        id("org.jetbrains.compose").version(composeVersion)
     }
 }
 

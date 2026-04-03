@@ -2,6 +2,7 @@ import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
     kotlin("jvm")
+    id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.compose")
 }
 
@@ -20,6 +21,9 @@ dependencies {
     // (in a separate module for demo project and in testMain).
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
+    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.xerial:sqlite-jdbc:3.47.2.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
 }
 
 compose.desktop {
