@@ -69,6 +69,7 @@ fun CollectionTreeSidebar(
     onRename: (TreeSelection, String) -> Unit,
     onDelete: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onDuplicateRequestBelow: (String) -> Unit,
     folderAddEnabled: Boolean,
     requestAddEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -196,6 +197,7 @@ fun CollectionTreeSidebar(
                         onToggleFolder = onToggleFolder,
                         onSelectNode = onSelectNode,
                         onExportRequestAsCurl = onExportRequestAsCurl,
+                        onDuplicateRequestBelow = onDuplicateRequestBelow,
                     )
                 }
             }
@@ -264,6 +266,7 @@ private fun CollectionTreeBlock(
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onDuplicateRequestBelow: (String) -> Unit,
 ) {
     val expanded = expandedCollectionIds.contains(collection.id)
     val isSelected = selectedNode is TreeSelection.Collection && selectedNode.id == collection.id
@@ -300,6 +303,7 @@ private fun CollectionTreeBlock(
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
         }
         collection.rootRequests.forEach { req ->
@@ -310,6 +314,7 @@ private fun CollectionTreeBlock(
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
         }
     }
@@ -325,6 +330,7 @@ private fun FolderTreeBlock(
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onDuplicateRequestBelow: (String) -> Unit,
 ) {
     val expanded = expandedFolderIds.contains(folder.id)
     val isSelected = selectedNode is TreeSelection.Folder && selectedNode.id == folder.id
@@ -366,6 +372,7 @@ private fun FolderTreeBlock(
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
         }
         folder.requests.forEach { req ->
@@ -376,6 +383,7 @@ private fun FolderTreeBlock(
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onDuplicateRequestBelow = onDuplicateRequestBelow,
             )
         }
     }
@@ -389,6 +397,7 @@ private fun RequestTreeRow(
     editorBoundRequestId: String?,
     onSelectNode: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onDuplicateRequestBelow: (String) -> Unit,
 ) {
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
@@ -397,6 +406,9 @@ private fun RequestTreeRow(
             listOf(
                 ContextMenuItem("导出为 cURL") {
                     onExportRequestAsCurl(req.id)
+                },
+                ContextMenuItem("复制") {
+                    onDuplicateRequestBelow(req.id)
                 }
             )
         }

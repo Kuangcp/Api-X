@@ -167,6 +167,97 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         return id
     }
 
+    /**
+     * 在同一集合、同一文件夹（含根）内，在原请求下方插入副本；
+     * 名称为「原名 + " Copy"」，并复制 method/url/headers/body/meta。
+     */
+    fun duplicateRequestBelow(sourceId: String): String? {
+        val row = conn.prepareStatement(
+            """
+            SELECT collection_id, folder_id, name, method, url, headers_text, body_text, meta_json, sort_order
+            FROM requests WHERE id = ?
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, sourceId)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                object {
+                    val collectionId = rs.getString("collection_id")
+                    val folderId = rs.getString("folder_id").takeUnless { rs.wasNull() }
+                    val name = rs.getString("name")
+                    val method = rs.getString("method")
+                    val url = rs.getString("url")
+                    val headersText = rs.getString("headers_text")
+                    val bodyText = rs.getString("body_text")
+                    val metaJson = rs.getString("meta_json")
+                    val sortOrder = rs.getInt("sort_order")
+                }
+            }
+        }
+        val newId = newId()
+        val newName = "${row.name} Copy"
+        val insertAt = row.sortOrder + 1
+        val now = System.currentTimeMillis()
+        val oldAutoCommit = conn.autoCommit
+        return try {
+            conn.autoCommit = false
+            if (row.folderId == null) {
+                conn.prepareStatement(
+                    """
+                    UPDATE requests SET sort_order = sort_order + 1, updated_at = ?
+                    WHERE collection_id = ? AND folder_id IS NULL AND sort_order >= ?
+                    """.trimIndent()
+                ).use { ps ->
+                    ps.setLong(1, now)
+                    ps.setString(2, row.collectionId)
+                    ps.setInt(3, insertAt)
+                    ps.executeUpdate()
+                }
+            } else {
+                conn.prepareStatement(
+                    """
+                    UPDATE requests SET sort_order = sort_order + 1, updated_at = ?
+                    WHERE collection_id = ? AND folder_id = ? AND sort_order >= ?
+                    """.trimIndent()
+                ).use { ps ->
+                    ps.setLong(1, now)
+                    ps.setString(2, row.collectionId)
+                    ps.setString(3, row.folderId)
+                    ps.setInt(4, insertAt)
+                    ps.executeUpdate()
+                }
+            }
+            conn.prepareStatement(
+                """
+                INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, body_text, sort_order, created_at, updated_at, meta_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, newId)
+                ps.setString(2, row.collectionId)
+                if (row.folderId == null) ps.setNull(3, java.sql.Types.VARCHAR)
+                else ps.setString(3, row.folderId)
+                ps.setString(4, newName)
+                ps.setString(5, row.method)
+                ps.setString(6, row.url)
+                ps.setString(7, row.headersText)
+                ps.setString(8, row.bodyText)
+                ps.setInt(9, insertAt)
+                ps.setLong(10, now)
+                ps.setLong(11, now)
+                ps.setString(12, row.metaJson)
+                ps.executeUpdate()
+            }
+            conn.commit()
+            newId
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = oldAutoCommit
+        }
+    }
+
     fun renameCollection(id: String, name: String) {
         val now = System.currentTimeMillis()
         conn.prepareStatement("UPDATE collections SET name = ?, updated_at = ? WHERE id = ?").use { ps ->

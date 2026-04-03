@@ -467,6 +467,18 @@ fun App() {
                         setSingleResponseMessage(responseLines, "已复制 cURL 到剪贴板")
                         responsePartialLine = null
                     },
+                    onDuplicateRequestBelow = { rid ->
+                        saveEditorIfBound()
+                        val newId = repository.duplicateRequestBelow(rid) ?: return@CollectionTreeSidebar
+                        refreshTree()
+                        val placed = repository.getRequest(newId) ?: return@CollectionTreeSidebar
+                        expandedCollectionIds = expandedCollectionIds + placed.collectionId
+                        if (placed.folderId != null) {
+                            expandedFolderIds = expandedFolderIds + placed.folderId
+                        }
+                        applyRequestToEditor(newId)
+                        treeSelection = TreeSelection.Request(newId)
+                    },
                 )
                 Box(
                     modifier = Modifier
