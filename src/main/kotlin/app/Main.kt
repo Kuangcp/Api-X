@@ -224,6 +224,8 @@ fun App() {
     val responseListState = remember(responseScopeKey) { LazyListState() }
     val responseHeadersListState = remember(responseScopeKey) { LazyListState() }
     var isDarkTheme by remember { mutableStateOf(true) }
+    var showSettings by remember { mutableStateOf(false) }
+    var appSettings by remember { mutableStateOf(AppSettingsStore.snapshot()) }
     /** 当前进行中的 HTTP 请求对应的 request id（用于计时器不污染切换后的请求文案）。 */
     var inflightBoundRequestId by remember { mutableStateOf<String?>(null) }
     /** 每次发起请求递增；避免 flusher 已 drain 但 EDT 尚未应用时，完成回调先清空 active 导致正文丢失。 */
@@ -479,8 +481,10 @@ fun App() {
     }
 
     MaterialTheme(
-        colors = if (isDarkTheme) apiXDarkColors() else lightColors(background = hexToColor("#f2f2f2"))
+        colors = appMaterialColors(isDarkTheme, appSettings.backgroundHex),
+        typography = typographyFromSettings(appSettings),
     ) {
+        Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -510,15 +514,7 @@ fun App() {
                 isLoading = isLoading,
                 isDarkTheme = isDarkTheme,
                 onThemeToggle = { isDarkTheme = !isDarkTheme },
-                onSettingsClick = {
-                    setSingleResponseMessage(responseLines, "设置功能待实现")
-                    responsePartialLine = null
-                    responseHeaderLines.clear()
-                    responseHeaderLines.add("(暂无响应头)")
-                    statusCodeText = ""
-                    responseTimeText = ""
-                    responseSizeText = ""
-                },
+                onSettingsClick = { showSettings = true },
                 onImportCurlClick = {
                     try {
                         val clipboardText = readClipboardText()
@@ -746,13 +742,38 @@ fun App() {
                 )
             }
         }
+            SettingsDialogWindow(
+                visible = showSettings,
+                isDarkTheme = isDarkTheme,
+                typographyBase = typographyFromSettings(appSettings),
+                onCloseRequest = { showSettings = false },
+                onSaved = { saved ->
+                    AppSettingsStore.replace(saved)
+                    appSettings = saved
+                },
+            )
+        }
     }
 }
 
 private const val UI_REFRESH_INTERVAL_MS = 100L
 
 /** 深色主题：前景统一为白色，避免桌面端部分组件仍使用默认深色字色。 */
-private fun apiXDarkColors() = darkColors(
+internal fun appMaterialColors(isDark: Boolean, backgroundHex: String) =
+    parseHexColorOrNull(backgroundHex).let { customBg ->
+        when {
+            isDark -> {
+                val base = apiXDarkColors()
+                if (customBg != null) base.copy(background = customBg) else base
+            }
+            else -> {
+                if (customBg != null) lightColors(background = customBg)
+                else lightColors(background = hexToColor("#f2f2f2"))
+            }
+        }
+    }
+
+internal fun apiXDarkColors() = darkColors(
     primary = Color(0xFF90CAF9),
     primaryVariant = Color(0xFF42A5F5),
     secondary = Color(0xFF90CAF9),
@@ -766,7 +787,7 @@ private fun apiXDarkColors() = darkColors(
     onError = Color.Black
 )
 
-private fun hexToColor(hex: String): Color {
+internal fun hexToColor(hex: String): Color {
     val value = hex.removePrefix("#")
     val argb = when (value.length) {
         6 -> "FF$value"

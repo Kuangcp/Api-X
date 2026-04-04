@@ -9,6 +9,7 @@ import java.net.http.HttpHeaders
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
+import java.time.Duration
 
 private val RESTRICTED_HEADERS = setOf(
     "connection",
@@ -17,6 +18,13 @@ private val RESTRICTED_HEADERS = setOf(
     "host",
     "upgrade"
 )
+
+private val streamingHttpClient: HttpClient by lazy {
+    HttpClient.newBuilder()
+        .connectTimeout(Duration.ofSeconds(30))
+        .proxy(ApiXProxySelector)
+        .build()
+}
 
 fun formatHttpResponseHeaders(headers: HttpHeaders): List<String> {
     val out = mutableListOf<String>()
@@ -102,7 +110,7 @@ fun sendRequestStreaming(
 ) {
     try {
         if (control.cancelled) return
-        val client = HttpClient.newHttpClient()
+        val client = streamingHttpClient
         val builder = HttpRequest.newBuilder().uri(URI.create(url.trim()))
 
         val allowedHeaders = parseHeadersForSend(headersText).filterNot { (name, _) ->
