@@ -151,10 +151,13 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val id = newId()
         val now = System.currentTimeMillis()
         val sort = nextRequestSortOrder(collectionId, folderId)
+        // 须用 Kotlin 普通字符串里的真实换行；勿写在 """ """ SQL 里，否则 \n 会按字面存入库
+        val defaultHeaders = "Content-Type: application/json\nAccept: application/json"
+        val defaultBody = "{\n  \"name\": \"api-x\"\n}"
         conn.prepareStatement(
             """
             INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, body_text, sort_order, created_at, updated_at, meta_json)
-            VALUES (?, ?, ?, ?, 'GET', 'https://httpbin.org/get', 'Content-Type: application/json\nAccept: application/json', '{\n}', ?, ?, ?, '{}')
+            VALUES (?, ?, ?, ?, 'GET', 'https://httpbin.org/get', ?, ?, ?, ?, ?, '{}')
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, id)
@@ -162,9 +165,11 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             if (folderId == null) ps.setNull(3, java.sql.Types.VARCHAR)
             else ps.setString(3, folderId)
             ps.setString(4, name)
-            ps.setInt(5, sort)
-            ps.setLong(6, now)
-            ps.setLong(7, now)
+            ps.setString(5, defaultHeaders)
+            ps.setString(6, defaultBody)
+            ps.setInt(7, sort)
+            ps.setLong(8, now)
+            ps.setLong(9, now)
             ps.executeUpdate()
         }
         return id
