@@ -20,6 +20,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -66,7 +68,7 @@ import kotlin.math.min
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
 
-/** Header 表单：勾选框列与 Key 输入区之间的空隙 */
+/** Header 表单：勾选框左右与 Key 列、容器边缘的间隔 */
 private val HeaderFormCheckboxToKeyGap = 12.dp
 
 private data class HeaderFormFocusedCell(val rowIndex: Int, val isValueColumn: Boolean)
@@ -571,6 +573,7 @@ fun RequestEditorPane(
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(0.dp),
                                         ) {
+                                            Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                             Spacer(modifier = Modifier.width(20.dp))
                                             Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                             Text(
@@ -593,12 +596,16 @@ fun RequestEditorPane(
                                         formHeaderRows.forEachIndexed { index, row ->
                                             Column(modifier = Modifier.fillMaxWidth()) {
                                                 Row(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(IntrinsicSize.Max),
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                                                 ) {
                                                     Box(
-                                                        modifier = Modifier.width(20.dp),
+                                                        modifier = Modifier
+                                                            .width(20.dp)
+                                                            .fillMaxHeight(),
                                                         contentAlignment = Alignment.Center,
                                                     ) {
                                                         Checkbox(
@@ -627,7 +634,8 @@ fun RequestEditorPane(
                                                     Box(
                                                         modifier = Modifier
                                                             .weight(0.36f)
-                                                            .padding(start = 2.dp, end = 4.dp, top = 1.dp, bottom = 1.dp)
+                                                            .fillMaxHeight()
+                                                            .padding(start = 2.dp, end = 4.dp)
                                                             .then(
                                                                 if (keyFocused) {
                                                                     Modifier
@@ -636,11 +644,12 @@ fun RequestEditorPane(
                                                                             MaterialTheme.colors.primary,
                                                                             RoundedCornerShape(3.dp),
                                                                         )
-                                                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                                                        .padding(horizontal = 3.dp)
                                                                 } else {
                                                                     Modifier
                                                                 },
                                                             ),
+                                                        contentAlignment = Alignment.CenterStart,
                                                     ) {
                                                         BasicTextField(
                                                             value = row.first,
@@ -655,6 +664,7 @@ fun RequestEditorPane(
                                                             cursorBrush = SolidColor(MaterialTheme.colors.primary),
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
+                                                                .wrapContentHeight()
                                                                 .onFocusChanged { fc ->
                                                                     if (fc.isFocused) {
                                                                         focusedCell =
@@ -674,7 +684,8 @@ fun RequestEditorPane(
                                                     Box(
                                                         modifier = Modifier
                                                             .weight(0.50f)
-                                                            .padding(start = 2.dp, end = 4.dp, top = 1.dp, bottom = 1.dp)
+                                                            .fillMaxHeight()
+                                                            .padding(start = 2.dp, end = 4.dp)
                                                             .then(
                                                                 if (valueFocused) {
                                                                     Modifier
@@ -683,11 +694,12 @@ fun RequestEditorPane(
                                                                             MaterialTheme.colors.primary,
                                                                             RoundedCornerShape(3.dp),
                                                                         )
-                                                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                                                        .padding(horizontal = 3.dp)
                                                                 } else {
                                                                     Modifier
                                                                 },
                                                             ),
+                                                        contentAlignment = Alignment.CenterStart,
                                                     ) {
                                                         BasicTextField(
                                                             value = row.second,
@@ -702,6 +714,7 @@ fun RequestEditorPane(
                                                             cursorBrush = SolidColor(MaterialTheme.colors.primary),
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
+                                                                .wrapContentHeight()
                                                                 .onFocusChanged { fc ->
                                                                     if (fc.isFocused) {
                                                                         focusedCell =
@@ -716,26 +729,33 @@ fun RequestEditorPane(
                                                                 },
                                                         )
                                                     }
-                                                    IconButton(
-                                                        onClick = {
-                                                            formHeaderRows.removeAt(index)
-                                                            commitHeadersForm()
-                                                        },
-                                                        enabled = !isLoading,
-                                                        modifier = Modifier.size(22.dp),
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .width(22.dp)
+                                                            .fillMaxHeight(),
+                                                        contentAlignment = Alignment.Center,
                                                     ) {
-                                                        Icon(
-                                                            Icons.Filled.Delete,
-                                                            contentDescription = "删除此行",
-                                                            modifier = Modifier.size(14.dp),
-                                                            tint = MaterialTheme.colors.onSurface.copy(
-                                                                alpha = if (!isLoading) {
-                                                                    ContentAlpha.medium
-                                                                } else {
-                                                                    ContentAlpha.disabled
-                                                                },
-                                                            ),
-                                                        )
+                                                        IconButton(
+                                                            onClick = {
+                                                                formHeaderRows.removeAt(index)
+                                                                commitHeadersForm()
+                                                            },
+                                                            enabled = !isLoading,
+                                                            modifier = Modifier.size(22.dp),
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Filled.Delete,
+                                                                contentDescription = "删除此行",
+                                                                modifier = Modifier.size(14.dp),
+                                                                tint = MaterialTheme.colors.onSurface.copy(
+                                                                    alpha = if (!isLoading) {
+                                                                        ContentAlpha.medium
+                                                                    } else {
+                                                                        ContentAlpha.disabled
+                                                                    },
+                                                                ),
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)

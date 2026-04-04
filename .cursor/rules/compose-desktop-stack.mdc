@@ -1,0 +1,23 @@
+---
+description: JDK 21 + Compose Desktop 1.10.3 技术栈与 Windows/Linux/macOS 兼容性
+alwaysApply: true
+---
+
+# Compose Desktop 桌面端技术栈
+
+## 运行时与构建
+
+- **JDK**：以 **JDK 21** 为目标；新增或修改 Gradle 时优先显式 `jvmToolchain(21)`（若项目尚未配置，补齐时与本文一致）。
+- **Compose Desktop**：版本以仓库根目录 `gradle.properties` 中的 `compose.version` 为准（当前 **1.10.3**）。升级时需同时核对 **Kotlin 版本** 与 **org.jetbrains.compose** 插件的[官方兼容矩阵](https://github.com/JetBrains/compose-multiplatform/releases)，避免混用不匹配的 `kotlin.version` / `compose.version`。
+- **依赖**：与 Compose 相关的 BOM/物料版本（如 `material-icons-extended`）尽量与 Compose 主版本线一致，减少二进制不兼容。
+
+## 多平台（Windows / Linux / macOS）
+
+- **避免隐式假设当前操作系统**：路径、换行、默认编码、大小写敏感、可执行权限、系统托盘/通知等行为在三端可能不同。
+- **路径与文件**：使用 `java.nio.file.Path` / `kotlin.io.path` 或 `File.separator`，不要硬编码 `\` 或 `C:\`；注意 Linux/macOS 上路径大小写敏感。
+- **原生 API**：若必须调用平台 API，集中封装并做 `currentOs` 或显式分支，避免在 UI 业务层散落 `os.name` 判断。
+- **打包与资源**：`compose.desktop` 的 `nativeDistributions` 已面向多格式（如 Dmg / Msi / Deb）；图标、JVM 模块（`jlink` `modules`）等资源变更时，需考虑三端是否均需或是否需平台专属资源（如 `.ico` / `.icns`）。
+
+## 对助手行为的期望
+
+- 修改构建、Compose API 或文件/进程相关逻辑时，**默认按三端可行为前提**给出方案；若某端需要例外，在说明中写清条件与回退策略。
