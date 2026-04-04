@@ -1,5 +1,6 @@
 package http
 
+import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStream
 import java.io.InputStreamReader
@@ -10,6 +11,9 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.zip.GZIPInputStream
+import java.util.zip.Inflater
+import java.util.zip.InflaterInputStream
 
 private val RESTRICTED_HEADERS = setOf(
     "connection",
@@ -82,6 +86,89 @@ fun splitHeadersForEditor(headersText: String): Pair<List<Triple<String, String,
     return valid to invalid
 }
 
+/**
+ * 解压后落盘 HAR 时去掉与「已解码正文」不一致的逐跳/传输相关头，避免与 `text` 正文矛盾。
+ */
+fun responseHeaderLinesForHar(wireHeaders: List<String>, bodyWasDecoded: Boolean): List<String> {
+    if (!bodyWasDecoded) return wireHeaders
+    return wireHeaders.filter { line ->
+        val name = parseHeaderLine(line)?.first?.lowercase() ?: return@filter true
+        name !in OMIT_FROM_HAR_AFTER_DECODE
+    }
+}
+
+private val OMIT_FROM_HAR_AFTER_DECODE = setOf("content-encoding", "content-length", "transfer-encoding")
+
+private fun parseContentEncodingTokens(headers: HttpHeaders): List<String> {
+    val out = mutableListOf<String>()
+    for ((name, values) in headers.map()) {
+        if (!name.equals("Content-Encoding", ignoreCase = true)) continue
+        for (v in values) {
+            for (part in v.split(',')) {
+                val t = part.trim().lowercase()
+                if (t.isNotEmpty()) out.add(t)
+            }
+        }
+    }
+    return out
+}
+
+/**
+ * 按 Content-Encoding 链（自外向内解压）包装流；支持 gzip / x-gzip / deflate。
+ * 若声明了 gzip 但正文已是解压后的明文（部分 HttpClient 行为），则不再套 GZIPInputStream。
+ */
+private fun wrapResponseBodyStream(
+    raw: InputStream,
+    headers: HttpHeaders,
+    control: RequestControl,
+): InputStream {
+    control.responseBodyDecodedForHar = false
+    val encodings = parseContentEncodingTokens(headers)
+    val supported = encodings.filter { it in DECODING_CHAIN }
+    if (supported.isEmpty()) {
+        if (encodings.isNotEmpty()) {
+            return BufferedInputStream(raw)
+        }
+        val peek = BufferedInputStream(raw)
+        peek.mark(2)
+        val b0 = peek.read()
+        val b1 = peek.read()
+        peek.reset()
+        if (b0 == 0x1f && b1 == 0x8b) {
+            control.responseBodyDecodedForHar = true
+            return GZIPInputStream(peek)
+        }
+        return peek
+    }
+    control.responseBodyDecodedForHar = true
+    var stream: InputStream = raw
+    var firstGzipLayer = true
+    for (token in supported.asReversed()) {
+        when (token) {
+            "gzip", "x-gzip" -> {
+                stream = if (firstGzipLayer) {
+                    firstGzipLayer = false
+                    val buf = BufferedInputStream(stream)
+                    buf.mark(2)
+                    val a = buf.read()
+                    val b = buf.read()
+                    buf.reset()
+                    if (a == 0x1f && b == 0x8b) GZIPInputStream(buf) else buf
+                } else {
+                    GZIPInputStream(stream)
+                }
+            }
+            "deflate" -> {
+                stream = InflaterInputStream(BufferedInputStream(stream), Inflater())
+                firstGzipLayer = false
+            }
+        }
+    }
+    return stream
+}
+
+private val DECODING_CHAIN = setOf("gzip", "x-gzip", "deflate")
+
 fun joinHeadersEditor(validRows: List<Triple<String, String, Boolean>>, orphanLines: List<String>): String {
     val rowsPart = validRows.filter { it.first.isNotBlank() }.joinToString("\n") { (k, v, enabled) ->
         if (enabled) "$k: $v" else "! $k: $v"
@@ -142,12 +229,14 @@ fun sendRequestStreaming(
             onResponseTime(System.currentTimeMillis() - control.startTimeMs)
         }
 
-        response.body().use { input ->
-            control.activeInput = input
+        val rawBody = response.body()
+        val stream = if (isSse) rawBody else wrapResponseBodyStream(rawBody, response.headers(), control)
+        try {
+            control.activeInput = stream
             if (isSse) {
                 onChunk("SSE 流式响应中...\n\n")
                 var firstSseEventArrived = false
-                BufferedReader(InputStreamReader(input)).use { reader ->
+                BufferedReader(InputStreamReader(stream)).use { reader ->
                     while (true) {
                         if (control.cancelled || Thread.currentThread().isInterrupted) break
                         val line = reader.readLine() ?: break
@@ -162,7 +251,7 @@ fun sendRequestStreaming(
                 }
                 if (!control.cancelled) onChunk("\n[SSE 连接已结束]")
             } else {
-                val reader = InputStreamReader(input)
+                val reader = InputStreamReader(stream, StandardCharsets.UTF_8)
                 val buffer = CharArray(2048)
                 while (true) {
                     if (control.cancelled || Thread.currentThread().isInterrupted) break
@@ -174,6 +263,9 @@ fun sendRequestStreaming(
                     onProgress(control.totalBytes)
                 }
             }
+        } finally {
+            control.activeInput = null
+            closeQuietly(stream)
         }
     } catch (_: InterruptedException) {
         if (!control.cancelled) onChunk("\n[请求已取消]\n")
@@ -183,7 +275,9 @@ fun sendRequestStreaming(
             onChunk("请求失败: ${e.message}")
         }
     } finally {
-        control.activeInput = null
+        if (control.activeInput != null) {
+            control.activeInput = null
+        }
         onSseDetected(false)
     }
 }
@@ -258,6 +352,10 @@ class RequestControl {
 
     @Volatile
     var responseWasSse: Boolean = false
+
+    /** 为 true 时 HAR 中应去掉 content-encoding 等头，与解压后的正文一致。 */
+    @Volatile
+    var responseBodyDecodedForHar: Boolean = false
 
     @Synchronized
     fun appendRawResponse(chunk: String) {

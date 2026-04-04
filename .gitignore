@@ -11,6 +11,8 @@ git-report/
 
 update.sh
 
+.kotlin/
+
 ### IntelliJ IDEA ###
 .idea/modules.xml
 .idea/jarRepositories.xml

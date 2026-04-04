@@ -69,6 +69,7 @@ import http.closeQuietly
 import http.parseHeadersForSend
 import http.parseCurlCommand
 import http.requestToCurlCommand
+import http.responseHeaderLinesForHar
 import http.sendRequestStreaming
 import tree.CollectionTreeSidebar
 import tree.TreeDropTarget
@@ -392,7 +393,10 @@ fun App() {
                             } else {
                                 ""
                             },
-                            responseHeaderLines = control.responseHeaderSnapshot,
+                            responseHeaderLines = responseHeaderLinesForHar(
+                                control.responseHeaderSnapshot,
+                                control.responseBodyDecodedForHar,
+                            ),
                             responseBodyLines = control.snapshotRawBodyLines(),
                             responseTimeMs = elapsed,
                             responseSizeBytes = control.totalBytes,
@@ -459,7 +463,10 @@ fun App() {
                 requestHeadersSent = parseHeadersForSend(headersText),
                 responseStatus = if (sc >= 0) sc else 0,
                 responseStatusText = if (sc >= 0) HarLogCodec.responseStatusPhrase(sc) else "",
-                responseHeaderLines = control.responseHeaderSnapshot,
+                responseHeaderLines = responseHeaderLinesForHar(
+                    control.responseHeaderSnapshot,
+                    control.responseBodyDecodedForHar,
+                ),
                 responseBodyLines = control.snapshotRawBodyLines(),
                 responseTimeMs = System.currentTimeMillis() - control.startTimeMs,
                 responseSizeBytes = control.totalBytes,
