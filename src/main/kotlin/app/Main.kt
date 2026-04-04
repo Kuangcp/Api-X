@@ -51,6 +51,7 @@ import java.awt.EventQueue
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import db.AppPaths
 import db.CachedHttpResponse
@@ -225,6 +226,8 @@ fun App() {
     var isDarkTheme by remember { mutableStateOf(true) }
     /** 当前进行中的 HTTP 请求对应的 request id（用于计时器不污染切换后的请求文案）。 */
     var inflightBoundRequestId by remember { mutableStateOf<String?>(null) }
+    /** 每次发起请求递增；避免 flusher 已 drain 但 EDT 尚未应用时，完成回调先清空 active 导致正文丢失。 */
+    val outboundRequestGeneration = remember { AtomicInteger(0) }
 
     LaunchedEffect(method, url, headersText, bodyText, editorRequestId) {
         val id = editorRequestId ?: return@LaunchedEffect
@@ -279,6 +282,7 @@ fun App() {
     fun startRequest() {
         if (isLoading) return
         val boundRequestId = editorRequestId ?: return
+        val requestGen = outboundRequestGeneration.incrementAndGet()
         saveEditorIfBound()
         RequestResponseStore.ensureLayout(boundRequestId)
         val tabAtStart = rightTabIndex
@@ -312,10 +316,10 @@ fun App() {
                 val update = control.lineBuffer.drainUpdate()
                 if (!update.hasChanges()) continue
                 EventQueue.invokeLater {
-                    if (activeRequestControl === control && editorRequestId == boundRequestId) {
-                        applyBufferUpdate(update, responseLines) { partial ->
-                            responsePartialLine = partial
-                        }
+                    if (requestGen != outboundRequestGeneration.get()) return@invokeLater
+                    if (editorRequestId != boundRequestId) return@invokeLater
+                    applyBufferUpdate(update, responseLines) { partial ->
+                        responsePartialLine = partial
                     }
                 }
             }
@@ -402,7 +406,7 @@ fun App() {
                     activeRequestControl = null
                     activeRequestThread = null
                 }
-                if (editorRequestId == boundRequestId) {
+                if (editorRequestId == boundRequestId && requestGen == outboundRequestGeneration.get()) {
                     if (!control.cancelled) {
                         applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
                             responsePartialLine = partial
