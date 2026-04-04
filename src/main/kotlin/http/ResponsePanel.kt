@@ -34,7 +34,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /** 响应头展示用：按第一个 `:` 拆成 name / value（value 内可含冒号）。 */
 private fun splitResponseHeaderLine(line: String): Pair<String, String> {
@@ -48,6 +47,7 @@ private fun splitResponseHeaderLine(line: String): Pair<String, String> {
 @Composable
 fun ResponsePanel(
     modifier: Modifier = Modifier,
+    exchangeMetrics: ExchangeFontMetrics,
     statusCodeText: String,
     responseTimeText: String,
     responseSizeText: String,
@@ -106,23 +106,25 @@ fun ResponsePanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(RequestSideTopChromeTotalHeight),
+                .height(exchangeMetrics.urlBarHeight),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 val darkTheme = !MaterialTheme.colors.isLight
                 val metaColor = MaterialTheme.colors.onSurface
+                val tab = exchangeMetrics.tab
                 Text(
                     text = statusCodeText,
+                    fontSize = tab,
                     color = when (statusCodeText.toIntOrNull()) {
                         null -> metaColor
                         200 -> if (darkTheme) Color(0xFF81C784) else Color(0xFF2E7D32)
                         else -> if (darkTheme) Color(0xFFFF8A80) else Color(0xFFC62828)
                     }
                 )
-                Text(" ", color = metaColor)
-                Text("$responseTimeText ", color = metaColor)
-                Text(responseSizeText, color = metaColor)
+                Text(" ", fontSize = tab, color = metaColor)
+                Text("$responseTimeText ", fontSize = tab, color = metaColor)
+                Text(responseSizeText, fontSize = tab, color = metaColor)
             }
         }
         Column(
@@ -133,7 +135,7 @@ fun ResponsePanel(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(24.dp)
+                    .height(exchangeMetrics.editorTabStripHeight)
                     .clip(RoundedCornerShape(4.dp))
                     .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
             ) {
@@ -153,7 +155,7 @@ fun ResponsePanel(
                 ) {
                     Text(
                         "Body",
-                        fontSize = 12.sp,
+                        fontSize = exchangeMetrics.tab,
                         color = if (rightTabIndex == 0) {
                             MaterialTheme.colors.onSurface
                         } else {
@@ -177,7 +179,7 @@ fun ResponsePanel(
                 ) {
                     Text(
                         "Headers",
-                        fontSize = 12.sp,
+                        fontSize = exchangeMetrics.tab,
                         color = if (rightTabIndex == 1) {
                             MaterialTheme.colors.onSurface
                         } else {
@@ -202,7 +204,7 @@ fun ResponsePanel(
                                     text = jsonAnnotatedBody,
                                     style = TextStyle(
                                         fontFamily = FontFamily.Monospace,
-                                        fontSize = 12.sp,
+                                        fontSize = exchangeMetrics.body,
                                         color = MaterialTheme.colors.onSurface,
                                     ),
                                     modifier = Modifier
@@ -226,7 +228,7 @@ fun ResponsePanel(
                                     items(responseLines) { line ->
                                         Text(
                                             line,
-                                            fontSize = 12.sp,
+                                            fontSize = exchangeMetrics.body,
                                             color = MaterialTheme.colors.onSurface,
                                         )
                                     }
@@ -234,7 +236,7 @@ fun ResponsePanel(
                                         item("partial") {
                                             Text(
                                                 partial,
-                                                fontSize = 12.sp,
+                                                fontSize = exchangeMetrics.body,
                                                 color = MaterialTheme.colors.onSurface,
                                             )
                                         }
@@ -250,7 +252,7 @@ fun ResponsePanel(
                     else -> {
                         val headerStyle = TextStyle(
                             fontFamily = FontFamily.Monospace,
-                            fontSize = 12.sp,
+                            fontSize = exchangeMetrics.body,
                             color = MaterialTheme.colors.onSurface,
                         )
                         SelectionContainer {

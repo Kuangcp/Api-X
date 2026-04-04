@@ -83,6 +83,9 @@ private fun SettingsDialogBody(
     var section by remember { mutableIntStateOf(0) }
     var fontFamily by remember { mutableStateOf(AppSettingsStore.snapshot().fontFamilyName) }
     var fontSize by remember { mutableFloatStateOf(AppSettingsStore.snapshot().fontSizeSp) }
+    var requestResponseFontSize by remember {
+        mutableFloatStateOf(AppSettingsStore.snapshot().requestResponseFontSizeSp)
+    }
     var backgroundHex by remember { mutableStateOf(AppSettingsStore.snapshot().backgroundHex) }
     var httpProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpProxyUrl) }
     var httpsProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpsProxyUrl) }
@@ -155,6 +158,22 @@ private fun SettingsDialogBody(
                             value = fontSize,
                             onValueChange = { fontSize = it },
                             valueRange = 8f..24f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text(
+                            "请求 / 响应区字体（sp）: ${"%.0f".format(requestResponseFontSize)}",
+                            style = MaterialTheme.typography.body2,
+                            color = MaterialTheme.colors.onSurface,
+                        )
+                        Text(
+                            "中间 Request、Response 正文与相关控件；与上方全局界面字体无关。",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        Slider(
+                            value = requestResponseFontSize,
+                            onValueChange = { requestResponseFontSize = it },
+                            valueRange = 9f..28f,
                             modifier = Modifier.fillMaxWidth(),
                         )
                         Text(
@@ -271,6 +290,7 @@ private fun SettingsDialogBody(
                         AppSettings(
                             fontFamilyName = fontFamily.trim(),
                             fontSizeSp = fontSize.coerceIn(8f, 32f),
+                            requestResponseFontSizeSp = requestResponseFontSize.coerceIn(9f, 28f),
                             backgroundHex = backgroundHex.trim(),
                             httpProxyUrl = httpProxy.trim(),
                             httpsProxyUrl = httpsProxy.trim(),

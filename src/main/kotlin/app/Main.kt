@@ -65,6 +65,7 @@ import http.RequestControl
 import http.RequestSidePanel
 import http.RequestTopBar
 import http.ResponsePanel
+import http.exchangeFontMetrics
 import http.closeQuietly
 import http.parseHeadersForSend
 import http.parseCurlCommand
@@ -508,6 +509,9 @@ fun App() {
         colors = appMaterialColors(isDarkTheme, appSettings.backgroundHex),
         typography = typographyFromSettings(appSettings),
     ) {
+        val exchangeMetrics = remember(appSettings.requestResponseFontSizeSp) {
+            exchangeFontMetrics(appSettings.requestResponseFontSizeSp)
+        }
         Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -711,6 +715,7 @@ fun App() {
                 }
                 RequestSidePanel(
                     modifier = Modifier.weight(middleFraction * splitRatio),
+                    exchangeMetrics = exchangeMetrics,
                     editorRequestId = editorRequestId,
                     isLoading = isLoading,
                     method = method,
@@ -753,6 +758,7 @@ fun App() {
                 }
                 ResponsePanel(
                     modifier = Modifier.weight(middleFraction * (1f - splitRatio)),
+                    exchangeMetrics = exchangeMetrics,
                     statusCodeText = statusCodeText,
                     responseTimeText = responseTimeText,
                     responseSizeText = responseSizeText,

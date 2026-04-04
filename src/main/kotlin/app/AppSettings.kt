@@ -9,6 +9,8 @@ import java.util.concurrent.atomic.AtomicReference
 data class AppSettings(
     val fontFamilyName: String = "",
     val fontSizeSp: Float = 13f,
+    /** 中间 Request / Response 编辑区正文字号（sp），与全局界面字体独立。 */
+    val requestResponseFontSizeSp: Float = 13f,
     /** 主窗口背景色，如 `#282923`；空则跟随主题默认。 */
     val backgroundHex: String = "",
     val httpProxyUrl: String = "",
@@ -19,6 +21,7 @@ data class AppSettings(
     companion object {
         private const val KEY_FONT_FAMILY = "ui.fontFamily"
         private const val KEY_FONT_SIZE = "ui.fontSizeSp"
+        private const val KEY_REQ_RESP_FONT = "ui.requestResponseFontSizeSp"
         private const val KEY_BACKGROUND = "ui.backgroundHex"
         private const val KEY_HTTP_PROXY = "proxy.http"
         private const val KEY_HTTPS_PROXY = "proxy.https"
@@ -35,6 +38,8 @@ data class AppSettings(
                 AppSettings(
                     fontFamilyName = props.getProperty(KEY_FONT_FAMILY, "").trim(),
                     fontSizeSp = props.getProperty(KEY_FONT_SIZE)?.toFloatOrNull()?.coerceIn(8f, 32f) ?: 13f,
+                    requestResponseFontSizeSp = props.getProperty(KEY_REQ_RESP_FONT)?.toFloatOrNull()?.coerceIn(9f, 28f)
+                        ?: 13f,
                     backgroundHex = props.getProperty(KEY_BACKGROUND, "").trim(),
                     httpProxyUrl = props.getProperty(KEY_HTTP_PROXY, "").trim(),
                     httpsProxyUrl = props.getProperty(KEY_HTTPS_PROXY, "").trim(),
@@ -48,6 +53,7 @@ data class AppSettings(
                 val props = Properties()
                 props.setProperty(KEY_FONT_FAMILY, settings.fontFamilyName)
                 props.setProperty(KEY_FONT_SIZE, settings.fontSizeSp.toString())
+                props.setProperty(KEY_REQ_RESP_FONT, settings.requestResponseFontSizeSp.toString())
                 props.setProperty(KEY_BACKGROUND, settings.backgroundHex)
                 props.setProperty(KEY_HTTP_PROXY, settings.httpProxyUrl)
                 props.setProperty(KEY_HTTPS_PROXY, settings.httpsProxyUrl)

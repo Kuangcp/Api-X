@@ -59,7 +59,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 
 /** 顶栏：主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
 @Composable
@@ -133,6 +132,7 @@ fun RequestTopBar(
 @Composable
 fun RequestSidePanel(
     modifier: Modifier = Modifier,
+    exchangeMetrics: ExchangeFontMetrics,
     editorRequestId: String?,
     isLoading: Boolean,
     method: String,
@@ -159,7 +159,7 @@ fun RequestSidePanel(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(UrlBarCompactHeight),
+                .height(exchangeMetrics.urlBarHeight),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(
@@ -179,7 +179,7 @@ fun RequestSidePanel(
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
                         colors = methodButtonColors
                     ) {
-                        Text(method, fontSize = 12.sp)
+                        Text(method, fontSize = exchangeMetrics.tab)
                     }
                     DropdownMenu(
                         expanded = methodMenuExpanded,
@@ -189,17 +189,18 @@ fun RequestSidePanel(
                             onMethodSelected("GET")
                             onMethodMenuExpandedChange(false)
                         }) {
-                            Text("GET", fontSize = 12.sp, color = MaterialTheme.colors.onSurface)
+                            Text("GET", fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
                         }
                         DropdownMenuItem(onClick = {
                             onMethodSelected("POST")
                             onMethodMenuExpandedChange(false)
                         }) {
-                            Text("POST", fontSize = 12.sp, color = MaterialTheme.colors.onSurface)
+                            Text("POST", fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
                         }
                     }
                 }
                 UrlInputWithInlineSend(
+                    exchangeMetrics = exchangeMetrics,
                     url = url,
                     onUrlChange = onUrlChange,
                     urlFieldEnabled = !isLoading,
@@ -211,6 +212,7 @@ fun RequestSidePanel(
         }
         RequestEditorPane(
             modifier = Modifier.weight(1f).fillMaxWidth(),
+            exchangeMetrics = exchangeMetrics,
             editorRequestId = editorRequestId,
             isLoading = isLoading,
             leftTabIndex = leftTabIndex,
@@ -242,6 +244,7 @@ private fun headerFormOutlinedColors(enabled: Boolean) = TextFieldDefaults.outli
 @Composable
 fun RequestEditorPane(
     modifier: Modifier = Modifier,
+    exchangeMetrics: ExchangeFontMetrics,
     editorRequestId: String?,
     isLoading: Boolean,
     leftTabIndex: Int,
@@ -282,7 +285,7 @@ fun RequestEditorPane(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(24.dp)
+                .height(exchangeMetrics.editorTabStripHeight)
                 .clip(RoundedCornerShape(4.dp))
                 .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
         ) {
@@ -302,7 +305,7 @@ fun RequestEditorPane(
             ) {
                 Text(
                     "Body",
-                    fontSize = 12.sp,
+                    fontSize = exchangeMetrics.tab,
                     color = if (leftTabIndex == 0) {
                         MaterialTheme.colors.onSurface
                     } else {
@@ -326,7 +329,7 @@ fun RequestEditorPane(
             ) {
                 Text(
                     "Headers",
-                    fontSize = 12.sp,
+                    fontSize = exchangeMetrics.tab,
                     color = if (leftTabIndex == 1) {
                         MaterialTheme.colors.onSurface
                     } else {
@@ -350,7 +353,7 @@ fun RequestEditorPane(
                     ) {
                         Text(
                             "Body（POST 时生效）",
-                            fontSize = 12.sp,
+                            fontSize = exchangeMetrics.tab,
                             color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                             modifier = Modifier.padding(bottom = 4.dp, start = 2.dp)
                         )
@@ -371,7 +374,7 @@ fun RequestEditorPane(
                                 onValueChange = onBodyTextChange,
                                 enabled = !isLoading,
                                 textStyle = MaterialTheme.typography.body2.copy(
-                                    fontSize = 13.sp,
+                                    fontSize = exchangeMetrics.body,
                                     color = MaterialTheme.colors.onSurface.copy(
                                         alpha = if (!isLoading) 1f else ContentAlpha.disabled
                                     )
@@ -408,7 +411,7 @@ fun RequestEditorPane(
                                     HeadersEditMode.Form ->
                                         "勾选=发送；取消勾选或文本模式「! 」前缀均不发送；无效行请用文本查看"
                                 },
-                                fontSize = 12.sp,
+                                fontSize = exchangeMetrics.tab,
                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                                 modifier = Modifier.weight(1f)
                             )
@@ -439,7 +442,7 @@ fun RequestEditorPane(
                                 ) {
                                     Text(
                                         "文本",
-                                        fontSize = 11.sp,
+                                        fontSize = exchangeMetrics.compact,
                                         color = if (headersEditMode == HeadersEditMode.Text) {
                                             MaterialTheme.colors.onSurface
                                         } else {
@@ -469,7 +472,7 @@ fun RequestEditorPane(
                                 ) {
                                     Text(
                                         "表单",
-                                        fontSize = 11.sp,
+                                        fontSize = exchangeMetrics.compact,
                                         color = if (headersEditMode == HeadersEditMode.Form) {
                                             MaterialTheme.colors.onSurface
                                         } else {
@@ -499,7 +502,7 @@ fun RequestEditorPane(
                                         onValueChange = onHeadersTextChange,
                                         enabled = !isLoading,
                                         textStyle = MaterialTheme.typography.body2.copy(
-                                            fontSize = 13.sp,
+                                            fontSize = exchangeMetrics.body,
                                             color = MaterialTheme.colors.onSurface.copy(
                                                 alpha = if (!isLoading) 1f else ContentAlpha.disabled
                                             )
@@ -526,13 +529,13 @@ fun RequestEditorPane(
                                             Spacer(modifier = Modifier.width(24.dp))
                                             Text(
                                                 "Key",
-                                                fontSize = 10.sp,
+                                                fontSize = exchangeMetrics.tiny,
                                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                                                 modifier = Modifier.weight(0.36f)
                                             )
                                             Text(
                                                 "Value",
-                                                fontSize = 10.sp,
+                                                fontSize = exchangeMetrics.tiny,
                                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                                                 modifier = Modifier.weight(0.50f)
                                             )
@@ -578,7 +581,7 @@ fun RequestEditorPane(
                                                     enabled = !isLoading,
                                                     singleLine = true,
                                                     textStyle = MaterialTheme.typography.body2.copy(
-                                                        fontSize = 11.sp,
+                                                        fontSize = exchangeMetrics.compact,
                                                         color = MaterialTheme.colors.onSurface.copy(
                                                             alpha = if (!isLoading) 1f else ContentAlpha.disabled
                                                         )
@@ -598,7 +601,7 @@ fun RequestEditorPane(
                                                     enabled = !isLoading,
                                                     singleLine = true,
                                                     textStyle = MaterialTheme.typography.body2.copy(
-                                                        fontSize = 11.sp,
+                                                        fontSize = exchangeMetrics.compact,
                                                         color = MaterialTheme.colors.onSurface.copy(
                                                             alpha = if (!isLoading) 1f else ContentAlpha.disabled
                                                         )
@@ -643,7 +646,7 @@ fun RequestEditorPane(
                                             )
                                             Text(
                                                 "添加",
-                                                fontSize = 11.sp,
+                                                fontSize = exchangeMetrics.compact,
                                                 color = MaterialTheme.colors.onSurface,
                                                 modifier = Modifier.padding(start = 2.dp)
                                             )
@@ -668,6 +671,7 @@ fun RequestEditorPane(
  */
 @Composable
 private fun UrlInputWithInlineSend(
+    exchangeMetrics: ExchangeFontMetrics,
     url: String,
     onUrlChange: (String) -> Unit,
     urlFieldEnabled: Boolean,
@@ -680,7 +684,7 @@ private fun UrlInputWithInlineSend(
     )
     Row(
         modifier = modifier
-            .height(UrlBarCompactHeight)
+            .height(exchangeMetrics.urlBarHeight)
             .clip(RoundedCornerShape(6.dp))
             .border(1.dp, borderColor, RoundedCornerShape(6.dp))
             .background(MaterialTheme.colors.surface),
@@ -696,7 +700,7 @@ private fun UrlInputWithInlineSend(
             enabled = urlFieldEnabled,
             singleLine = true,
             textStyle = MaterialTheme.typography.body2.copy(
-                fontSize = 13.sp,
+                fontSize = exchangeMetrics.body,
                 color = MaterialTheme.colors.onSurface.copy(
                     alpha = if (urlFieldEnabled) 1f else ContentAlpha.disabled
                 )
@@ -713,7 +717,7 @@ private fun UrlInputWithInlineSend(
                         if (url.isEmpty()) {
                             Text(
                                 "输入 URL",
-                                fontSize = 13.sp,
+                                fontSize = exchangeMetrics.body,
                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                             )
                         }
@@ -753,9 +757,3 @@ private fun UrlInputWithInlineSend(
         }
     }
 }
-
-/** URL 栏与两侧按钮对齐的高度；栏内用 BasicTextField 避免默认内边距裁切文字 */
-val UrlBarCompactHeight = 39.dp
-
-/** 左侧 URL 行高度，右侧状态区用相同高度以便 Body/Headers Tab 与左侧对齐 */
-val RequestSideTopChromeTotalHeight = UrlBarCompactHeight
