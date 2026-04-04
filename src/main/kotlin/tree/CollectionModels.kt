@@ -30,6 +30,7 @@ data class StoredHttpRequest(
     val method: String,
     val url: String,
     val headersText: String,
+    val paramsText: String,
     val bodyText: String,
     val metaJson: String,
 )

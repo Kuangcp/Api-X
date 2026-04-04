@@ -5,7 +5,7 @@ import java.sql.Statement
 
 object CollectionDatabase {
 
-    private const val CURRENT_VERSION = 1
+    private const val CURRENT_VERSION = 2
 
     fun migrate(conn: Connection) {
         conn.createStatement().use { st ->
@@ -28,6 +28,18 @@ object CollectionDatabase {
             conn.createStatement().use { st -> migrateToV1(st) }
             conn.prepareStatement("INSERT INTO schema_migrations(version) VALUES (1)").use { it.executeUpdate() }
         }
+        if (!applied.contains(2)) {
+            conn.createStatement().use { st -> migrateToV2(st) }
+            conn.prepareStatement("INSERT INTO schema_migrations(version) VALUES (2)").use { it.executeUpdate() }
+        }
+    }
+
+    private fun migrateToV2(st: Statement) {
+        st.executeUpdate(
+            """
+            ALTER TABLE requests ADD COLUMN params_text TEXT NOT NULL DEFAULT ''
+            """.trimIndent(),
+        )
     }
 
     private fun migrateToV1(st: Statement) {

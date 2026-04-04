@@ -67,11 +67,13 @@ import http.RequestTopBar
 import http.ResponsePanel
 import http.exchangeFontMetrics
 import http.closeQuietly
+import http.mergeUrlWithParams
 import http.parseHeadersForSend
 import http.parseCurlCommand
 import http.requestToCurlCommand
 import http.responseHeaderLinesForHar
 import http.sendRequestStreaming
+import http.splitUrlQueryForParamsEditor
 import tree.CollectionTreeSidebar
 import tree.TreeDropTarget
 import tree.TreeSelection
@@ -93,6 +95,7 @@ fun App() {
         )
     }
     var bodyText by remember { mutableStateOf("{\n  \"name\": \"api-x\"\n}") }
+    var paramsText by remember { mutableStateOf("") }
 
     var tree by remember { mutableStateOf(repository.loadTree()) }
     var treeSelection by remember { mutableStateOf<TreeSelection?>(null) }
@@ -109,6 +112,7 @@ fun App() {
     val methodSnap by rememberUpdatedState(method)
     val urlSnap by rememberUpdatedState(url)
     val headersSnap by rememberUpdatedState(headersText)
+    val paramsSnap by rememberUpdatedState(paramsText)
     val bodySnap by rememberUpdatedState(bodyText)
 
     DisposableEffect(repository) {
@@ -119,7 +123,8 @@ fun App() {
                     methodSnap,
                     urlSnap,
                     headersSnap,
-                    bodySnap
+                    paramsSnap,
+                    bodySnap,
                 )
             }
             repository.close()
@@ -132,7 +137,7 @@ fun App() {
 
     fun saveEditorIfBound() {
         val id = editorRequestId ?: return
-        repository.saveRequestEditorFields(id, method, url, headersText, bodyText)
+        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText)
     }
 
     fun applyRequestToEditor(reqId: String) {
@@ -141,6 +146,7 @@ fun App() {
         method = r.method
         url = r.url
         headersText = r.headersText
+        paramsText = r.paramsText
         bodyText = r.bodyText
     }
 
@@ -235,10 +241,10 @@ fun App() {
     /** 每次发起请求递增；避免 flusher 已 drain 但 EDT 尚未应用时，完成回调先清空 active 导致正文丢失。 */
     val outboundRequestGeneration = remember { AtomicInteger(0) }
 
-    LaunchedEffect(method, url, headersText, bodyText, editorRequestId) {
+    LaunchedEffect(method, url, headersText, paramsText, bodyText, editorRequestId) {
         val id = editorRequestId ?: return@LaunchedEffect
         delay(450)
-        repository.saveRequestEditorFields(id, method, url, headersText, bodyText)
+        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText)
     }
 
     LaunchedEffect(editorRequestId) {
@@ -309,6 +315,9 @@ fun App() {
         val tabAtStart = rightTabIndex
         val reqMethodSnap = method
         val reqUrlSnap = url
+        val reqParamsSnap = paramsText
+        val effectiveRequestUrl =
+            mergeUrlWithParams(reqUrlSnap, parseHeadersForSend(reqParamsSnap))
         val reqHeadersFullSnap = headersText
         val reqBodySnap = bodyText
         val control = RequestControl()
@@ -348,7 +357,7 @@ fun App() {
         val worker = thread {
             sendRequestStreaming(
                 method = method,
-                url = url,
+                url = effectiveRequestUrl,
                 body = bodyText,
                 headersText = headersText,
                 control = control,
@@ -400,7 +409,7 @@ fun App() {
                         HarSnapshot(
                             savedAtEpochMs = System.currentTimeMillis(),
                             requestMethod = reqMethodSnap,
-                            requestUrl = reqUrlSnap,
+                            requestUrl = effectiveRequestUrl,
                             requestHeadersFullText = reqHeadersFullSnap,
                             requestBody = reqBodySnap,
                             requestHeadersSent = parseHeadersForSend(reqHeadersFullSnap),
@@ -469,12 +478,13 @@ fun App() {
             responseTimeText = timeText
         }
         val sc = control.responseStatusCode
+        val cancelUrl = mergeUrlWithParams(url, parseHeadersForSend(paramsText))
         RequestResponseStore.save(
             boundId,
             HarSnapshot(
                 savedAtEpochMs = System.currentTimeMillis(),
                 requestMethod = method,
-                requestUrl = url,
+                requestUrl = cancelUrl,
                 requestHeadersFullText = headersText,
                 requestBody = bodyText,
                 requestHeadersSent = parseHeadersForSend(headersText),
@@ -548,12 +558,15 @@ fun App() {
                         val clipboardText = readClipboardText()
                         val parsed = parseCurlCommand(clipboardText)
                         method = parsed.method
-                        url = parsed.url.ifBlank { url }
+                        val rawUrl = parsed.url.ifBlank { url }
+                        val (urlNoQuery, queryParamsText) = splitUrlQueryForParamsEditor(rawUrl)
+                        url = urlNoQuery.ifBlank { rawUrl }
+                        paramsText = queryParamsText
                         headersText = parsed.headers.joinToString("\n")
                         bodyText = parsed.body
                         editorRequestId?.let {
                             repository.saveRequestEditorFields(
-                                it, method, url, headersText, bodyText
+                                it, method, url, headersText, paramsText, bodyText,
                             )
                         }
                         setSingleResponseMessage(responseLines, "已从剪贴板导入 cURL")
@@ -636,6 +649,7 @@ fun App() {
                                 method = "GET"
                                 url = ""
                                 headersText = ""
+                                paramsText = ""
                                 bodyText = ""
                                 treeSelection =
                                     nextTree.firstOrNull()?.let { TreeSelection.Collection(it.id) }
@@ -647,7 +661,12 @@ fun App() {
                     onExportRequestAsCurl = { rid ->
                         val r = repository.getRequest(rid) ?: return@CollectionTreeSidebar
                         writeClipboardText(
-                            requestToCurlCommand(r.method, r.url, r.headersText, r.bodyText)
+                            requestToCurlCommand(
+                                r.method,
+                                mergeUrlWithParams(r.url, parseHeadersForSend(r.paramsText)),
+                                r.headersText,
+                                r.bodyText,
+                            ),
                         )
                         setSingleResponseMessage(responseLines, "已复制 cURL 到剪贴板")
                         responsePartialLine = null
@@ -728,11 +747,13 @@ fun App() {
                         if (!isLoading) startRequest() else cancelActiveRequest()
                     },
                     leftTabIndex = leftTabIndex,
-                    onLeftTabIndexChange = { leftTabIndex = it },
+                    onLeftTabIndexChange = { leftTabIndex = it.coerceIn(0, 2) },
                     bodyText = bodyText,
                     onBodyTextChange = { bodyText = it },
                     headersText = headersText,
-                    onHeadersTextChange = { headersText = it }
+                    onHeadersTextChange = { headersText = it },
+                    paramsText = paramsText,
+                    onParamsTextChange = { paramsText = it },
                 )
                 Box(
                     modifier = Modifier

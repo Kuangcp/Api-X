@@ -28,6 +28,7 @@ data class PortableRequest(
     val method: String,
     val url: String,
     val headersText: String = "",
+    val paramsText: String = "",
     val bodyText: String = "",
     val sortOrder: Int = 0,
     val metaJson: String = "{}",

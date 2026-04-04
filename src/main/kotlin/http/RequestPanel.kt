@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.VerticalScrollbar
@@ -102,6 +103,410 @@ private fun HeaderFormRowDashedDivider(
     }
 }
 
+private enum class KeyValueEditorMode { Text, Form }
+
+/** 与 Headers 相同的「文本 / 表单」键值编辑（Params 复用）。 */
+@Composable
+private fun HeaderLikeKeyValueEditor(
+    exchangeMetrics: ExchangeFontMetrics,
+    editorRequestId: String?,
+    isLoading: Boolean,
+    text: String,
+    onTextChange: (String) -> Unit,
+    scrollState: ScrollState,
+    hintLine: String,
+    modifier: Modifier = Modifier,
+) {
+    var editMode by remember { mutableStateOf(KeyValueEditorMode.Text) }
+    val formRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
+    val formOrphans = remember { mutableStateListOf<String>() }
+
+    fun syncFormFromText() {
+        val (valid, invalid) = splitHeadersForEditor(text)
+        formRows.clear()
+        formRows.addAll(valid)
+        formOrphans.clear()
+        formOrphans.addAll(invalid)
+    }
+
+    fun commitForm() {
+        onTextChange(
+            joinHeadersEditor(
+                formRows.filter { it.first.isNotBlank() },
+                formOrphans.toList(),
+            ),
+        )
+    }
+
+    LaunchedEffect(editorRequestId) {
+        syncFormFromText()
+    }
+
+    Column(modifier = modifier.fillMaxSize().padding(end = 10.dp)) {
+        if (hintLine.isNotBlank()) {
+            Text(
+                hintLine,
+                fontSize = exchangeMetrics.compact,
+                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                modifier = Modifier.padding(bottom = 4.dp, start = 2.dp),
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 4.dp, start = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                "",
+                fontSize = exchangeMetrics.tab,
+                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                modifier = Modifier.weight(1f),
+            )
+            Row(
+                modifier = Modifier
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f)),
+            ) {
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 44.dp)
+                        .fillMaxHeight()
+                        .background(
+                            if (editMode == KeyValueEditorMode.Text) {
+                                MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                            } else {
+                                Color.Transparent
+                            },
+                        )
+                        .clickable(enabled = !isLoading) {
+                            if (editMode == KeyValueEditorMode.Form) commitForm()
+                            editMode = KeyValueEditorMode.Text
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "文本",
+                        fontSize = exchangeMetrics.compact,
+                        color = if (editMode == KeyValueEditorMode.Text) {
+                            MaterialTheme.colors.onSurface
+                        } else {
+                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .defaultMinSize(minWidth = 44.dp)
+                        .fillMaxHeight()
+                        .background(
+                            if (editMode == KeyValueEditorMode.Form) {
+                                MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                            } else {
+                                Color.Transparent
+                            },
+                        )
+                        .clickable(enabled = !isLoading) {
+                            if (editMode == KeyValueEditorMode.Text) syncFormFromText()
+                            editMode = KeyValueEditorMode.Form
+                        },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "表单",
+                        fontSize = exchangeMetrics.compact,
+                        color = if (editMode == KeyValueEditorMode.Form) {
+                            MaterialTheme.colors.onSurface
+                        } else {
+                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                        },
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    )
+                }
+            }
+        }
+        val outlineModifier =
+            if (editMode == KeyValueEditorMode.Text) {
+                Modifier.border(
+                    1.dp,
+                    MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                    RoundedCornerShape(4.dp),
+                )
+            } else {
+                Modifier
+            }
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp))
+                .then(outlineModifier)
+                .background(MaterialTheme.colors.surface),
+        ) {
+            when (editMode) {
+                KeyValueEditorMode.Text -> {
+                    BasicTextField(
+                        value = text,
+                        onValueChange = onTextChange,
+                        enabled = !isLoading,
+                        textStyle = MaterialTheme.typography.body2.copy(
+                            fontSize = exchangeMetrics.body,
+                            color = MaterialTheme.colors.onSurface.copy(
+                                alpha = if (!isLoading) 1f else ContentAlpha.disabled,
+                            ),
+                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(10.dp),
+                    )
+                }
+                KeyValueEditorMode.Form -> {
+                    var focusedCell by remember { mutableStateOf<HeaderFormFocusedCell?>(null) }
+                    LaunchedEffect(editorRequestId) {
+                        focusedCell = null
+                    }
+                    val dashedLineColor = MaterialTheme.colors.onSurface.copy(alpha = 0.22f)
+                    val rowFieldStyle = MaterialTheme.typography.body2.copy(
+                        fontSize = exchangeMetrics.compact,
+                        color = MaterialTheme.colors.onSurface.copy(
+                            alpha = if (!isLoading) 1f else ContentAlpha.disabled,
+                        ),
+                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(scrollState)
+                            .padding(horizontal = 0.dp, vertical = 2.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp, vertical = 0.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(0.dp),
+                        ) {
+                            Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
+                            Spacer(modifier = Modifier.width(20.dp))
+                            Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
+                            Text(
+                                "Key",
+                                fontSize = exchangeMetrics.tiny,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                modifier = Modifier
+                                    .weight(0.36f)
+                                    .padding(start = 2.dp),
+                            )
+                            Text(
+                                "Value",
+                                fontSize = exchangeMetrics.tiny,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                modifier = Modifier.weight(0.50f),
+                            )
+                            Spacer(modifier = Modifier.width(22.dp))
+                        }
+                        HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)
+                        formRows.forEachIndexed { index, row ->
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(IntrinsicSize.Max),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                                ) {
+                                    Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
+                                    Box(
+                                        modifier = Modifier
+                                            .width(20.dp)
+                                            .fillMaxHeight(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Checkbox(
+                                            checked = row.third,
+                                            onCheckedChange = { c ->
+                                                formRows[index] = Triple(row.first, row.second, c)
+                                                commitForm()
+                                            },
+                                            enabled = !isLoading,
+                                            modifier = Modifier.scale(0.68f),
+                                            colors = CheckboxDefaults.colors(
+                                                checkedColor = MaterialTheme.colors.primary,
+                                                uncheckedColor = MaterialTheme.colors.onSurface.copy(
+                                                    alpha = ContentAlpha.medium,
+                                                ),
+                                                disabledColor = MaterialTheme.colors.onSurface.copy(
+                                                    alpha = ContentAlpha.disabled,
+                                                ),
+                                            ),
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
+                                    val keyFocused =
+                                        focusedCell == HeaderFormFocusedCell(index, isValueColumn = false)
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.36f)
+                                            .fillMaxHeight()
+                                            .padding(start = 2.dp, end = 4.dp)
+                                            .then(
+                                                if (keyFocused) {
+                                                    Modifier
+                                                        .border(
+                                                            2.dp,
+                                                            MaterialTheme.colors.primary,
+                                                            RoundedCornerShape(3.dp),
+                                                        )
+                                                        .padding(horizontal = 3.dp)
+                                                } else {
+                                                    Modifier
+                                                },
+                                            ),
+                                        contentAlignment = Alignment.CenterStart,
+                                    ) {
+                                        BasicTextField(
+                                            value = row.first,
+                                            onValueChange = { nv ->
+                                                formRows[index] = Triple(nv, row.second, row.third)
+                                                commitForm()
+                                            },
+                                            enabled = !isLoading,
+                                            singleLine = true,
+                                            textStyle = rowFieldStyle,
+                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight()
+                                                .onFocusChanged { fc ->
+                                                    if (fc.isFocused) {
+                                                        focusedCell = HeaderFormFocusedCell(index, false)
+                                                    } else if (focusedCell == HeaderFormFocusedCell(index, false)) {
+                                                        focusedCell = null
+                                                    }
+                                                },
+                                            decorationBox = { innerTextField ->
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.CenterStart,
+                                                ) {
+                                                    innerTextField()
+                                                }
+                                            },
+                                        )
+                                    }
+                                    val valueFocused =
+                                        focusedCell == HeaderFormFocusedCell(index, isValueColumn = true)
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.50f)
+                                            .fillMaxHeight()
+                                            .padding(start = 2.dp, end = 4.dp)
+                                            .then(
+                                                if (valueFocused) {
+                                                    Modifier
+                                                        .border(
+                                                            2.dp,
+                                                            MaterialTheme.colors.primary,
+                                                            RoundedCornerShape(3.dp),
+                                                        )
+                                                        .padding(horizontal = 3.dp)
+                                                } else {
+                                                    Modifier
+                                                },
+                                            ),
+                                        contentAlignment = Alignment.CenterStart,
+                                    ) {
+                                        BasicTextField(
+                                            value = row.second,
+                                            onValueChange = { nv ->
+                                                formRows[index] = Triple(row.first, nv, row.third)
+                                                commitForm()
+                                            },
+                                            enabled = !isLoading,
+                                            singleLine = true,
+                                            textStyle = rowFieldStyle,
+                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight()
+                                                .onFocusChanged { fc ->
+                                                    if (fc.isFocused) {
+                                                        focusedCell = HeaderFormFocusedCell(index, true)
+                                                    } else if (focusedCell == HeaderFormFocusedCell(index, true)) {
+                                                        focusedCell = null
+                                                    }
+                                                },
+                                            decorationBox = { innerTextField ->
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.CenterStart,
+                                                ) {
+                                                    innerTextField()
+                                                }
+                                            },
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .width(22.dp)
+                                            .fillMaxHeight(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                formRows.removeAt(index)
+                                                commitForm()
+                                            },
+                                            enabled = !isLoading,
+                                            modifier = Modifier.size(22.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = "删除此行",
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colors.onSurface.copy(
+                                                    alpha = if (!isLoading) {
+                                                        ContentAlpha.medium
+                                                    } else {
+                                                        ContentAlpha.disabled
+                                                    },
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }
+                                HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)
+                            }
+                        }
+                        TextButton(
+                            onClick = { formRows.add(Triple("", "", true)) },
+                            enabled = !isLoading,
+                            modifier = Modifier.align(Alignment.Start),
+                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colors.primary,
+                            )
+                            Text(
+                                "添加",
+                                fontSize = exchangeMetrics.compact,
+                                color = MaterialTheme.colors.onSurface,
+                                modifier = Modifier.padding(start = 2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** 顶栏：主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun RequestTopBar(
@@ -189,7 +594,9 @@ fun RequestSidePanel(
     bodyText: String,
     onBodyTextChange: (String) -> Unit,
     headersText: String,
-    onHeadersTextChange: (String) -> Unit
+    onHeadersTextChange: (String) -> Unit,
+    paramsText: String,
+    onParamsTextChange: (String) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -258,14 +665,14 @@ fun RequestSidePanel(
             bodyText = bodyText,
             onBodyTextChange = onBodyTextChange,
             headersText = headersText,
-            onHeadersTextChange = onHeadersTextChange
+            onHeadersTextChange = onHeadersTextChange,
+            paramsText = paramsText,
+            onParamsTextChange = onParamsTextChange,
         )
     }
 }
 
-/** 左侧 Body / Headers 编辑区（分割条左侧） */
-private enum class HeadersEditMode { Text, Form }
-
+/** 左侧 Body / Headers / Params 编辑区（分割条左侧） */
 @Composable
 fun RequestEditorPane(
     modifier: Modifier = Modifier,
@@ -277,34 +684,13 @@ fun RequestEditorPane(
     bodyText: String,
     onBodyTextChange: (String) -> Unit,
     headersText: String,
-    onHeadersTextChange: (String) -> Unit
+    onHeadersTextChange: (String) -> Unit,
+    paramsText: String,
+    onParamsTextChange: (String) -> Unit,
 ) {
     val bodyScrollState = rememberScrollState()
     val headersScrollState = rememberScrollState()
-    var headersEditMode by remember { mutableStateOf(HeadersEditMode.Text) }
-    val formHeaderRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
-    val formHeaderOrphans = remember { mutableStateListOf<String>() }
-
-    fun syncFormFromHeadersText() {
-        val (valid, invalid) = splitHeadersForEditor(headersText)
-        formHeaderRows.clear()
-        formHeaderRows.addAll(valid)
-        formHeaderOrphans.clear()
-        formHeaderOrphans.addAll(invalid)
-    }
-
-    fun commitHeadersForm() {
-        onHeadersTextChange(
-            joinHeadersEditor(
-                formHeaderRows.filter { it.first.isNotBlank() },
-                formHeaderOrphans.toList()
-            )
-        )
-    }
-
-    LaunchedEffect(editorRequestId) {
-        syncFormFromHeadersText()
-    }
+    val paramsScrollState = rememberScrollState()
 
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight()) {
         Row(
@@ -362,6 +748,30 @@ fun RequestEditorPane(
                     }
                 )
             }
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(
+                        if (leftTabIndex == 2) {
+                            MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                        } else {
+                            Color.Transparent
+                        },
+                    )
+                    .clickable(enabled = !isLoading) { onLeftTabIndexChange(2) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "Params",
+                    fontSize = exchangeMetrics.tab,
+                    color = if (leftTabIndex == 2) {
+                        MaterialTheme.colors.onSurface
+                    } else {
+                        MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                    },
+                )
+            }
         }
         Box(
             modifier = Modifier
@@ -416,396 +826,36 @@ fun RequestEditorPane(
                         adapter = rememberScrollbarAdapter(bodyScrollState)
                     )
                 }
-                else -> {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(end = 10.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 4.dp, start = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                when (headersEditMode) {
-                                    HeadersEditMode.Text -> ""
-                                    HeadersEditMode.Form -> ""
-                                    // HeadersEditMode.Text ->
-                                    //    "每行 Key: Value；行首「! 」表示不发送；无效行发送时不带"
-                                    //HeadersEditMode.Form ->
-                                    //    "勾选=发送；取消勾选或文本模式「! 」前缀均不发送；无效行请用文本查看"
-                                },
-                                fontSize = exchangeMetrics.tab,
-                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                modifier = Modifier.weight(1f)
-                            )
-                            Row(
-                                modifier = Modifier
-                                    .height(22.dp)
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .defaultMinSize(minWidth = 44.dp)
-                                        .fillMaxHeight()
-                                        .background(
-                                            if (headersEditMode == HeadersEditMode.Text) {
-                                                MaterialTheme.colors.primary.copy(alpha = 0.14f)
-                                            } else {
-                                                Color.Transparent
-                                            }
-                                        )
-                                        .clickable(enabled = !isLoading) {
-                                            if (headersEditMode == HeadersEditMode.Form) {
-                                                commitHeadersForm()
-                                            }
-                                            headersEditMode = HeadersEditMode.Text
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "文本",
-                                        fontSize = exchangeMetrics.compact,
-                                        color = if (headersEditMode == HeadersEditMode.Text) {
-                                            MaterialTheme.colors.onSurface
-                                        } else {
-                                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                                        },
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .defaultMinSize(minWidth = 44.dp)
-                                        .fillMaxHeight()
-                                        .background(
-                                            if (headersEditMode == HeadersEditMode.Form) {
-                                                MaterialTheme.colors.primary.copy(alpha = 0.14f)
-                                            } else {
-                                                Color.Transparent
-                                            }
-                                        )
-                                        .clickable(enabled = !isLoading) {
-                                            if (headersEditMode == HeadersEditMode.Text) {
-                                                syncFormFromHeadersText()
-                                            }
-                                            headersEditMode = HeadersEditMode.Form
-                                        },
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        "表单",
-                                        fontSize = exchangeMetrics.compact,
-                                        color = if (headersEditMode == HeadersEditMode.Form) {
-                                            MaterialTheme.colors.onSurface
-                                        } else {
-                                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                                        },
-                                        modifier = Modifier.padding(horizontal = 8.dp)
-                                    )
-                                }
-                            }
-                        }
-                        val headersOutlineModifier =
-                            if (headersEditMode == HeadersEditMode.Text) {
-                                Modifier.border(
-                                    1.dp,
-                                    MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                    RoundedCornerShape(4.dp),
-                                )
-                            } else {
-                                Modifier
-                            }
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                                .then(headersOutlineModifier)
-                                .background(MaterialTheme.colors.surface)
-                        ) {
-                            when (headersEditMode) {
-                                HeadersEditMode.Text -> {
-                                    BasicTextField(
-                                        value = headersText,
-                                        onValueChange = onHeadersTextChange,
-                                        enabled = !isLoading,
-                                        textStyle = MaterialTheme.typography.body2.copy(
-                                            fontSize = exchangeMetrics.body,
-                                            color = MaterialTheme.colors.onSurface.copy(
-                                                alpha = if (!isLoading) 1f else ContentAlpha.disabled
-                                            )
-                                        ),
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .verticalScroll(headersScrollState)
-                                            .padding(10.dp)
-                                    )
-                                }
-                                HeadersEditMode.Form -> {
-                                    var focusedCell by remember { mutableStateOf<HeaderFormFocusedCell?>(null) }
-                                    LaunchedEffect(editorRequestId) {
-                                        focusedCell = null
-                                    }
-                                    val dashedLineColor =
-                                        MaterialTheme.colors.onSurface.copy(alpha = 0.22f)
-                                    val rowFieldStyle = MaterialTheme.typography.body2.copy(
-                                        fontSize = exchangeMetrics.compact,
-                                        color = MaterialTheme.colors.onSurface.copy(
-                                            alpha = if (!isLoading) 1f else ContentAlpha.disabled,
-                                        ),
-                                    )
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .verticalScroll(headersScrollState)
-                                            .padding(horizontal = 0.dp, vertical = 2.dp),
-                                    ) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 2.dp, vertical = 0.dp),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(0.dp),
-                                        ) {
-                                            Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
-                                            Spacer(modifier = Modifier.width(20.dp))
-                                            Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
-                                            Text(
-                                                "Key",
-                                                fontSize = exchangeMetrics.tiny,
-                                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                                modifier = Modifier
-                                                    .weight(0.36f)
-                                                    .padding(start = 2.dp),
-                                            )
-                                            Text(
-                                                "Value",
-                                                fontSize = exchangeMetrics.tiny,
-                                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                                modifier = Modifier.weight(0.50f),
-                                            )
-                                            Spacer(modifier = Modifier.width(22.dp))
-                                        }
-                                        HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)
-                                        formHeaderRows.forEachIndexed { index, row ->
-                                            Column(modifier = Modifier.fillMaxWidth()) {
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(IntrinsicSize.Max),
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(0.dp),
-                                                ) {
-                                                    Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .width(20.dp)
-                                                            .fillMaxHeight(),
-                                                        contentAlignment = Alignment.Center,
-                                                    ) {
-                                                        Checkbox(
-                                                            checked = row.third,
-                                                            onCheckedChange = { c ->
-                                                                formHeaderRows[index] =
-                                                                    Triple(row.first, row.second, c)
-                                                                commitHeadersForm()
-                                                            },
-                                                            enabled = !isLoading,
-                                                            modifier = Modifier.scale(0.68f),
-                                                            colors = CheckboxDefaults.colors(
-                                                                checkedColor = MaterialTheme.colors.primary,
-                                                                uncheckedColor = MaterialTheme.colors.onSurface.copy(
-                                                                    alpha = ContentAlpha.medium,
-                                                                ),
-                                                                disabledColor = MaterialTheme.colors.onSurface.copy(
-                                                                    alpha = ContentAlpha.disabled,
-                                                                ),
-                                                            ),
-                                                        )
-                                                    }
-                                                    Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
-                                                    val keyFocused =
-                                                        focusedCell == HeaderFormFocusedCell(index, isValueColumn = false)
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .weight(0.36f)
-                                                            .fillMaxHeight()
-                                                            .padding(start = 2.dp, end = 4.dp)
-                                                            .then(
-                                                                if (keyFocused) {
-                                                                    Modifier
-                                                                        .border(
-                                                                            2.dp,
-                                                                            MaterialTheme.colors.primary,
-                                                                            RoundedCornerShape(3.dp),
-                                                                        )
-                                                                        .padding(horizontal = 3.dp)
-                                                                } else {
-                                                                    Modifier
-                                                                },
-                                                            ),
-                                                        contentAlignment = Alignment.CenterStart,
-                                                    ) {
-                                                        BasicTextField(
-                                                            value = row.first,
-                                                            onValueChange = { nv ->
-                                                                formHeaderRows[index] =
-                                                                    Triple(nv, row.second, row.third)
-                                                                commitHeadersForm()
-                                                            },
-                                                            enabled = !isLoading,
-                                                            singleLine = true,
-                                                            textStyle = rowFieldStyle,
-                                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .fillMaxHeight()
-                                                                .onFocusChanged { fc ->
-                                                                    if (fc.isFocused) {
-                                                                        focusedCell =
-                                                                            HeaderFormFocusedCell(index, false)
-                                                                    } else if (focusedCell == HeaderFormFocusedCell(
-                                                                            index,
-                                                                            false,
-                                                                        )
-                                                                    ) {
-                                                                        focusedCell = null
-                                                                    }
-                                                                },
-                                                            decorationBox = { innerTextField ->
-                                                                Box(
-                                                                    modifier = Modifier.fillMaxSize(),
-                                                                    contentAlignment = Alignment.CenterStart,
-                                                                ) {
-                                                                    innerTextField()
-                                                                }
-                                                            },
-                                                        )
-                                                    }
-                                                    val valueFocused =
-                                                        focusedCell == HeaderFormFocusedCell(index, isValueColumn = true)
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .weight(0.50f)
-                                                            .fillMaxHeight()
-                                                            .padding(start = 2.dp, end = 4.dp)
-                                                            .then(
-                                                                if (valueFocused) {
-                                                                    Modifier
-                                                                        .border(
-                                                                            2.dp,
-                                                                            MaterialTheme.colors.primary,
-                                                                            RoundedCornerShape(3.dp),
-                                                                        )
-                                                                        .padding(horizontal = 3.dp)
-                                                                } else {
-                                                                    Modifier
-                                                                },
-                                                            ),
-                                                        contentAlignment = Alignment.CenterStart,
-                                                    ) {
-                                                        BasicTextField(
-                                                            value = row.second,
-                                                            onValueChange = { nv ->
-                                                                formHeaderRows[index] =
-                                                                    Triple(row.first, nv, row.third)
-                                                                commitHeadersForm()
-                                                            },
-                                                            enabled = !isLoading,
-                                                            singleLine = true,
-                                                            textStyle = rowFieldStyle,
-                                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .fillMaxHeight()
-                                                                .onFocusChanged { fc ->
-                                                                    if (fc.isFocused) {
-                                                                        focusedCell =
-                                                                            HeaderFormFocusedCell(index, true)
-                                                                    } else if (focusedCell == HeaderFormFocusedCell(
-                                                                            index,
-                                                                            true,
-                                                                        )
-                                                                    ) {
-                                                                        focusedCell = null
-                                                                    }
-                                                                },
-                                                            decorationBox = { innerTextField ->
-                                                                Box(
-                                                                    modifier = Modifier.fillMaxSize(),
-                                                                    contentAlignment = Alignment.CenterStart,
-                                                                ) {
-                                                                    innerTextField()
-                                                                }
-                                                            },
-                                                        )
-                                                    }
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .width(22.dp)
-                                                            .fillMaxHeight(),
-                                                        contentAlignment = Alignment.Center,
-                                                    ) {
-                                                        IconButton(
-                                                            onClick = {
-                                                                formHeaderRows.removeAt(index)
-                                                                commitHeadersForm()
-                                                            },
-                                                            enabled = !isLoading,
-                                                            modifier = Modifier.size(22.dp),
-                                                        ) {
-                                                            Icon(
-                                                                Icons.Filled.Delete,
-                                                                contentDescription = "删除此行",
-                                                                modifier = Modifier.size(14.dp),
-                                                                tint = MaterialTheme.colors.onSurface.copy(
-                                                                    alpha = if (!isLoading) {
-                                                                        ContentAlpha.medium
-                                                                    } else {
-                                                                        ContentAlpha.disabled
-                                                                    },
-                                                                ),
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                                HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)
-                                            }
-                                        }
-                                        TextButton(
-                                            onClick = {
-                                                formHeaderRows.add(Triple("", "", true))
-                                            },
-                                            enabled = !isLoading,
-                                            modifier = Modifier.align(Alignment.Start),
-                                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
-                                        ) {
-                                            Icon(
-                                                Icons.Filled.Add,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(14.dp),
-                                                tint = MaterialTheme.colors.primary,
-                                            )
-                                            Text(
-                                                "添加",
-                                                fontSize = exchangeMetrics.compact,
-                                                color = MaterialTheme.colors.onSurface,
-                                                modifier = Modifier.padding(start = 2.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                1 -> {
+                    HeaderLikeKeyValueEditor(
+                        exchangeMetrics = exchangeMetrics,
+                        editorRequestId = editorRequestId,
+                        isLoading = isLoading,
+                        text = headersText,
+                        onTextChange = onHeadersTextChange,
+                        scrollState = headersScrollState,
+                        hintLine = "",
+                        modifier = Modifier.fillMaxSize(),
+                    )
                     VerticalScrollbar(
                         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                        adapter = rememberScrollbarAdapter(headersScrollState)
+                        adapter = rememberScrollbarAdapter(headersScrollState),
+                    )
+                }
+                2 -> {
+                    HeaderLikeKeyValueEditor(
+                        exchangeMetrics = exchangeMetrics,
+                        editorRequestId = editorRequestId,
+                        isLoading = isLoading,
+                        text = paramsText,
+                        onTextChange = onParamsTextChange,
+                        scrollState = paramsScrollState,
+                        hintLine = "可与 URL 栏内已有 ?query 用 & 合并。",
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    VerticalScrollbar(
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        adapter = rememberScrollbarAdapter(paramsScrollState),
                     )
                 }
             }

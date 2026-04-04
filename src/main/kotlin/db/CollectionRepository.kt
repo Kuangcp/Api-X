@@ -58,7 +58,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     fun getRequest(id: String): StoredHttpRequest? {
         conn.prepareStatement(
             """
-            SELECT id, collection_id, folder_id, name, method, url, headers_text, body_text, meta_json
+            SELECT id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, meta_json
             FROM requests WHERE id = ?
             """.trimIndent()
         ).use { ps ->
@@ -73,6 +73,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                     method = rs.getString("method"),
                     url = rs.getString("url"),
                     headersText = rs.getString("headers_text"),
+                    paramsText = rs.getString("params_text"),
                     bodyText = rs.getString("body_text"),
                     metaJson = rs.getString("meta_json"),
                 )
@@ -85,21 +86,23 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         method: String,
         url: String,
         headersText: String,
+        paramsText: String,
         bodyText: String,
     ) {
         val now = System.currentTimeMillis()
         conn.prepareStatement(
             """
-            UPDATE requests SET method = ?, url = ?, headers_text = ?, body_text = ?, updated_at = ?
+            UPDATE requests SET method = ?, url = ?, headers_text = ?, params_text = ?, body_text = ?, updated_at = ?
             WHERE id = ?
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, method)
             ps.setString(2, url)
             ps.setString(3, headersText)
-            ps.setString(4, bodyText)
-            ps.setLong(5, now)
-            ps.setString(6, id)
+            ps.setString(4, paramsText)
+            ps.setString(5, bodyText)
+            ps.setLong(6, now)
+            ps.setString(7, id)
             ps.executeUpdate()
         }
     }
@@ -156,8 +159,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val defaultBody = "{\n  \"name\": \"api-x\"\n}"
         conn.prepareStatement(
             """
-            INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, body_text, sort_order, created_at, updated_at, meta_json)
-            VALUES (?, ?, ?, ?, 'GET', 'https://httpbin.org/get', ?, ?, ?, ?, ?, '{}')
+            INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
+            VALUES (?, ?, ?, ?, 'GET', 'https://httpbin.org/get', ?, '', ?, ?, ?, ?, '{}')
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, id)
@@ -182,7 +185,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     fun duplicateRequestBelow(sourceId: String): String? {
         val row = conn.prepareStatement(
             """
-            SELECT collection_id, folder_id, name, method, url, headers_text, body_text, meta_json, sort_order
+            SELECT collection_id, folder_id, name, method, url, headers_text, params_text, body_text, meta_json, sort_order
             FROM requests WHERE id = ?
             """.trimIndent()
         ).use { ps ->
@@ -196,6 +199,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                     val method = rs.getString("method")
                     val url = rs.getString("url")
                     val headersText = rs.getString("headers_text")
+                    val paramsText = rs.getString("params_text")
                     val bodyText = rs.getString("body_text")
                     val metaJson = rs.getString("meta_json")
                     val sortOrder = rs.getInt("sort_order")
@@ -237,8 +241,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             }
             conn.prepareStatement(
                 """
-                INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, body_text, sort_order, created_at, updated_at, meta_json)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """.trimIndent()
             ).use { ps ->
                 ps.setString(1, newId)
@@ -249,11 +253,12 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 ps.setString(5, row.method)
                 ps.setString(6, row.url)
                 ps.setString(7, row.headersText)
-                ps.setString(8, row.bodyText)
-                ps.setInt(9, insertAt)
-                ps.setLong(10, now)
+                ps.setString(8, row.paramsText)
+                ps.setString(9, row.bodyText)
+                ps.setInt(10, insertAt)
                 ps.setLong(11, now)
-                ps.setString(12, row.metaJson)
+                ps.setLong(12, now)
+                ps.setString(13, row.metaJson)
                 ps.executeUpdate()
             }
             conn.commit()
@@ -727,13 +732,13 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val out = mutableListOf<PortableRequest>()
         val sql = if (folderId == null) {
             """
-            SELECT name, method, url, headers_text, body_text, sort_order, meta_json
+            SELECT name, method, url, headers_text, params_text, body_text, sort_order, meta_json
             FROM requests WHERE collection_id = ? AND folder_id IS NULL
             ORDER BY sort_order ASC, name ASC
             """.trimIndent()
         } else {
             """
-            SELECT name, method, url, headers_text, body_text, sort_order, meta_json
+            SELECT name, method, url, headers_text, params_text, body_text, sort_order, meta_json
             FROM requests WHERE collection_id = ? AND folder_id = ?
             ORDER BY sort_order ASC, name ASC
             """.trimIndent()
@@ -748,6 +753,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                         method = rs.getString("method"),
                         url = rs.getString("url"),
                         headersText = rs.getString("headers_text"),
+                        paramsText = rs.getString("params_text"),
                         bodyText = rs.getString("body_text"),
                         sortOrder = rs.getInt("sort_order"),
                         metaJson = rs.getString("meta_json"),
@@ -805,8 +811,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     ) {
         conn.prepareStatement(
             """
-            INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, body_text, sort_order, created_at, updated_at, meta_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { ps ->
             ps.setString(1, newId())
@@ -817,11 +823,12 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             ps.setString(5, pr.method)
             ps.setString(6, pr.url)
             ps.setString(7, pr.headersText)
-            ps.setString(8, pr.bodyText)
-            ps.setInt(9, pr.sortOrder)
-            ps.setLong(10, now)
+            ps.setString(8, pr.paramsText)
+            ps.setString(9, pr.bodyText)
+            ps.setInt(10, pr.sortOrder)
             ps.setLong(11, now)
-            ps.setString(12, pr.metaJson.ifBlank { "{}" })
+            ps.setLong(12, now)
+            ps.setString(13, pr.metaJson.ifBlank { "{}" })
             ps.executeUpdate()
         }
     }
