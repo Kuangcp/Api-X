@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -768,7 +769,7 @@ private fun RequestTreeRow(
                     req.method.uppercase(),
                     style = TextStyle(
                         fontSize = 12.sp,
-                        lineHeight = 13.sp,
+                        lineHeight = 14.sp,
                         lineHeightStyle = LineHeightStyle(
                             alignment = LineHeightStyle.Alignment.Center,
                             trim = LineHeightStyle.Trim.Both,
@@ -856,7 +857,8 @@ private fun TreeRow(
         modifier = rowExtraModifier
             .then(clickableModifier)
             .then(dragModifier)
-            .padding(vertical = 1.dp, horizontal = 0.dp)
+            .heightIn(min = 32.dp)
+            .padding(vertical = 5.dp, horizontal = 0.dp)
             .padding(start = (depth * 6).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -870,7 +872,7 @@ private fun TreeRow(
             label,
             style = TextStyle(
                 fontSize = 15.sp,
-                lineHeight = 16.sp,
+                lineHeight = 18.sp,
                 lineHeightStyle = LineHeightStyle(
                     alignment = LineHeightStyle.Alignment.Center,
                     trim = LineHeightStyle.Trim.Both,

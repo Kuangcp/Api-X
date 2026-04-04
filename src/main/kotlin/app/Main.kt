@@ -767,6 +767,8 @@ fun App() {
 
 private const val UI_REFRESH_INTERVAL_MS = 100L
 
+private val lightThemeDefaultBackground = hexToColor("#EBECF0")
+
 /** 深色主题：前景统一为白色，避免桌面端部分组件仍使用默认深色字色。 */
 internal fun appMaterialColors(isDark: Boolean, backgroundHex: String) =
     parseHexColorOrNull(backgroundHex).let { customBg ->
@@ -776,8 +778,13 @@ internal fun appMaterialColors(isDark: Boolean, backgroundHex: String) =
                 if (customBg != null) base.copy(background = customBg) else base
             }
             else -> {
-                if (customBg != null) lightColors(background = customBg)
-                else lightColors(background = hexToColor("#f2f2f2"))
+                // 设置里存的深色预设只在深色主题下合理；浅色主题仍套用会得到深色底 + 浅色主题的深色字。
+                val bg = when {
+                    customBg == null -> lightThemeDefaultBackground
+                    customBg.isVisuallyDarkBackground() -> lightThemeDefaultBackground
+                    else -> customBg
+                }
+                lightColors(background = bg)
             }
         }
     }
