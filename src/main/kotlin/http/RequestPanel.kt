@@ -1,5 +1,6 @@
 package http
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -55,14 +56,50 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import kotlin.math.min
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
 
 /** Header 表单：勾选框列与 Key 输入区之间的空隙 */
-private val HeaderFormCheckboxToKeyGap = 10.dp
+private val HeaderFormCheckboxToKeyGap = 12.dp
+
+private data class HeaderFormFocusedCell(val rowIndex: Int, val isValueColumn: Boolean)
+
+/** 表单项之间的底部分隔：浅色虚线 */
+@Composable
+private fun HeaderFormRowDashedDivider(
+    color: Color,
+    modifier: Modifier = Modifier,
+    thickness: Dp = 1.dp,
+) {
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(thickness.coerceAtLeast(1.dp)),
+    ) {
+        val stroke = thickness.toPx().coerceAtLeast(1f)
+        val dash = 3.dp.toPx()
+        val gap = 4.dp.toPx()
+        val y = size.height / 2f
+        var x = 0f
+        while (x < size.width) {
+            val segEnd = min(x + dash, size.width)
+            drawLine(
+                color = color,
+                start = Offset(x, y),
+                end = Offset(segEnd, y),
+                strokeWidth = stroke,
+            )
+            x += dash + gap
+        }
+    }
+}
 
 /** 顶栏：主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
 @Composable
@@ -509,8 +546,12 @@ fun RequestEditorPane(
                                     )
                                 }
                                 HeadersEditMode.Form -> {
-                                    val formDividerColor =
-                                        MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                                    var focusedCell by remember { mutableStateOf<HeaderFormFocusedCell?>(null) }
+                                    LaunchedEffect(editorRequestId) {
+                                        focusedCell = null
+                                    }
+                                    val dashedLineColor =
+                                        MaterialTheme.colors.onSurface.copy(alpha = 0.22f)
                                     val rowFieldStyle = MaterialTheme.typography.body2.copy(
                                         fontSize = exchangeMetrics.compact,
                                         color = MaterialTheme.colors.onSurface.copy(
@@ -548,7 +589,7 @@ fun RequestEditorPane(
                                             )
                                             Spacer(modifier = Modifier.width(22.dp))
                                         }
-                                        Divider(color = formDividerColor, thickness = 1.dp)
+                                        HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)
                                         formHeaderRows.forEachIndexed { index, row ->
                                             Column(modifier = Modifier.fillMaxWidth()) {
                                                 Row(
@@ -581,36 +622,100 @@ fun RequestEditorPane(
                                                         )
                                                     }
                                                     Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
-                                                    BasicTextField(
-                                                        value = row.first,
-                                                        onValueChange = { nv ->
-                                                            formHeaderRows[index] =
-                                                                Triple(nv, row.second, row.third)
-                                                            commitHeadersForm()
-                                                        },
-                                                        enabled = !isLoading,
-                                                        singleLine = true,
-                                                        textStyle = rowFieldStyle,
-                                                        cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                                    val keyFocused =
+                                                        focusedCell == HeaderFormFocusedCell(index, isValueColumn = false)
+                                                    Box(
                                                         modifier = Modifier
                                                             .weight(0.36f)
-                                                            .padding(start = 2.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
-                                                    )
-                                                    BasicTextField(
-                                                        value = row.second,
-                                                        onValueChange = { nv ->
-                                                            formHeaderRows[index] =
-                                                                Triple(row.first, nv, row.third)
-                                                            commitHeadersForm()
-                                                        },
-                                                        enabled = !isLoading,
-                                                        singleLine = true,
-                                                        textStyle = rowFieldStyle,
-                                                        cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                                            .padding(start = 2.dp, end = 4.dp, top = 1.dp, bottom = 1.dp)
+                                                            .then(
+                                                                if (keyFocused) {
+                                                                    Modifier
+                                                                        .border(
+                                                                            2.dp,
+                                                                            MaterialTheme.colors.primary,
+                                                                            RoundedCornerShape(3.dp),
+                                                                        )
+                                                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                                                } else {
+                                                                    Modifier
+                                                                },
+                                                            ),
+                                                    ) {
+                                                        BasicTextField(
+                                                            value = row.first,
+                                                            onValueChange = { nv ->
+                                                                formHeaderRows[index] =
+                                                                    Triple(nv, row.second, row.third)
+                                                                commitHeadersForm()
+                                                            },
+                                                            enabled = !isLoading,
+                                                            singleLine = true,
+                                                            textStyle = rowFieldStyle,
+                                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .onFocusChanged { fc ->
+                                                                    if (fc.isFocused) {
+                                                                        focusedCell =
+                                                                            HeaderFormFocusedCell(index, false)
+                                                                    } else if (focusedCell == HeaderFormFocusedCell(
+                                                                            index,
+                                                                            false,
+                                                                        )
+                                                                    ) {
+                                                                        focusedCell = null
+                                                                    }
+                                                                },
+                                                        )
+                                                    }
+                                                    val valueFocused =
+                                                        focusedCell == HeaderFormFocusedCell(index, isValueColumn = true)
+                                                    Box(
                                                         modifier = Modifier
                                                             .weight(0.50f)
-                                                            .padding(start = 2.dp, end = 4.dp, top = 1.dp, bottom = 1.dp),
-                                                    )
+                                                            .padding(start = 2.dp, end = 4.dp, top = 1.dp, bottom = 1.dp)
+                                                            .then(
+                                                                if (valueFocused) {
+                                                                    Modifier
+                                                                        .border(
+                                                                            2.dp,
+                                                                            MaterialTheme.colors.primary,
+                                                                            RoundedCornerShape(3.dp),
+                                                                        )
+                                                                        .padding(horizontal = 3.dp, vertical = 2.dp)
+                                                                } else {
+                                                                    Modifier
+                                                                },
+                                                            ),
+                                                    ) {
+                                                        BasicTextField(
+                                                            value = row.second,
+                                                            onValueChange = { nv ->
+                                                                formHeaderRows[index] =
+                                                                    Triple(row.first, nv, row.third)
+                                                                commitHeadersForm()
+                                                            },
+                                                            enabled = !isLoading,
+                                                            singleLine = true,
+                                                            textStyle = rowFieldStyle,
+                                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .onFocusChanged { fc ->
+                                                                    if (fc.isFocused) {
+                                                                        focusedCell =
+                                                                            HeaderFormFocusedCell(index, true)
+                                                                    } else if (focusedCell == HeaderFormFocusedCell(
+                                                                            index,
+                                                                            true,
+                                                                        )
+                                                                    ) {
+                                                                        focusedCell = null
+                                                                    }
+                                                                },
+                                                        )
+                                                    }
                                                     IconButton(
                                                         onClick = {
                                                             formHeaderRows.removeAt(index)
@@ -633,7 +738,7 @@ fun RequestEditorPane(
                                                         )
                                                     }
                                                 }
-                                                Divider(color = formDividerColor, thickness = 1.dp)
+                                                HeaderFormRowDashedDivider(color = dashedLineColor, thickness = 1.dp)
                                             }
                                         }
                                         TextButton(
