@@ -10,6 +10,16 @@ plugins {
 group = "com.github.kuangcp"
 version = "1.0-SNAPSHOT"
 
+val appIconPng = layout.projectDirectory.file("api.png").asFile
+
+tasks.processResources {
+    if (appIconPng.exists()) {
+        from(appIconPng) {
+            rename { "app-icon.png" }
+        }
+    }
+}
+
 repositories {
     mavenCentral()
     maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
@@ -45,6 +55,18 @@ compose.desktop {
             packageVersion = "1.0.0"
             // java.sql：SQLite JDBC 需要 DriverManager 等（jlink 默认运行时未包含）
             modules("java.net.http", "java.sql")
+            // 根目录 api-3.png；Linux 打包用 PNG 最合适。Windows 安装包若失败可另备 .ico，macOS 可另备 .icns。
+            if (appIconPng.exists()) {
+                linux {
+                    iconFile.set(appIconPng)
+                }
+                windows {
+                    iconFile.set(appIconPng)
+                }
+                macOS {
+                    iconFile.set(appIconPng)
+                }
+            }
         }
     }
 }

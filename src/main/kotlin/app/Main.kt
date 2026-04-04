@@ -31,6 +31,7 @@ import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -859,8 +860,15 @@ private fun writeClipboardText(text: String) {
     Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
 }
 
+/** 仅用于取得与业务代码相同的 ClassLoader，以探测打包进 jar 的 `app-icon.png`。 */
+private object AppClasspathAnchor
+
 fun main() = application {
     val loaded = remember { WindowPrefs.load() }
+    val hasWindowIcon = remember {
+        AppClasspathAnchor::class.java.classLoader?.getResource("app-icon.png") != null
+    }
+    val windowIcon = if (hasWindowIcon) painterResource("app-icon.png") else null
     val windowState = rememberWindowState(
         position = if (loaded.xDp != null && loaded.yDp != null) {
             WindowPosition.Absolute(loaded.xDp.dp, loaded.yDp.dp)
@@ -872,6 +880,7 @@ fun main() = application {
     )
     Window(
         title = "Api-X",
+        icon = windowIcon,
         state = windowState,
         onCloseRequest = {
             persistWindowGeometry(windowState)
