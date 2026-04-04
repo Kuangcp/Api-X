@@ -61,6 +61,9 @@ import androidx.compose.ui.unit.dp
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
 
+/** Header 表单：勾选框列与 Key 输入区之间的空隙 */
+private val HeaderFormCheckboxToKeyGap = 10.dp
+
 /** 顶栏：主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun RequestTopBar(
@@ -390,10 +393,12 @@ fun RequestEditorPane(
                         ) {
                             Text(
                                 when (headersEditMode) {
-                                    HeadersEditMode.Text ->
-                                        "每行 Key: Value；行首「! 」表示不发送；无效行发送时不带"
-                                    HeadersEditMode.Form ->
-                                        "勾选=发送；取消勾选或文本模式「! 」前缀均不发送；无效行请用文本查看"
+                                    HeadersEditMode.Text -> ""
+                                    HeadersEditMode.Form -> ""
+                                    // HeadersEditMode.Text ->
+                                    //    "每行 Key: Value；行首「! 」表示不发送；无效行发送时不带"
+                                    //HeadersEditMode.Form ->
+                                    //    "勾选=发送；取消勾选或文本模式「! 」前缀均不发送；无效行请用文本查看"
                                 },
                                 fontSize = exchangeMetrics.tab,
                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
@@ -526,11 +531,14 @@ fun RequestEditorPane(
                                             horizontalArrangement = Arrangement.spacedBy(0.dp),
                                         ) {
                                             Spacer(modifier = Modifier.width(20.dp))
+                                            Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                             Text(
                                                 "Key",
                                                 fontSize = exchangeMetrics.tiny,
                                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                                modifier = Modifier.weight(0.36f),
+                                                modifier = Modifier
+                                                    .weight(0.36f)
+                                                    .padding(start = 2.dp),
                                             )
                                             Text(
                                                 "Value",
@@ -572,6 +580,7 @@ fun RequestEditorPane(
                                                             ),
                                                         )
                                                     }
+                                                    Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                                     BasicTextField(
                                                         value = row.first,
                                                         onValueChange = { nv ->
