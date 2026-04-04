@@ -15,18 +15,23 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -42,11 +47,41 @@ fun ResponsePanel(
     rightTabIndex: Int,
     onRightTabIndexChange: (Int) -> Unit,
     isSseResponse: Boolean,
+    /** 为 true 时不做 JSON 高亮（流式未完成或正加载）。 */
+    isResponseLoading: Boolean = false,
     responseListState: LazyListState,
     responseHeadersListState: LazyListState
 ) {
-    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex) {
-        if (isSseResponse && rightTabIndex == 0) {
+    val isJsonContentType = remember(responseHeaderLines) {
+        contentTypeHeaderIndicatesJson(responseHeaderLines)
+    }
+    val rawBodyCombined = remember(responseLines, responsePartialLine) {
+        buildString {
+            append(responseLines.joinToString("\n"))
+            responsePartialLine?.let { p ->
+                if (responseLines.isNotEmpty()) append('\n')
+                append(p)
+            }
+        }
+    }
+    val darkTheme = !MaterialTheme.colors.isLight
+    val jsonAnnotatedBody = remember(
+        rawBodyCombined,
+        isJsonContentType,
+        isSseResponse,
+        isResponseLoading,
+        darkTheme,
+    ) {
+        if (!isJsonContentType || isSseResponse || isResponseLoading) {
+            null
+        } else {
+            formatAndHighlightJsonOrNull(rawBodyCombined, darkTheme)
+        }
+    }
+    val jsonBodyScrollState = rememberScrollState()
+
+    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonAnnotatedBody) {
+        if (isSseResponse && rightTabIndex == 0 && jsonAnnotatedBody == null) {
             val total = responseLines.size + if (responsePartialLine != null) 1 else 0
             if (total > 0) {
                 responseListState.scrollToItem(total - 1)
@@ -151,35 +186,56 @@ fun ResponsePanel(
             ) {
                 when (rightTabIndex) {
                     0 -> {
-                        SelectionContainer {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(end = 12.dp),
-                                state = responseListState
-                            ) {
-                                items(responseLines) { line ->
-                                    Text(
-                                        line,
+                        if (jsonAnnotatedBody != null) {
+                            SelectionContainer {
+                                Text(
+                                    text = jsonAnnotatedBody,
+                                    style = TextStyle(
+                                        fontFamily = FontFamily.Monospace,
                                         fontSize = 12.sp,
-                                        color = MaterialTheme.colors.onSurface
-                                    )
-                                }
-                                responsePartialLine?.let { partial ->
-                                    item("partial") {
+                                        color = MaterialTheme.colors.onSurface,
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(jsonBodyScrollState)
+                                        .padding(end = 12.dp),
+                                )
+                            }
+                            VerticalScrollbar(
+                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                adapter = rememberScrollbarAdapter(jsonBodyScrollState),
+                            )
+                        } else {
+                            SelectionContainer {
+                                LazyColumn(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(end = 12.dp),
+                                    state = responseListState,
+                                ) {
+                                    items(responseLines) { line ->
                                         Text(
-                                            partial,
+                                            line,
                                             fontSize = 12.sp,
-                                            color = MaterialTheme.colors.onSurface
+                                            color = MaterialTheme.colors.onSurface,
                                         )
+                                    }
+                                    responsePartialLine?.let { partial ->
+                                        item("partial") {
+                                            Text(
+                                                partial,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colors.onSurface,
+                                            )
+                                        }
                                     }
                                 }
                             }
+                            VerticalScrollbar(
+                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                adapter = rememberScrollbarAdapter(responseListState),
+                            )
                         }
-                        VerticalScrollbar(
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            adapter = rememberScrollbarAdapter(responseListState)
-                        )
                     }
                     else -> {
                         SelectionContainer {

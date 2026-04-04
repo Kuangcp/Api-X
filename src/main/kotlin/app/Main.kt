@@ -745,6 +745,7 @@ fun App() {
                     rightTabIndex = rightTabIndex,
                     onRightTabIndexChange = { rightTabIndex = it },
                     isSseResponse = isSseResponse,
+                    isResponseLoading = isLoading,
                     responseListState = responseListState,
                     responseHeadersListState = responseHeadersListState
                 )
