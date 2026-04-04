@@ -207,9 +207,22 @@ fun sendRequestStreaming(
             builder.header(name, value)
         }
 
-        val request = when (method) {
-            "POST" -> builder.POST(HttpRequest.BodyPublishers.ofString(body)).build()
-            else -> builder.GET().build()
+        val m = method.trim().uppercase()
+        val bodyPub = HttpRequest.BodyPublishers.ofString(body)
+        val noBody = HttpRequest.BodyPublishers.noBody()
+        val request = when (m) {
+            "GET" -> builder.GET().build()
+            "POST" -> builder.POST(bodyPub).build()
+            "PUT" -> builder.PUT(bodyPub).build()
+            "DELETE" ->
+                if (body.isBlank()) builder.DELETE().build()
+                else builder.method("DELETE", bodyPub).build()
+            "OPTIONS" -> builder.method("OPTIONS", noBody).build()
+            "HEAD" -> builder.method("HEAD", noBody).build()
+            "PATCH" -> builder.method("PATCH", bodyPub).build()
+            else ->
+                if (body.isNotBlank()) builder.method(m, bodyPub).build()
+                else builder.method(m, noBody).build()
         }
 
         if (control.cancelled) return
