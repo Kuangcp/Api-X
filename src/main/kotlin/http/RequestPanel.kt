@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -602,6 +601,7 @@ fun RequestEditorPane(
                                                     verticalAlignment = Alignment.CenterVertically,
                                                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                                                 ) {
+                                                    Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                                     Box(
                                                         modifier = Modifier
                                                             .width(20.dp)
@@ -664,7 +664,7 @@ fun RequestEditorPane(
                                                             cursorBrush = SolidColor(MaterialTheme.colors.primary),
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
-                                                                .wrapContentHeight()
+                                                                .fillMaxHeight()
                                                                 .onFocusChanged { fc ->
                                                                     if (fc.isFocused) {
                                                                         focusedCell =
@@ -677,6 +677,14 @@ fun RequestEditorPane(
                                                                         focusedCell = null
                                                                     }
                                                                 },
+                                                            decorationBox = { innerTextField ->
+                                                                Box(
+                                                                    modifier = Modifier.fillMaxSize(),
+                                                                    contentAlignment = Alignment.CenterStart,
+                                                                ) {
+                                                                    innerTextField()
+                                                                }
+                                                            },
                                                         )
                                                     }
                                                     val valueFocused =
@@ -714,7 +722,7 @@ fun RequestEditorPane(
                                                             cursorBrush = SolidColor(MaterialTheme.colors.primary),
                                                             modifier = Modifier
                                                                 .fillMaxWidth()
-                                                                .wrapContentHeight()
+                                                                .fillMaxHeight()
                                                                 .onFocusChanged { fc ->
                                                                     if (fc.isFocused) {
                                                                         focusedCell =
@@ -727,6 +735,14 @@ fun RequestEditorPane(
                                                                         focusedCell = null
                                                                     }
                                                                 },
+                                                            decorationBox = { innerTextField ->
+                                                                Box(
+                                                                    modifier = Modifier.fillMaxSize(),
+                                                                    contentAlignment = Alignment.CenterStart,
+                                                                ) {
+                                                                    innerTextField()
+                                                                }
+                                                            },
                                                         )
                                                     }
                                                     Box(
