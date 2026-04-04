@@ -39,11 +39,26 @@ object RequestResponseStore {
         return t
     }
 
-    private fun listResponseJsonFiles(dir: Path): List<Path> {
+    private fun responseLogStemEpochMs(fileName: String): Long {
+        val n = fileName.lowercase()
+        val stem = when {
+            n.endsWith(".har") -> fileName.dropLast(4)
+            n.endsWith(".json") -> fileName.dropLast(5)
+            else -> return 0L
+        }
+        return stem.toLongOrNull() ?: 0L
+    }
+
+    /** 当前使用 `.har`；仍扫描 `.json` 以便读取升级前的旧文件。 */
+    private fun listResponseLogFiles(dir: Path): List<Path> {
         if (dir.notExists() || !dir.isDirectory()) return emptyList()
         return Files.list(dir).use { stream ->
             stream.filter { p ->
-                Files.isRegularFile(p) && p.fileName.toString().endsWith(".json", ignoreCase = true)
+                val name = p.fileName.toString()
+                Files.isRegularFile(p) && (
+                    name.endsWith(".har", ignoreCase = true) ||
+                        name.endsWith(".json", ignoreCase = true)
+                    )
             }.collect(Collectors.toList())
         }
     }
@@ -59,10 +74,10 @@ object RequestResponseStore {
         val id = requestId.trim()
         if (id.isEmpty()) return null
         val dir = responseDir(id)
-        val files = listResponseJsonFiles(dir)
+        val files = listResponseLogFiles(dir)
         if (files.isEmpty()) return null
         val latest = files.maxWithOrNull(Comparator.comparingLong { p ->
-            p.fileName.toString().removeSuffix(".json").removeSuffix(".JSON").toLongOrNull() ?: 0L
+            responseLogStemEpochMs(p.fileName.toString())
         }) ?: return null
         return runCatching {
             val text = Files.readString(latest, Charsets.UTF_8)
@@ -75,16 +90,16 @@ object RequestResponseStore {
         if (id.isEmpty()) return
         ensureLayout(id)
         val dir = responseDir(id)
-        val file = dir.resolve("${snapshot.savedAtEpochMs}.json")
+        val file = dir.resolve("${snapshot.savedAtEpochMs}.har")
         val text = HarLogCodec.toJsonString(snapshot)
         Files.writeString(file, text, Charsets.UTF_8)
         pruneOld(dir)
     }
 
     private fun pruneOld(dir: Path) {
-        val files = listResponseJsonFiles(dir).sortedWith(
+        val files = listResponseLogFiles(dir).sortedWith(
             Comparator.comparingLong { p: Path ->
-                p.fileName.toString().removeSuffix(".json").removeSuffix(".JSON").toLongOrNull() ?: 0L
+                responseLogStemEpochMs(p.fileName.toString())
             }.reversed()
         )
         if (files.size <= MAX_FILES_PER_REQUEST) return
