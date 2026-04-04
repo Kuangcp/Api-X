@@ -32,8 +32,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+
+/** 响应头展示用：按第一个 `:` 拆成 name / value（value 内可含冒号）。 */
+private fun splitResponseHeaderLine(line: String): Pair<String, String> {
+    val idx = line.indexOf(':')
+    if (idx < 0) return line.trim() to ""
+    val name = line.substring(0, idx).trim()
+    val value = line.substring(idx + 1).trimStart()
+    return name to value
+}
 
 @Composable
 fun ResponsePanel(
@@ -238,6 +248,11 @@ fun ResponsePanel(
                         }
                     }
                     else -> {
+                        val headerStyle = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colors.onSurface,
+                        )
                         SelectionContainer {
                             LazyColumn(
                                 modifier = Modifier
@@ -245,12 +260,30 @@ fun ResponsePanel(
                                     .padding(end = 12.dp),
                                 state = responseHeadersListState
                             ) {
-                                items(responseHeaderLines) { line ->
-                                    Text(
-                                        line,
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colors.onSurface
-                                    )
+                                items(
+                                    count = responseHeaderLines.size,
+                                    key = { it },
+                                ) { index ->
+                                    val (name, value) = splitResponseHeaderLine(responseHeaderLines[index])
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 1.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = name,
+                                            modifier = Modifier.weight(1f),
+                                            style = headerStyle,
+                                            textAlign = TextAlign.Start,
+                                        )
+                                        Text(
+                                            text = value,
+                                            modifier = Modifier.weight(1f),
+                                            style = headerStyle,
+                                            textAlign = TextAlign.Start,
+                                        )
+                                    }
                                 }
                             }
                         }

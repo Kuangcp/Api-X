@@ -75,6 +75,7 @@ import tree.CollectionTreeSidebar
 import tree.TreeDropTarget
 import tree.TreeSelection
 import tree.collectAllFolderIds
+import tree.expandSetsForRequest
 import tree.firstRequestSelection
 
 @Composable
@@ -239,6 +240,11 @@ fun App() {
         repository.saveRequestEditorFields(id, method, url, headersText, bodyText)
     }
 
+    LaunchedEffect(editorRequestId) {
+        val id = editorRequestId ?: return@LaunchedEffect
+        LastRequestPrefs.save(id)
+    }
+
     LaunchedEffect(tree) {
         if (tree.isEmpty()) return@LaunchedEffect
         if (!didApplyDefaultTreeExpand) {
@@ -254,9 +260,19 @@ fun App() {
         persistTreeExpand = true
         if (!didPickInitialRequest) {
             didPickInitialRequest = true
-            firstRequestSelection(tree)?.let { sel ->
-                applyRequestToEditor(sel.id)
-                treeSelection = sel
+            val savedId = LastRequestPrefs.load()
+            if (savedId.isNotEmpty() && repository.getRequest(savedId) != null) {
+                expandSetsForRequest(tree, savedId)?.let { (cols, folders) ->
+                    expandedCollectionIds = expandedCollectionIds + cols
+                    expandedFolderIds = expandedFolderIds + folders
+                }
+                applyRequestToEditor(savedId)
+                treeSelection = TreeSelection.Request(savedId)
+            } else {
+                firstRequestSelection(tree)?.let { sel ->
+                    applyRequestToEditor(sel.id)
+                    treeSelection = sel
+                }
             }
         }
     }
@@ -612,6 +628,7 @@ fun App() {
                                 applyRequestToEditor(next.id)
                                 treeSelection = next
                             } ?: run {
+                                LastRequestPrefs.clear()
                                 method = "GET"
                                 url = ""
                                 headersText = ""

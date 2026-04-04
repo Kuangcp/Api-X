@@ -933,6 +933,31 @@ fun firstRequestSelection(tree: List<UiCollection>): TreeSelection.Request? {
     return null
 }
 
+/** 为在侧栏中露出某请求，需要额外展开的集合 id 与文件夹 id（含从根到父文件夹的链）。 */
+fun expandSetsForRequest(tree: List<UiCollection>, requestId: String): Pair<Set<String>, Set<String>>? {
+    for (c in tree) {
+        if (c.rootRequests.any { it.id == requestId }) {
+            return setOf(c.id) to emptySet()
+        }
+        folderPathContainingRequest(c.folders, requestId)?.let { path ->
+            return setOf(c.id) to path.toSet()
+        }
+    }
+    return null
+}
+
+private fun folderPathContainingRequest(folders: List<UiFolder>, requestId: String): List<String>? {
+    for (f in folders) {
+        if (f.requests.any { it.id == requestId }) {
+            return listOf(f.id)
+        }
+        folderPathContainingRequest(f.children, requestId)?.let { tail ->
+            return listOf(f.id) + tail
+        }
+    }
+    return null
+}
+
 private fun firstRequestInFolders(folders: List<UiFolder>): TreeSelection.Request? {
     for (f in folders) {
         f.requests.firstOrNull()?.let { return TreeSelection.Request(it.id) }

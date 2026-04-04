@@ -11,5 +11,8 @@ gradle createDistributable 打包
 
 记忆最后打开的 Request, 启动时打开对应的Request
 
-request body json高亮
 response header 默认两列展示 两列对半分, key和value 都左对齐就可以了, 只是文本, 不需要表格样式
+
+request body json高亮
+
+request 的 header 表单形式 高度还要缩减下 紧凑些 可以取消间隔, 然后去掉 顶和左右的边框, 只保留底栏边框
