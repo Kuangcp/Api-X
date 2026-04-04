@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -24,6 +25,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.ButtonDefaults
+import androidx.compose.material.Checkbox
+import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
 import androidx.compose.material.IconButton
@@ -34,6 +37,7 @@ import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -223,6 +227,19 @@ fun RequestSidePanel(
 private enum class HeadersEditMode { Text, Form }
 
 @Composable
+private fun headerFormOutlinedColors(enabled: Boolean) = TextFieldDefaults.outlinedTextFieldColors(
+    textColor = MaterialTheme.colors.onSurface.copy(
+        alpha = if (enabled) 1f else ContentAlpha.disabled
+    ),
+    disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+    backgroundColor = Color.Transparent,
+    cursorColor = MaterialTheme.colors.primary,
+    focusedBorderColor = MaterialTheme.colors.primary,
+    unfocusedBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+    disabledBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+)
+
+@Composable
 fun RequestEditorPane(
     modifier: Modifier = Modifier,
     editorRequestId: String?,
@@ -237,7 +254,7 @@ fun RequestEditorPane(
     val bodyScrollState = rememberScrollState()
     val headersScrollState = rememberScrollState()
     var headersEditMode by remember { mutableStateOf(HeadersEditMode.Text) }
-    val formHeaderRows = remember { mutableStateListOf<Pair<String, String>>() }
+    val formHeaderRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
     val formHeaderOrphans = remember { mutableStateListOf<String>() }
 
     fun syncFormFromHeadersText() {
@@ -386,8 +403,10 @@ fun RequestEditorPane(
                         ) {
                             Text(
                                 when (headersEditMode) {
-                                    HeadersEditMode.Text -> "每行：Key: Value；无效行发送时不带"
-                                    HeadersEditMode.Form -> "表单仅含合法行；无效内容请切回文本查看"
+                                    HeadersEditMode.Text ->
+                                        "每行 Key: Value；行首「! 」表示不发送；无效行发送时不带"
+                                    HeadersEditMode.Form ->
+                                        "勾选=发送；取消勾选或文本模式「! 」前缀均不发送；无效行请用文本查看"
                                 },
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
@@ -496,54 +515,98 @@ fun RequestEditorPane(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .verticalScroll(headersScrollState)
-                                            .padding(8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            .padding(horizontal = 4.dp, vertical = 4.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
                                     ) {
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
+                                            Spacer(modifier = Modifier.width(24.dp))
                                             Text(
                                                 "Key",
-                                                fontSize = 11.sp,
+                                                fontSize = 10.sp,
                                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                                modifier = Modifier.weight(0.38f)
+                                                modifier = Modifier.weight(0.36f)
                                             )
                                             Text(
                                                 "Value",
-                                                fontSize = 11.sp,
+                                                fontSize = 10.sp,
                                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                                modifier = Modifier.weight(0.52f)
+                                                modifier = Modifier.weight(0.50f)
                                             )
-                                            Spacer(modifier = Modifier.width(36.dp))
+                                            Spacer(modifier = Modifier.width(26.dp))
                                         }
-                                        formHeaderRows.forEachIndexed { index, pair ->
+                                        formHeaderRows.forEachIndexed { index, row ->
                                             Row(
                                                 modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.Top,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(2.dp)
                                             ) {
+                                                Box(
+                                                    modifier = Modifier.width(24.dp),
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Checkbox(
+                                                        checked = row.third,
+                                                        onCheckedChange = { c ->
+                                                            formHeaderRows[index] =
+                                                                Triple(row.first, row.second, c)
+                                                            commitHeadersForm()
+                                                        },
+                                                        enabled = !isLoading,
+                                                        modifier = Modifier.scale(0.78f),
+                                                        colors = CheckboxDefaults.colors(
+                                                            checkedColor = MaterialTheme.colors.primary,
+                                                            uncheckedColor = MaterialTheme.colors.onSurface.copy(
+                                                                alpha = ContentAlpha.medium
+                                                            ),
+                                                            disabledColor = MaterialTheme.colors.onSurface.copy(
+                                                                alpha = ContentAlpha.disabled
+                                                            )
+                                                        )
+                                                    )
+                                                }
                                                 OutlinedTextField(
-                                                    value = pair.first,
+                                                    value = row.first,
                                                     onValueChange = { nv ->
-                                                        formHeaderRows[index] = nv to pair.second
+                                                        formHeaderRows[index] =
+                                                            Triple(nv, row.second, row.third)
                                                         commitHeadersForm()
                                                     },
                                                     enabled = !isLoading,
                                                     singleLine = true,
-                                                    textStyle = MaterialTheme.typography.body2.copy(fontSize = 12.sp),
-                                                    modifier = Modifier.weight(0.38f)
+                                                    textStyle = MaterialTheme.typography.body2.copy(
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colors.onSurface.copy(
+                                                            alpha = if (!isLoading) 1f else ContentAlpha.disabled
+                                                        )
+                                                    ),
+                                                    colors = headerFormOutlinedColors(!isLoading),
+                                                    modifier = Modifier
+                                                        .weight(0.36f)
+                                                        .defaultMinSize(minHeight = 36.dp)
                                                 )
                                                 OutlinedTextField(
-                                                    value = pair.second,
+                                                    value = row.second,
                                                     onValueChange = { nv ->
-                                                        formHeaderRows[index] = pair.first to nv
+                                                        formHeaderRows[index] =
+                                                            Triple(row.first, nv, row.third)
                                                         commitHeadersForm()
                                                     },
                                                     enabled = !isLoading,
                                                     singleLine = true,
-                                                    textStyle = MaterialTheme.typography.body2.copy(fontSize = 12.sp),
-                                                    modifier = Modifier.weight(0.52f)
+                                                    textStyle = MaterialTheme.typography.body2.copy(
+                                                        fontSize = 11.sp,
+                                                        color = MaterialTheme.colors.onSurface.copy(
+                                                            alpha = if (!isLoading) 1f else ContentAlpha.disabled
+                                                        )
+                                                    ),
+                                                    colors = headerFormOutlinedColors(!isLoading),
+                                                    modifier = Modifier
+                                                        .weight(0.50f)
+                                                        .defaultMinSize(minHeight = 36.dp)
                                                 )
                                                 IconButton(
                                                     onClick = {
@@ -551,12 +614,12 @@ fun RequestEditorPane(
                                                         commitHeadersForm()
                                                     },
                                                     enabled = !isLoading,
-                                                    modifier = Modifier.size(36.dp)
+                                                    modifier = Modifier.size(26.dp)
                                                 ) {
                                                     Icon(
                                                         Icons.Filled.Delete,
                                                         contentDescription = "删除此行",
-                                                        modifier = Modifier.size(18.dp),
+                                                        modifier = Modifier.size(15.dp),
                                                         tint = MaterialTheme.colors.onSurface.copy(
                                                             alpha = if (!isLoading) ContentAlpha.medium else ContentAlpha.disabled
                                                         )
@@ -566,18 +629,24 @@ fun RequestEditorPane(
                                         }
                                         TextButton(
                                             onClick = {
-                                                formHeaderRows.add("" to "")
+                                                formHeaderRows.add(Triple("", "", true))
                                             },
                                             enabled = !isLoading,
-                                            modifier = Modifier.align(Alignment.Start)
+                                            modifier = Modifier.align(Alignment.Start),
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                                         ) {
                                             Icon(
                                                 Icons.Filled.Add,
                                                 contentDescription = null,
-                                                modifier = Modifier.size(16.dp),
+                                                modifier = Modifier.size(14.dp),
                                                 tint = MaterialTheme.colors.primary
                                             )
-                                            Text("添加", fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
+                                            Text(
+                                                "添加",
+                                                fontSize = 11.sp,
+                                                color = MaterialTheme.colors.onSurface,
+                                                modifier = Modifier.padding(start = 2.dp)
+                                            )
                                         }
                                     }
                                 }

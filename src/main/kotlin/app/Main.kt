@@ -55,6 +55,8 @@ import kotlin.concurrent.thread
 import db.AppPaths
 import db.CachedHttpResponse
 import db.CollectionRepository
+import db.HarLogCodec
+import db.HarSnapshot
 import db.RequestResponseStore
 import http.BufferUpdate
 import http.RequestControl
@@ -62,6 +64,7 @@ import http.RequestSidePanel
 import http.RequestTopBar
 import http.ResponsePanel
 import http.closeQuietly
+import http.parseHeadersForSend
 import http.parseCurlCommand
 import http.requestToCurlCommand
 import http.sendRequestStreaming
@@ -279,6 +282,10 @@ fun App() {
         saveEditorIfBound()
         RequestResponseStore.ensureLayout(boundRequestId)
         val tabAtStart = rightTabIndex
+        val reqMethodSnap = method
+        val reqUrlSnap = url
+        val reqHeadersFullSnap = headersText
+        val reqBodySnap = bodyText
         val control = RequestControl()
         control.startTimeMs = System.currentTimeMillis()
         activeRequestControl = control
@@ -362,21 +369,32 @@ fun App() {
                 val elapsed = System.currentTimeMillis() - control.startTimeMs
                 val timeText = formatDuration(elapsed)
                 if (!control.cancelled) {
-                    val snap = CachedHttpResponse(
-                        savedAtEpochMs = System.currentTimeMillis(),
-                        statusCodeText = if (control.responseStatusCode >= 0) {
-                            control.responseStatusCode.toString()
-                        } else {
-                            ""
-                        },
-                        responseTimeText = timeText,
-                        responseSizeText = formatBytes(control.totalBytes),
-                        responseBodyLines = control.snapshotRawBodyLines(),
-                        responseHeaderLines = control.responseHeaderSnapshot,
-                        isSseResponse = control.responseWasSse,
-                        rightTabIndex = tabAtStart.coerceIn(0, 1),
+                    val code = control.responseStatusCode
+                    RequestResponseStore.save(
+                        boundRequestId,
+                        HarSnapshot(
+                            savedAtEpochMs = System.currentTimeMillis(),
+                            requestMethod = reqMethodSnap,
+                            requestUrl = reqUrlSnap,
+                            requestHeadersFullText = reqHeadersFullSnap,
+                            requestBody = reqBodySnap,
+                            requestHeadersSent = parseHeadersForSend(reqHeadersFullSnap),
+                            responseStatus = if (code >= 0) code else 0,
+                            responseStatusText = if (code >= 0) {
+                                HarLogCodec.responseStatusPhrase(code)
+                            } else {
+                                ""
+                            },
+                            responseHeaderLines = control.responseHeaderSnapshot,
+                            responseBodyLines = control.snapshotRawBodyLines(),
+                            responseTimeMs = elapsed,
+                            responseSizeBytes = control.totalBytes,
+                            responseTimeLabel = timeText,
+                            responseSizeLabel = formatBytes(control.totalBytes),
+                            rightTabIndex = tabAtStart.coerceIn(0, 1),
+                            isSseResponse = control.responseWasSse,
+                        ),
                     )
-                    RequestResponseStore.save(boundRequestId, snap)
                 }
                 if (activeRequestControl === control) {
                     isLoading = false
@@ -422,25 +440,30 @@ fun App() {
         if (editorRequestId == boundId) {
             responseTimeText = timeText
         }
+        val sc = control.responseStatusCode
         RequestResponseStore.save(
             boundId,
-            CachedHttpResponse(
+            HarSnapshot(
                 savedAtEpochMs = System.currentTimeMillis(),
-                statusCodeText = if (control.responseStatusCode >= 0) {
-                    control.responseStatusCode.toString()
-                } else {
-                    ""
-                },
-                responseTimeText = timeText,
-                responseSizeText = formatBytes(control.totalBytes),
-                responseBodyLines = control.snapshotRawBodyLines(),
+                requestMethod = method,
+                requestUrl = url,
+                requestHeadersFullText = headersText,
+                requestBody = bodyText,
+                requestHeadersSent = parseHeadersForSend(headersText),
+                responseStatus = if (sc >= 0) sc else 0,
+                responseStatusText = if (sc >= 0) HarLogCodec.responseStatusPhrase(sc) else "",
                 responseHeaderLines = control.responseHeaderSnapshot,
-                isSseResponse = control.responseWasSse,
+                responseBodyLines = control.snapshotRawBodyLines(),
+                responseTimeMs = System.currentTimeMillis() - control.startTimeMs,
+                responseSizeBytes = control.totalBytes,
+                responseTimeLabel = timeText,
+                responseSizeLabel = formatBytes(control.totalBytes),
                 rightTabIndex = if (editorRequestId == boundId) {
                     rightTabIndex.coerceIn(0, 1)
                 } else {
                     0
                 },
+                isSseResponse = control.responseWasSse,
             ),
         )
         activeRequestThread?.interrupt()

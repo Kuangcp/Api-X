@@ -1,19 +1,12 @@
 package db
 
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import java.nio.file.Files
 import java.nio.file.Path
 import java.util.Comparator
 import java.util.stream.Collectors
 import kotlin.io.path.isDirectory
 import kotlin.io.path.notExists
-
-private val responseJson = Json {
-    prettyPrint = false
-    encodeDefaults = true
-    ignoreUnknownKeys = true
-}
 
 @Serializable
 data class CachedHttpResponse(
@@ -73,17 +66,17 @@ object RequestResponseStore {
         }) ?: return null
         return runCatching {
             val text = Files.readString(latest, Charsets.UTF_8)
-            responseJson.decodeFromString(CachedHttpResponse.serializer(), text)
+            HarLogCodec.parseToCachedResponse(text)
         }.getOrNull()
     }
 
-    fun save(requestId: String, snapshot: CachedHttpResponse) {
+    fun save(requestId: String, snapshot: HarSnapshot) {
         val id = requestId.trim()
         if (id.isEmpty()) return
         ensureLayout(id)
         val dir = responseDir(id)
         val file = dir.resolve("${snapshot.savedAtEpochMs}.json")
-        val text = responseJson.encodeToString(CachedHttpResponse.serializer(), snapshot)
+        val text = HarLogCodec.toJsonString(snapshot)
         Files.writeString(file, text, Charsets.UTF_8)
         pruneOld(dir)
     }

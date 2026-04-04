@@ -44,29 +44,40 @@ fun parseHeaderLine(line: String): Pair<String, String>? {
     return name to value
 }
 
-fun parseHeaders(headersText: String): List<Pair<String, String>> =
+/** 行首 `! ` 表示该行 Header 仅编辑、不随请求发送（与表单取消勾选一致）。 */
+fun parseHeadersForSend(headersText: String): List<Pair<String, String>> =
     headersText
         .lines()
-        .map { it.trim() }
+        .map { it.trim().trimEnd('\r') }
         .filter { it.isNotEmpty() }
+        .filterNot { it.startsWith("! ") }
         .mapNotNull { parseHeaderLine(it) }
 
-/** 拆成可进表单的合法行，与无法解析的行（切换表单时不生成行，发送时也不带）。 */
-fun splitHeadersForEditor(headersText: String): Pair<List<Pair<String, String>>, List<String>> {
-    val valid = mutableListOf<Pair<String, String>>()
+fun parseHeaders(headersText: String): List<Pair<String, String>> = parseHeadersForSend(headersText)
+
+/** 拆成可进表单的合法行（含是否发送），与无法解析的孤儿行。 */
+fun splitHeadersForEditor(headersText: String): Pair<List<Triple<String, String, Boolean>>, List<String>> {
+    val valid = mutableListOf<Triple<String, String, Boolean>>()
     val invalid = mutableListOf<String>()
     for (raw in headersText.lines()) {
         val trimmed = raw.trim().trimEnd('\r')
         if (trimmed.isEmpty()) continue
-        val parsed = parseHeaderLine(trimmed)
-        if (parsed != null) valid.add(parsed)
-        else invalid.add(trimmed)
+        val disabled = trimmed.startsWith("! ")
+        val content = if (disabled) trimmed.removePrefix("! ").trimStart() else trimmed
+        val parsed = parseHeaderLine(content)
+        if (parsed != null) {
+            valid.add(Triple(parsed.first, parsed.second, !disabled))
+        } else {
+            invalid.add(trimmed)
+        }
     }
     return valid to invalid
 }
 
-fun joinHeadersEditor(validRows: List<Pair<String, String>>, orphanLines: List<String>): String {
-    val rowsPart = validRows.filter { it.first.isNotBlank() }.joinToString("\n") { "${it.first}: ${it.second}" }
+fun joinHeadersEditor(validRows: List<Triple<String, String, Boolean>>, orphanLines: List<String>): String {
+    val rowsPart = validRows.filter { it.first.isNotBlank() }.joinToString("\n") { (k, v, enabled) ->
+        if (enabled) "$k: $v" else "! $k: $v"
+    }
     val orphanPart = orphanLines.filter { it.isNotBlank() }.joinToString("\n")
     return when {
         rowsPart.isEmpty() && orphanPart.isEmpty() -> ""
@@ -94,7 +105,7 @@ fun sendRequestStreaming(
         val client = HttpClient.newHttpClient()
         val builder = HttpRequest.newBuilder().uri(URI.create(url.trim()))
 
-        val allowedHeaders = parseHeaders(headersText).filterNot { (name, _) ->
+        val allowedHeaders = parseHeadersForSend(headersText).filterNot { (name, _) ->
             name.lowercase() in RESTRICTED_HEADERS
         }
         allowedHeaders.forEach { (name, value) ->
