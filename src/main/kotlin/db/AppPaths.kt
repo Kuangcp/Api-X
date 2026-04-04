@@ -32,4 +32,7 @@ object AppPaths {
     }
 
     fun collectionDatabasePath(): Path = dataDirectory().resolve("collections.db")
+
+    /** 各请求下的 response / bench 等落盘目录（非 SQLite）。 */
+    fun requestArtifactsRoot(): Path = dataDirectory().resolve("request")
 }

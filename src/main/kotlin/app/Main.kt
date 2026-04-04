@@ -13,7 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
@@ -53,7 +53,9 @@ import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
 import kotlin.concurrent.thread
 import db.AppPaths
+import db.CachedHttpResponse
 import db.CollectionRepository
+import db.RequestResponseStore
 import http.BufferUpdate
 import http.RequestControl
 import http.RequestSidePanel
@@ -167,23 +169,59 @@ fun App() {
         applyRequestToEditor(rid)
         treeSelection = TreeSelection.Request(rid)
     }
-    var responseLines by remember { mutableStateOf(mutableStateListOf("响应结果会显示在这里")) }
-    var responsePartialLine by remember { mutableStateOf<String?>(null) }
+    val responseScopeKey = editorRequestId ?: ""
+    val cachedResponse = remember(responseScopeKey) {
+        editorRequestId?.let { RequestResponseStore.loadLatest(it) }
+    }
+    val responseLines = remember(responseScopeKey) {
+        mutableStateListOf<String>().apply {
+            when {
+                editorRequestId == null -> add("请先选择或创建一个请求")
+                else -> {
+                    val snap = cachedResponse
+                    if (snap != null) addAll(snap.responseBodyLines)
+                    else add("响应结果会显示在这里")
+                }
+            }
+        }
+    }
+    var responsePartialLine by remember(responseScopeKey) { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
-    var isSseResponse by remember { mutableStateOf(false) }
-    var statusCodeText by remember { mutableStateOf("") }
-    var responseTimeText by remember { mutableStateOf("") }
-    var responseSizeText by remember { mutableStateOf("") }
+    var isSseResponse by remember(responseScopeKey) { mutableStateOf(false) }
+    var statusCodeText by remember(responseScopeKey) {
+        mutableStateOf(cachedResponse?.statusCodeText ?: "")
+    }
+    var responseTimeText by remember(responseScopeKey) {
+        mutableStateOf(cachedResponse?.responseTimeText ?: "")
+    }
+    var responseSizeText by remember(responseScopeKey) {
+        mutableStateOf(cachedResponse?.responseSizeText ?: "")
+    }
     var activeRequestControl by remember { mutableStateOf<RequestControl?>(null) }
     var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
     var splitRatio by remember { mutableStateOf(0.5f) }
     var contentRowWidthPx by remember { mutableStateOf(1f) }
     var leftTabIndex by remember { mutableStateOf(0) }
-    var rightTabIndex by remember { mutableStateOf(0) }
-    var responseHeaderLines by remember { mutableStateOf(mutableStateListOf("(暂无响应头)")) }
-    val responseListState = rememberLazyListState()
-    val responseHeadersListState = rememberLazyListState()
+    var rightTabIndex by remember(responseScopeKey) {
+        mutableStateOf(cachedResponse?.rightTabIndex?.coerceIn(0, 1) ?: 0)
+    }
+    val responseHeaderLines = remember(responseScopeKey) {
+        mutableStateListOf<String>().apply {
+            when {
+                editorRequestId == null -> add("(暂无响应头)")
+                else -> {
+                    val snap = cachedResponse
+                    if (snap != null) addAll(snap.responseHeaderLines)
+                    else add("(暂无响应头)")
+                }
+            }
+        }
+    }
+    val responseListState = remember(responseScopeKey) { LazyListState() }
+    val responseHeadersListState = remember(responseScopeKey) { LazyListState() }
     var isDarkTheme by remember { mutableStateOf(true) }
+    /** 当前进行中的 HTTP 请求对应的 request id（用于计时器不污染切换后的请求文案）。 */
+    var inflightBoundRequestId by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(method, url, headersText, bodyText, editorRequestId) {
         val id = editorRequestId ?: return@LaunchedEffect
@@ -220,7 +258,7 @@ fun App() {
 
     val loadingRef = rememberUpdatedState(isLoading)
     val liveTimerControlRef = rememberUpdatedState(activeRequestControl)
-    LaunchedEffect(isLoading, activeRequestControl) {
+    LaunchedEffect(isLoading, activeRequestControl, editorRequestId, inflightBoundRequestId) {
         if (!isLoading) return@LaunchedEffect
         val control = activeRequestControl ?: return@LaunchedEffect
         while (isActive) {
@@ -228,21 +266,28 @@ fun App() {
             if (!loadingRef.value) break
             val elapsed = System.currentTimeMillis() - control.startTimeMs
             val sec = (elapsed / 1000L).toInt().coerceAtLeast(0)
-            responseTimeText = "${sec}S"
+            if (editorRequestId == inflightBoundRequestId) {
+                responseTimeText = "${sec}S"
+            }
             delay(1000)
         }
     }
 
     fun startRequest() {
         if (isLoading) return
+        val boundRequestId = editorRequestId ?: return
         saveEditorIfBound()
+        RequestResponseStore.ensureLayout(boundRequestId)
+        val tabAtStart = rightTabIndex
         val control = RequestControl()
         control.startTimeMs = System.currentTimeMillis()
         activeRequestControl = control
+        inflightBoundRequestId = boundRequestId
         isLoading = true
-        responseLines = mutableStateListOf()
+        responseLines.clear()
         responsePartialLine = null
-        responseHeaderLines = mutableStateListOf("等待响应…")
+        responseHeaderLines.clear()
+        responseHeaderLines.add("等待响应…")
         statusCodeText = ""
         responseTimeText = ""
         responseSizeText = ""
@@ -260,7 +305,7 @@ fun App() {
                 val update = control.lineBuffer.drainUpdate()
                 if (!update.hasChanges()) continue
                 EventQueue.invokeLater {
-                    if (activeRequestControl === control) {
+                    if (activeRequestControl === control && editorRequestId == boundRequestId) {
                         applyBufferUpdate(update, responseLines) { partial ->
                             responsePartialLine = partial
                         }
@@ -277,70 +322,130 @@ fun App() {
                 control = control,
                 onSseDetected = { isSse ->
                     EventQueue.invokeLater {
-                        if (activeRequestControl === control) isSseResponse = isSse
+                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
+                            isSseResponse = isSse
+                        }
                     }
                 },
                 onStatusCode = { code ->
                     EventQueue.invokeLater {
-                        if (activeRequestControl === control) statusCodeText = code.toString()
+                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
+                            statusCodeText = code.toString()
+                        }
                     }
                 },
                 onResponseTime = { },
                 onProgress = { bytes ->
                     EventQueue.invokeLater {
-                        if (activeRequestControl === control) {
+                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
                             responseSizeText = formatBytes(bytes)
                         }
                     }
                 },
                 onResponseHeaders = { lines ->
                     EventQueue.invokeLater {
-                        if (activeRequestControl === control) {
-                            responseHeaderLines = mutableStateListOf<String>().apply {
-                                addAll(lines)
-                            }
+                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
+                            responseHeaderLines.clear()
+                            responseHeaderLines.addAll(lines)
                         }
                     }
                 },
                 onChunk = { chunk ->
                     if (activeRequestControl === control && !control.cancelled) {
                         control.lineBuffer.append(chunk)
+                        control.appendRawResponse(chunk)
                     }
                 }
             )
             EventQueue.invokeLater {
+                control.finished = true
+                val elapsed = System.currentTimeMillis() - control.startTimeMs
+                val timeText = formatDuration(elapsed)
+                if (!control.cancelled) {
+                    val snap = CachedHttpResponse(
+                        savedAtEpochMs = System.currentTimeMillis(),
+                        statusCodeText = if (control.responseStatusCode >= 0) {
+                            control.responseStatusCode.toString()
+                        } else {
+                            ""
+                        },
+                        responseTimeText = timeText,
+                        responseSizeText = formatBytes(control.totalBytes),
+                        responseBodyLines = control.snapshotRawBodyLines(),
+                        responseHeaderLines = control.responseHeaderSnapshot,
+                        isSseResponse = control.responseWasSse,
+                        rightTabIndex = tabAtStart.coerceIn(0, 1),
+                    )
+                    RequestResponseStore.save(boundRequestId, snap)
+                }
                 if (activeRequestControl === control) {
-                    control.finished = true
-                    applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
-                        responsePartialLine = partial
-                    }
-                    responseTimeText =
-                        formatDuration(System.currentTimeMillis() - control.startTimeMs)
                     isLoading = false
-                    isSseResponse = false
+                    inflightBoundRequestId = null
                     activeRequestControl = null
                     activeRequestThread = null
                 }
+                if (editorRequestId == boundRequestId) {
+                    if (!control.cancelled) {
+                        applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
+                            responsePartialLine = partial
+                        }
+                    } else {
+                        control.lineBuffer.drainUpdate()
+                    }
+                    responseTimeText = timeText
+                    responseSizeText = formatBytes(control.totalBytes)
+                    isSseResponse = false
+                }
+                flusher.interrupt()
             }
-            flusher.interrupt()
         }
         activeRequestThread = worker
     }
 
     fun cancelActiveRequest() {
         if (!isLoading) return
-        val control = activeRequestControl
-        if (control != null) {
-            control.cancelled = true
-            closeQuietly(control.activeInput)
-            control.lineBuffer.append("\n[请求已取消]\n")
+        val boundId = inflightBoundRequestId ?: return
+        val control = activeRequestControl ?: return
+        control.cancelled = true
+        closeQuietly(control.activeInput)
+        val cancelMsg = "\n[请求已取消]\n"
+        control.lineBuffer.append(cancelMsg)
+        control.appendRawResponse(cancelMsg)
+        if (editorRequestId == boundId) {
             applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
                 responsePartialLine = partial
             }
-            responseTimeText = formatDuration(System.currentTimeMillis() - control.startTimeMs)
+        } else {
+            control.lineBuffer.drainUpdate()
         }
+        val timeText = formatDuration(System.currentTimeMillis() - control.startTimeMs)
+        if (editorRequestId == boundId) {
+            responseTimeText = timeText
+        }
+        RequestResponseStore.save(
+            boundId,
+            CachedHttpResponse(
+                savedAtEpochMs = System.currentTimeMillis(),
+                statusCodeText = if (control.responseStatusCode >= 0) {
+                    control.responseStatusCode.toString()
+                } else {
+                    ""
+                },
+                responseTimeText = timeText,
+                responseSizeText = formatBytes(control.totalBytes),
+                responseBodyLines = control.snapshotRawBodyLines(),
+                responseHeaderLines = control.responseHeaderSnapshot,
+                isSseResponse = control.responseWasSse,
+                rightTabIndex = if (editorRequestId == boundId) {
+                    rightTabIndex.coerceIn(0, 1)
+                } else {
+                    0
+                },
+            ),
+        )
         activeRequestThread?.interrupt()
         isLoading = false
+        inflightBoundRequestId = null
         isSseResponse = false
         activeRequestControl = null
         activeRequestThread = null
@@ -381,7 +486,8 @@ fun App() {
                 onSettingsClick = {
                     setSingleResponseMessage(responseLines, "设置功能待实现")
                     responsePartialLine = null
-                    responseHeaderLines = mutableStateListOf("(暂无响应头)")
+                    responseHeaderLines.clear()
+                    responseHeaderLines.add("(暂无响应头)")
                     statusCodeText = ""
                     responseTimeText = ""
                     responseSizeText = ""
@@ -401,14 +507,16 @@ fun App() {
                         }
                         setSingleResponseMessage(responseLines, "已从剪贴板导入 cURL")
                         responsePartialLine = null
-                        responseHeaderLines = mutableStateListOf("(暂无响应头)")
+                        responseHeaderLines.clear()
+                        responseHeaderLines.add("(暂无响应头)")
                         statusCodeText = "-"
                         responseTimeText = "-"
                         responseSizeText = "0 B"
                     } catch (e: Exception) {
                         setSingleResponseMessage(responseLines, "导入 cURL 失败: ${e.message}")
                         responsePartialLine = null
-                        responseHeaderLines = mutableStateListOf("(暂无响应头)")
+                        responseHeaderLines.clear()
+                        responseHeaderLines.add("(暂无响应头)")
                     }
                 }
             )
@@ -460,7 +568,10 @@ fun App() {
                         when (sel) {
                             is TreeSelection.Collection -> repository.deleteCollection(sel.id)
                             is TreeSelection.Folder -> repository.deleteFolder(sel.id)
-                            is TreeSelection.Request -> repository.deleteRequest(sel.id)
+                            is TreeSelection.Request -> {
+                                repository.deleteRequest(sel.id)
+                                RequestResponseStore.deleteRequestArtifacts(sel.id)
+                            }
                         }
                         val nextTree = repository.loadTree()
                         tree = nextTree

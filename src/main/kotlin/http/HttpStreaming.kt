@@ -109,11 +109,16 @@ fun sendRequestStreaming(
         if (control.cancelled) return
         val response = client.send(request, HttpResponse.BodyHandlers.ofInputStream())
         control.totalBytes = 0
-        onResponseHeaders(formatHttpResponseHeaders(response.headers()))
+        val headerLines = formatHttpResponseHeaders(response.headers())
+        control.responseHeaderSnapshot = headerLines
+        onResponseHeaders(headerLines)
         val contentType = response.headers().firstValue("Content-Type").orElse("")
         val isSse = contentType.contains("text/event-stream", ignoreCase = true)
+        control.responseWasSse = isSse
         onSseDetected(isSse)
-        onStatusCode(response.statusCode())
+        val code = response.statusCode()
+        control.responseStatusCode = code
+        onStatusCode(code)
         if (!isSse) {
             onResponseTime(System.currentTimeMillis() - control.startTimeMs)
         }
@@ -222,6 +227,29 @@ class RequestControl {
     var totalBytes: Long = 0
 
     val lineBuffer = ResponseLineBuffer()
+
+    /** 与 UI 行列表一致，用于切换请求后仍能按请求维度落盘完整 Body。 */
+    private val rawResponseBody = StringBuilder(256)
+
+    @Volatile
+    var responseStatusCode: Int = -1
+
+    @Volatile
+    var responseHeaderSnapshot: List<String> = emptyList()
+
+    @Volatile
+    var responseWasSse: Boolean = false
+
+    @Synchronized
+    fun appendRawResponse(chunk: String) {
+        rawResponseBody.append(chunk)
+    }
+
+    fun snapshotRawBodyLines(): List<String> {
+        val s = synchronized(this) { rawResponseBody.toString() }
+        if (s.isEmpty()) return emptyList()
+        return s.lines()
+    }
 }
 
 fun closeQuietly(input: InputStream?) {
