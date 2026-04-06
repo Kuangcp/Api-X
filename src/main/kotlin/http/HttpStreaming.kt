@@ -23,6 +23,9 @@ private val RESTRICTED_HEADERS = setOf(
     "upgrade"
 )
 
+/** 非 HTTP 状态（连接失败、解析错误等）时在状态区展示的占位符。 */
+const val HttpExchangeErrorStatusMark = "✕"
+
 private val streamingHttpClient: HttpClient by lazy {
     HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(30))
@@ -284,8 +287,10 @@ fun sendRequestStreaming(
         if (!control.cancelled) onChunk("\n[请求已取消]\n")
     } catch (e: Exception) {
         if (!control.cancelled) {
+            control.requestFailed = true
             onSseDetected(false)
-            onChunk("请求失败: ${e.message}")
+            val detail = e.message?.ifBlank { null } ?: e.javaClass.simpleName
+            onChunk("请求失败: $detail")
         }
     } finally {
         if (control.activeInput != null) {
@@ -343,6 +348,10 @@ class ResponseLineBuffer {
 class RequestControl {
     @Volatile
     var cancelled: Boolean = false
+
+    /** 连接/读流等异常导致未完成一次有效交换；为 true 时不写入 HAR。 */
+    @Volatile
+    var requestFailed: Boolean = false
 
     @Volatile
     var activeInput: InputStream? = null

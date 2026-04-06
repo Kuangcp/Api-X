@@ -65,6 +65,7 @@ import http.RequestControl
 import http.RequestSidePanel
 import http.RequestTopBar
 import http.ResponsePanel
+import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
 import http.closeQuietly
 import http.mergeUrlWithParams
@@ -402,7 +403,7 @@ fun App() {
                 control.finished = true
                 val elapsed = System.currentTimeMillis() - control.startTimeMs
                 val timeText = formatDuration(elapsed)
-                if (!control.cancelled) {
+                if (!control.cancelled && !control.requestFailed) {
                     val code = control.responseStatusCode
                     RequestResponseStore.save(
                         boundRequestId,
@@ -441,6 +442,13 @@ fun App() {
                 }
                 if (editorRequestId == boundRequestId && requestGen == outboundRequestGeneration.get()) {
                     if (!control.cancelled) {
+                        if (control.requestFailed) {
+                            statusCodeText = HttpExchangeErrorStatusMark
+                            if (control.responseStatusCode < 0) {
+                                responseHeaderLines.clear()
+                                responseHeaderLines.add("(无响应头 — 请求未成功)")
+                            }
+                        }
                         applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
                             responsePartialLine = partial
                         }

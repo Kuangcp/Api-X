@@ -62,14 +62,17 @@ fun ResponsePanel(
     responseListState: LazyListState,
     responseHeadersListState: LazyListState
 ) {
-    val isJsonContentType = remember(responseHeaderLines) {
-        contentTypeHeaderIndicatesJson(responseHeaderLines)
+    // mutableStateListOf 引用不变，不能以列表引用作为 remember 键，否则头/正文更新后仍用旧缓存。
+    val headersSnapshot = responseHeaderLines.toList()
+    val isJsonContentType = remember(headersSnapshot) {
+        contentTypeHeaderIndicatesJson(headersSnapshot)
     }
-    val rawBodyCombined = remember(responseLines, responsePartialLine) {
+    val linesSnapshot = responseLines.toList()
+    val rawBodyCombined = remember(linesSnapshot, responsePartialLine) {
         buildString {
-            append(responseLines.joinToString("\n"))
+            append(linesSnapshot.joinToString("\n"))
             responsePartialLine?.let { p ->
-                if (responseLines.isNotEmpty()) append('\n')
+                if (linesSnapshot.isNotEmpty()) append('\n')
                 append(p)
             }
         }
@@ -116,10 +119,14 @@ fun ResponsePanel(
                 Text(
                     text = statusCodeText,
                     fontSize = tab,
-                    color = when (statusCodeText.toIntOrNull()) {
-                        null -> metaColor
-                        200 -> if (darkTheme) Color(0xFF81C784) else Color(0xFF2E7D32)
-                        else -> if (darkTheme) Color(0xFFFF8A80) else Color(0xFFC62828)
+                    color = when {
+                        statusCodeText == HttpExchangeErrorStatusMark ->
+                            if (darkTheme) Color(0xFFFF5252) else Color(0xFFD32F2F)
+                        else -> when (statusCodeText.toIntOrNull()) {
+                            null -> metaColor
+                            200 -> if (darkTheme) Color(0xFF81C784) else Color(0xFF2E7D32)
+                            else -> if (darkTheme) Color(0xFFFF8A80) else Color(0xFFC62828)
+                        }
                     }
                 )
                 Text(" ", fontSize = tab, color = metaColor)
