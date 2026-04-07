@@ -67,9 +67,7 @@ fun RecentRequestSwitcherOverlay(
     }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.35f)),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center,
     ) {
         Column(
