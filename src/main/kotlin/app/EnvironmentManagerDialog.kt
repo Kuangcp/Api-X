@@ -21,6 +21,8 @@ import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.Typography
 import androidx.compose.material.TextButton
+import androidx.compose.material.TextFieldDefaults
+import androidx.compose.material.darkColors
 import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,6 +33,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
@@ -40,6 +43,7 @@ import java.util.UUID
 fun EnvironmentManagerDialogWindow(
     visible: Boolean,
     isDarkTheme: Boolean,
+    appBackgroundHex: String,
     typographyBase: Typography,
     initial: EnvironmentsState,
     onCloseRequest: () -> Unit,
@@ -51,12 +55,9 @@ fun EnvironmentManagerDialogWindow(
         title = "环境变量",
         state = rememberDialogState(width = 720.dp, height = 520.dp),
     ) {
+        val colors = appMaterialColors(isDarkTheme, appBackgroundHex)
         MaterialTheme(
-            colors = if (isDarkTheme) {
-                apiXDarkColors()
-            } else {
-                lightColors(background = hexToColor("#f2f2f2"))
-            },
+            colors = colors,
             typography = typographyBase,
         ) {
             EnvironmentManagerDialogBody(
@@ -69,6 +70,34 @@ fun EnvironmentManagerDialogWindow(
             )
         }
     }
+}
+
+@Composable
+private fun EnvTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: @Composable (() -> Unit)? = null,
+    placeholder: @Composable (() -> Unit)? = null,
+    singleLine: Boolean = false,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier,
+        label = label,
+        placeholder = placeholder,
+        singleLine = singleLine,
+        colors = TextFieldDefaults.outlinedTextFieldColors(
+            textColor = MaterialTheme.colors.onSurface,
+            cursorColor = MaterialTheme.colors.primary,
+            focusedBorderColor = MaterialTheme.colors.primary.copy(alpha = ContentAlpha.high),
+            unfocusedBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+            placeholderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            focusedLabelColor = MaterialTheme.colors.primary.copy(alpha = ContentAlpha.high),
+            unfocusedLabelColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+        )
+    )
 }
 
 @Composable
@@ -224,7 +253,7 @@ private fun EnvironmentManagerDialogBody(
                         color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
                     )
                 } else {
-                    OutlinedTextField(
+                    EnvTextField(
                         value = envNameEdit,
                         onValueChange = { envNameEdit = it },
                         modifier = Modifier.fillMaxWidth(),
@@ -249,7 +278,7 @@ private fun EnvironmentManagerDialogBody(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                OutlinedTextField(
+                                EnvTextField(
                                     value = variableRows[i].key,
                                     onValueChange = { v ->
                                         variableRows[i] = variableRows[i].copy(key = v)
@@ -259,7 +288,7 @@ private fun EnvironmentManagerDialogBody(
                                     placeholder = { Text("host") },
                                     singleLine = true,
                                 )
-                                OutlinedTextField(
+                                EnvTextField(
                                     value = variableRows[i].value,
                                     onValueChange = { v ->
                                         variableRows[i] = variableRows[i].copy(value = v)

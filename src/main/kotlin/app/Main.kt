@@ -844,6 +844,7 @@ fun App() {
             EnvironmentManagerDialogWindow(
                 visible = showEnvironmentManager,
                 isDarkTheme = isDarkTheme,
+                appBackgroundHex = appSettings.backgroundHex,
                 typographyBase = typographyFromSettings(appSettings),
                 initial = environmentsState,
                 onCloseRequest = { showEnvironmentManager = false },
