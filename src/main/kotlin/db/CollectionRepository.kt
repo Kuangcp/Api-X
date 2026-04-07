@@ -18,6 +18,7 @@ import tree.StoredHttpRequest
 import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.TreeSelection
+import tree.GlobalSearchRequestRow
 import tree.UiCollection
 import tree.UiFolder
 import tree.UiRequestSummary
@@ -87,6 +88,31 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 )
             }
         }
+    }
+
+    fun loadAllRequestsForGlobalSearch(): List<GlobalSearchRequestRow> {
+        val out = mutableListOf<GlobalSearchRequestRow>()
+        conn.prepareStatement(
+            """
+            SELECT id, collection_id, folder_id, name, method, body_text
+            FROM requests
+            ORDER BY collection_id, folder_id, name
+            """.trimIndent(),
+        ).use { ps ->
+            ps.executeQuery().use { rs ->
+                while (rs.next()) {
+                    out += GlobalSearchRequestRow(
+                        id = rs.getString("id"),
+                        collectionId = rs.getString("collection_id"),
+                        folderId = rs.getString("folder_id").takeUnless { rs.wasNull() },
+                        name = rs.getString("name"),
+                        method = rs.getString("method"),
+                        bodyText = rs.getString("body_text") ?: "",
+                    )
+                }
+            }
+        }
+        return out
     }
 
     fun saveRequestEditorFields(

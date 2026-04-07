@@ -35,6 +35,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -261,6 +262,7 @@ fun App() {
     var isDarkTheme by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
     var showEnvironmentManager by remember { mutableStateOf(false) }
+    var showGlobalSearch by remember { mutableStateOf(false) }
     var showCollectionSettings by remember { mutableStateOf(false) }
     var collectionSettingsTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var environmentsState by remember {
@@ -603,6 +605,10 @@ fun App() {
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                     when {
+                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> {
+                            showGlobalSearch = true
+                            true
+                        }
                         event.isCtrlPressed && event.key == Key.Enter -> {
                             startRequest()
                             true
@@ -996,6 +1002,22 @@ fun App() {
                 initial = environmentsState,
                 onCloseRequest = { showEnvironmentManager = false },
                 onSaved = { saved -> commitEnvironmentsState(saved) },
+            )
+            GlobalSearchDialogWindow(
+                visible = showGlobalSearch,
+                isDarkTheme = isDarkTheme,
+                appBackgroundHex = appSettings.backgroundHex,
+                typographyBase = typographyFromSettings(appSettings),
+                tree = tree,
+                repository = repository,
+                onCloseRequest = { showGlobalSearch = false },
+                onPickRequest = { id ->
+                    expandSetsForRequest(tree, id)?.let { (cols, folders) ->
+                        expandedCollectionIds = expandedCollectionIds + cols
+                        expandedFolderIds = expandedFolderIds + folders
+                    }
+                    selectTreeNode(TreeSelection.Request(id))
+                },
             )
             CollectionSettingsDialog(
                 visible = showCollectionSettings,

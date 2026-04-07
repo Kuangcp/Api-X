@@ -21,6 +21,16 @@ data class UiRequestSummary(
     val method: String,
 )
 
+/** 全局搜索：从 DB 批量加载的请求名称与 Body（用于与侧边栏树路径组合展示）。 */
+data class GlobalSearchRequestRow(
+    val id: String,
+    val collectionId: String,
+    val folderId: String?,
+    val name: String,
+    val method: String,
+    val bodyText: String,
+)
+
 /** 完整请求，用于编辑器加载/保存 */
 data class StoredHttpRequest(
     val id: String,
