@@ -270,6 +270,7 @@ fun App() {
     val responseListState = remember(responseScopeKey) { LazyListState() }
     val responseHeadersListState = remember(responseScopeKey) { LazyListState() }
     var isDarkTheme by remember { mutableStateOf(true) }
+    var jsonSyntaxHighlightEnabled by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
     var showEnvironmentManager by remember { mutableStateOf(false) }
     var showGlobalSearch by remember { mutableStateOf(false) }
@@ -1064,6 +1065,8 @@ fun App() {
                         exchangeRequestPlainText =
                             "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
                     },
+                    jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
+                    onJsonSyntaxHighlightEnabledChange = { jsonSyntaxHighlightEnabled = it },
                 )
             }
         }

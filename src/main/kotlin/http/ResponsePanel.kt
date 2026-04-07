@@ -25,6 +25,8 @@ import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Switch
+import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ContentCopy
@@ -73,6 +75,9 @@ fun ResponsePanel(
     onCopyResponseBody: () -> Unit,
     clearResponseLogsEnabled: Boolean,
     onClearResponseLogs: () -> Unit,
+    /** 为 false 时 Body 始终按纯文本展示（不做 JSON 语法高亮），默认 true。 */
+    jsonSyntaxHighlightEnabled: Boolean = true,
+    onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit = {},
 ) {
     // mutableStateListOf 引用不变，不能以列表引用作为 remember 键，否则头/正文更新后仍用旧缓存。
     val headersSnapshot = responseHeaderLines.toList()
@@ -96,8 +101,9 @@ fun ResponsePanel(
         isSseResponse,
         isResponseLoading,
         darkTheme,
+        jsonSyntaxHighlightEnabled,
     ) {
-        if (!isJsonContentType || isSseResponse || isResponseLoading) {
+        if (!jsonSyntaxHighlightEnabled || !isJsonContentType || isSseResponse || isResponseLoading) {
             null
         } else {
             formatAndHighlightJsonOrNull(rawBodyCombined, darkTheme)
@@ -339,55 +345,84 @@ fun ResponsePanel(
                         )
                     }
                     else -> {
-                        if (jsonAnnotatedBody != null) {
-                            SelectionContainer {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                            ) {
                                 Text(
-                                    text = jsonAnnotatedBody,
-                                    style = TextStyle(
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = exchangeMetrics.body,
-                                        color = MaterialTheme.colors.onSurface,
+                                    text = "JSON 高亮",
+                                    fontSize = exchangeMetrics.tab,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                )
+                                Switch(
+                                    checked = jsonSyntaxHighlightEnabled,
+                                    onCheckedChange = onJsonSyntaxHighlightEnabledChange,
+                                    colors = SwitchDefaults.colors(
+                                        checkedThumbColor = MaterialTheme.colors.primary,
+                                        checkedTrackColor = MaterialTheme.colors.primary.copy(alpha = 0.5f),
                                     ),
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(jsonBodyScrollState)
-                                        .padding(end = 12.dp),
                                 )
                             }
-                            VerticalScrollbar(
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                adapter = rememberScrollbarAdapter(jsonBodyScrollState),
-                            )
-                        } else {
-                            SelectionContainer {
-                                LazyColumn(
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(end = 12.dp),
-                                    state = responseListState,
-                                ) {
-                                    items(responseLines) { line ->
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth(),
+                            ) {
+                                if (jsonAnnotatedBody != null) {
+                                    SelectionContainer {
                                         Text(
-                                            line,
-                                            fontSize = exchangeMetrics.body,
-                                            color = MaterialTheme.colors.onSurface,
-                                        )
-                                    }
-                                    responsePartialLine?.let { partial ->
-                                        item("partial") {
-                                            Text(
-                                                partial,
+                                            text = jsonAnnotatedBody,
+                                            style = TextStyle(
+                                                fontFamily = FontFamily.Monospace,
                                                 fontSize = exchangeMetrics.body,
                                                 color = MaterialTheme.colors.onSurface,
-                                            )
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(jsonBodyScrollState)
+                                                .padding(end = 12.dp),
+                                        )
+                                    }
+                                    VerticalScrollbar(
+                                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                        adapter = rememberScrollbarAdapter(jsonBodyScrollState),
+                                    )
+                                } else {
+                                    SelectionContainer {
+                                        LazyColumn(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(end = 12.dp),
+                                            state = responseListState,
+                                        ) {
+                                            items(responseLines) { line ->
+                                                Text(
+                                                    line,
+                                                    fontSize = exchangeMetrics.body,
+                                                    color = MaterialTheme.colors.onSurface,
+                                                )
+                                            }
+                                            responsePartialLine?.let { partial ->
+                                                item("partial") {
+                                                    Text(
+                                                        partial,
+                                                        fontSize = exchangeMetrics.body,
+                                                        color = MaterialTheme.colors.onSurface,
+                                                    )
+                                                }
+                                            }
                                         }
                                     }
+                                    VerticalScrollbar(
+                                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                        adapter = rememberScrollbarAdapter(responseListState),
+                                    )
                                 }
                             }
-                            VerticalScrollbar(
-                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                adapter = rememberScrollbarAdapter(responseListState),
-                            )
                         }
                     }
                 }
