@@ -60,11 +60,13 @@ import db.CollectionRepository
 import db.HarLogCodec
 import db.HarSnapshot
 import db.RequestResponseStore
+import http.applyEnvironmentVariables
 import http.BufferUpdate
 import http.RequestControl
 import http.RequestSidePanel
 import http.RequestTopBar
 import http.ResponsePanel
+import http.substitutionMapForActive
 import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
 import http.closeQuietly
@@ -236,7 +238,18 @@ fun App() {
     val responseHeadersListState = remember(responseScopeKey) { LazyListState() }
     var isDarkTheme by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
+    var showEnvironmentManager by remember { mutableStateOf(false) }
+    var environmentsState by remember {
+        mutableStateOf<EnvironmentsState>(
+            withDefaultActiveWhenSingle(EnvironmentStore.snapshot())
+        )
+    }
     var appSettings by remember { mutableStateOf(AppSettingsStore.snapshot()) }
+
+    fun commitEnvironmentsState(newState: EnvironmentsState) {
+        EnvironmentStore.replace(newState)
+        environmentsState = EnvironmentStore.snapshot()
+    }
     /** 当前进行中的 HTTP 请求对应的 request id（用于计时器不污染切换后的请求文案）。 */
     var inflightBoundRequestId by remember { mutableStateOf<String?>(null) }
     /** 每次发起请求递增；避免 flusher 已 drain 但 EDT 尚未应用时，完成回调先清空 active 导致正文丢失。 */
@@ -315,12 +328,13 @@ fun App() {
         RequestResponseStore.ensureLayout(boundRequestId)
         val tabAtStart = rightTabIndex
         val reqMethodSnap = method
-        val reqUrlSnap = url
-        val reqParamsSnap = paramsText
+        val varMap = environmentsState.substitutionMapForActive()
+        val reqUrlSnap = applyEnvironmentVariables(url, varMap)
+        val reqParamsSnap = applyEnvironmentVariables(paramsText, varMap)
         val effectiveRequestUrl =
             mergeUrlWithParams(reqUrlSnap, parseHeadersForSend(reqParamsSnap))
-        val reqHeadersFullSnap = headersText
-        val reqBodySnap = bodyText
+        val reqHeadersFullSnap = applyEnvironmentVariables(headersText, varMap)
+        val reqBodySnap = applyEnvironmentVariables(bodyText, varMap)
         val control = RequestControl()
         control.startTimeMs = System.currentTimeMillis()
         activeRequestControl = control
@@ -359,8 +373,8 @@ fun App() {
             sendRequestStreaming(
                 method = method,
                 url = effectiveRequestUrl,
-                body = bodyText,
-                headersText = headersText,
+                body = reqBodySnap,
+                headersText = reqHeadersFullSnap,
                 control = control,
                 onSseDetected = { isSse ->
                     EventQueue.invokeLater {
@@ -486,16 +500,21 @@ fun App() {
             responseTimeText = timeText
         }
         val sc = control.responseStatusCode
-        val cancelUrl = mergeUrlWithParams(url, parseHeadersForSend(paramsText))
+        val varMap = environmentsState.substitutionMapForActive()
+        val resolvedUrl = applyEnvironmentVariables(url, varMap)
+        val resolvedParams = applyEnvironmentVariables(paramsText, varMap)
+        val cancelUrl = mergeUrlWithParams(resolvedUrl, parseHeadersForSend(resolvedParams))
+        val resolvedHeaders = applyEnvironmentVariables(headersText, varMap)
+        val resolvedBody = applyEnvironmentVariables(bodyText, varMap)
         RequestResponseStore.save(
             boundId,
             HarSnapshot(
                 savedAtEpochMs = System.currentTimeMillis(),
                 requestMethod = method,
                 requestUrl = cancelUrl,
-                requestHeadersFullText = headersText,
-                requestBody = bodyText,
-                requestHeadersSent = parseHeadersForSend(headersText),
+                requestHeadersFullText = resolvedHeaders,
+                requestBody = resolvedBody,
+                requestHeadersSent = parseHeadersForSend(resolvedHeaders),
                 responseStatus = if (sc >= 0) sc else 0,
                 responseStatusText = if (sc >= 0) HarLogCodec.responseStatusPhrase(sc) else "",
                 responseHeaderLines = responseHeaderLinesForHar(
@@ -559,6 +578,11 @@ fun App() {
             RequestTopBar(
                 isLoading = isLoading,
                 isDarkTheme = isDarkTheme,
+                environmentsState = environmentsState,
+                onActiveEnvironmentChange = { id ->
+                    commitEnvironmentsState(environmentsState.copy(activeEnvironmentId = id))
+                },
+                onManageEnvironmentsClick = { showEnvironmentManager = true },
                 onThemeToggle = { isDarkTheme = !isDarkTheme },
                 onSettingsClick = { showSettings = true },
                 onImportCurlClick = {
@@ -668,12 +692,16 @@ fun App() {
                     requestAddEnabled = repository.newRequestTarget(treeSelection) != null,
                     onExportRequestAsCurl = { rid ->
                         val r = repository.getRequest(rid) ?: return@CollectionTreeSidebar
+                        val vm = environmentsState.substitutionMapForActive()
                         writeClipboardText(
                             requestToCurlCommand(
                                 r.method,
-                                mergeUrlWithParams(r.url, parseHeadersForSend(r.paramsText)),
-                                r.headersText,
-                                r.bodyText,
+                                mergeUrlWithParams(
+                                    applyEnvironmentVariables(r.url, vm),
+                                    parseHeadersForSend(applyEnvironmentVariables(r.paramsText, vm)),
+                                ),
+                                applyEnvironmentVariables(r.headersText, vm),
+                                applyEnvironmentVariables(r.bodyText, vm),
                             ),
                         )
                         setSingleResponseMessage(responseLines, "已复制 cURL 到剪贴板")
@@ -812,6 +840,14 @@ fun App() {
                     AppSettingsStore.replace(saved)
                     appSettings = saved
                 },
+            )
+            EnvironmentManagerDialogWindow(
+                visible = showEnvironmentManager,
+                isDarkTheme = isDarkTheme,
+                typographyBase = typographyFromSettings(appSettings),
+                initial = environmentsState,
+                onCloseRequest = { showEnvironmentManager = false },
+                onSaved = { saved -> commitEnvironmentsState(saved) },
             )
         }
     }

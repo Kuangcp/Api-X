@@ -33,6 +33,9 @@ object AppPaths {
 
     fun collectionDatabasePath(): Path = dataDirectory().resolve("collections.db")
 
+    /** Postman 风格环境变量（`{{name}}`），JSON 持久化。 */
+    fun environmentsJsonPath(): Path = dataDirectory().resolve("environments.json")
+
     /** 各请求下的 response / bench 等落盘目录（非 SQLite）。 */
     fun requestArtifactsRoot(): Path = dataDirectory().resolve("request")
 }

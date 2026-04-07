@@ -8,6 +8,8 @@ gradle/
 gradlew
 gradlew.bat
 git-report/
+.specstory/
+
 
 update.sh
 

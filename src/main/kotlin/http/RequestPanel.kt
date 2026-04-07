@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -44,10 +45,12 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
+import app.EnvironmentsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -507,11 +510,14 @@ private fun HeaderLikeKeyValueEditor(
     }
 }
 
-/** 顶栏：主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
+/** 顶栏：环境、主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun RequestTopBar(
     isLoading: Boolean,
     isDarkTheme: Boolean,
+    environmentsState: EnvironmentsState,
+    onActiveEnvironmentChange: (String?) -> Unit,
+    onManageEnvironmentsClick: () -> Unit,
     onThemeToggle: () -> Unit,
     onSettingsClick: () -> Unit,
     onImportCurlClick: () -> Unit,
@@ -522,6 +528,10 @@ fun RequestTopBar(
         .defaultMinSize(minWidth = 0.dp, minHeight = 0.dp)
         .size(26.dp)
     val topBarIconModifier = Modifier.size(17.dp)
+    var envMenuExpanded by remember { mutableStateOf(false) }
+    val activeLabel = environmentsState.activeEnvironment()?.name?.trim()?.takeIf { it.isNotEmpty() }
+        ?: "无环境"
+    val envButtonText = "环境: $activeLabel"
 
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
@@ -529,6 +539,67 @@ fun RequestTopBar(
             horizontalArrangement = Arrangement.spacedBy(0.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            Box {
+                TextButton(
+                    onClick = { envMenuExpanded = true },
+                    enabled = !isLoading,
+                    modifier = Modifier.widthIn(max = 200.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            envButtonText,
+                            maxLines = 1,
+                            style = MaterialTheme.typography.body2,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                        )
+                        Icon(
+                            imageVector = Icons.Filled.ArrowDropDown,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = topBarIconTint,
+                        )
+                    }
+                }
+                DropdownMenu(
+                    expanded = envMenuExpanded,
+                    onDismissRequest = { envMenuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        onClick = {
+                            onActiveEnvironmentChange(null)
+                            envMenuExpanded = false
+                        },
+                    ) {
+                        Text("无环境")
+                    }
+                    if (environmentsState.environments.isNotEmpty()) {
+                        Divider()
+                        for (env in environmentsState.environments) {
+                            DropdownMenuItem(
+                                onClick = {
+                                    onActiveEnvironmentChange(env.id)
+                                    envMenuExpanded = false
+                                },
+                            ) {
+                                Text(env.name.ifBlank { "(未命名)" })
+                            }
+                        }
+                    }
+                    Divider()
+                    DropdownMenuItem(
+                        onClick = {
+                            envMenuExpanded = false
+                            onManageEnvironmentsClick()
+                        },
+                    ) {
+                        Text("管理环境…")
+                    }
+                }
+            }
             IconButton(
                 onClick = onThemeToggle,
                 enabled = !isLoading,

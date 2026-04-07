@@ -1,0 +1,28 @@
+---
+description: 使用系统 gradle 命令，勿用 gradlew（本项目约定）
+alwaysApply: true
+---
+
+# Gradle：使用系统 CLI，不用 Wrapper
+
+在本仓库中执行构建、测试、依赖或任何 Gradle 任务时：
+
+- **使用**：`gradle`（系统已安装的 Gradle），例如 `gradle build`、`gradle test`、`gradle run`。
+- **不要使用**：`./gradlew`、`gradlew.bat` 或项目根目录下的 `gradle/wrapper` 调用方式。
+
+## 原因
+
+项目约定由本机/CI 上的 Gradle 发行版驱动构建，避免通过 Wrapper 脚本调用。
+
+## 示例
+
+```bash
+# ✅ 正确
+gradle build
+gradle test --tests "SomeTest"
+
+# ❌ 错误（本仓库不适用）
+./gradlew build
+```
+
+若文档或脚本里出现 `gradlew`，在本项目中应改为等价的 `gradle` 命令。
