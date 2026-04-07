@@ -52,6 +52,11 @@ import java.awt.EventQueue
 import java.awt.Toolkit
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.StringSelection
+import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import javax.swing.JFileChooser
+import javax.swing.JOptionPane
+import javax.swing.filechooser.FileNameExtensionFilter
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import db.AppPaths
@@ -61,12 +66,14 @@ import db.HarLogCodec
 import db.HarSnapshot
 import db.RequestResponseStore
 import http.applyEnvironmentVariables
+import http.resolveAuthToHeaders
 import http.BufferUpdate
 import http.RequestControl
 import http.RequestSidePanel
 import http.RequestTopBar
 import http.ResponsePanel
 import http.substitutionMapForActive
+import tree.PostmanAuth
 import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
 import http.closeQuietly
@@ -81,6 +88,8 @@ import tree.CollectionTreeSidebar
 import tree.TreeDropTarget
 import tree.TreeSelection
 import tree.collectAllFolderIds
+import tree.parsePostmanCollectionJsonToPortable
+import tree.portableCollectionToPostmanV21Json
 import tree.expandSetsForRequest
 import tree.firstRequestSelection
 
@@ -99,6 +108,7 @@ fun App() {
     }
     var bodyText by remember { mutableStateOf("{\n  \"name\": \"api-x\"\n}") }
     var paramsText by remember { mutableStateOf("") }
+    var auth by remember { mutableStateOf<PostmanAuth?>(null) }
 
     var tree by remember { mutableStateOf(repository.loadTree()) }
     var treeSelection by remember { mutableStateOf<TreeSelection?>(null) }
@@ -128,6 +138,7 @@ fun App() {
                     headersSnap,
                     paramsSnap,
                     bodySnap,
+                    auth,
                 )
             }
             repository.close()
@@ -140,7 +151,7 @@ fun App() {
 
     fun saveEditorIfBound() {
         val id = editorRequestId ?: return
-        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText)
+        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
     }
 
     fun applyRequestToEditor(reqId: String) {
@@ -151,6 +162,7 @@ fun App() {
         headersText = r.headersText
         paramsText = r.paramsText
         bodyText = r.bodyText
+        auth = r.auth
     }
 
     fun selectTreeNode(sel: TreeSelection) {
@@ -239,6 +251,8 @@ fun App() {
     var isDarkTheme by remember { mutableStateOf(true) }
     var showSettings by remember { mutableStateOf(false) }
     var showEnvironmentManager by remember { mutableStateOf(false) }
+    var showCollectionSettings by remember { mutableStateOf(false) }
+    var collectionSettingsTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var environmentsState by remember {
         mutableStateOf<EnvironmentsState>(
             withDefaultActiveWhenSingle(EnvironmentStore.snapshot())
@@ -255,10 +269,10 @@ fun App() {
     /** 每次发起请求递增；避免 flusher 已 drain 但 EDT 尚未应用时，完成回调先清空 active 导致正文丢失。 */
     val outboundRequestGeneration = remember { AtomicInteger(0) }
 
-    LaunchedEffect(method, url, headersText, paramsText, bodyText, editorRequestId) {
+    LaunchedEffect(method, url, headersText, paramsText, bodyText, auth, editorRequestId) {
         val id = editorRequestId ?: return@LaunchedEffect
         delay(450)
-        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText)
+        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
     }
 
     LaunchedEffect(editorRequestId) {
@@ -334,6 +348,20 @@ fun App() {
         val effectiveRequestUrl =
             mergeUrlWithParams(reqUrlSnap, parseHeadersForSend(reqParamsSnap))
         val reqHeadersFullSnap = applyEnvironmentVariables(headersText, varMap)
+        
+        // Resolve effective auth (handling inheritance)
+        val effectiveAuth = if (auth?.type == "inherit") {
+            repository.resolveEffectiveAuth(boundRequestId)
+        } else {
+            auth
+        }
+        
+        val authHeaders = resolveAuthToHeaders(effectiveAuth, varMap)
+        val finalHeaders = if (authHeaders.isEmpty()) reqHeadersFullSnap else {
+            if (reqHeadersFullSnap.isEmpty()) authHeaders.joinToString("\n") { "${it.first}: ${it.second}" }
+            else reqHeadersFullSnap + "\n" + authHeaders.joinToString("\n") { "${it.first}: ${it.second}" }
+        }
+
         val reqBodySnap = applyEnvironmentVariables(bodyText, varMap)
         val control = RequestControl()
         control.startTimeMs = System.currentTimeMillis()
@@ -374,7 +402,7 @@ fun App() {
                 method = method,
                 url = effectiveRequestUrl,
                 body = reqBodySnap,
-                headersText = reqHeadersFullSnap,
+                headersText = finalHeaders,
                 control = control,
                 onSseDetected = { isSse ->
                     EventQueue.invokeLater {
@@ -585,6 +613,42 @@ fun App() {
                 onManageEnvironmentsClick = { showEnvironmentManager = true },
                 onThemeToggle = { isDarkTheme = !isDarkTheme },
                 onSettingsClick = { showSettings = true },
+                onImportCollectionClick = {
+                    EventQueue.invokeLater {
+                        val chooser = JFileChooser()
+                        chooser.dialogTitle = "导入 Postman Collection"
+                        chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
+                        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
+                        val file = chooser.selectedFile ?: return@invokeLater
+                        try {
+                            val text = Files.readString(file.toPath(), StandardCharsets.UTF_8)
+                            val portable = parsePostmanCollectionJsonToPortable(text)
+                            val newId = repository.importAsNewCollection(portable)
+                            refreshTree()
+                            expandedCollectionIds = expandedCollectionIds + newId
+                            treeSelection = TreeSelection.Collection(newId)
+                            setSingleResponseMessage(
+                                responseLines,
+                                "已导入集合「${portable.name}」",
+                            )
+                        } catch (e: IllegalArgumentException) {
+                            JOptionPane.showMessageDialog(
+                                null,
+                                e.message ?: "文件格式不正确",
+                                "导入失败",
+                                JOptionPane.ERROR_MESSAGE,
+                            )
+                        } catch (e: Exception) {
+                            JOptionPane.showMessageDialog(
+                                null,
+                                e.message ?: e.toString(),
+                                "导入失败",
+                                JOptionPane.ERROR_MESSAGE,
+                            )
+                        }
+                        responsePartialLine = null
+                    }
+                },
                 onImportCurlClick = {
                     try {
                         val clipboardText = readClipboardText()
@@ -598,7 +662,7 @@ fun App() {
                         bodyText = parsed.body
                         editorRequestId?.let {
                             repository.saveRequestEditorFields(
-                                it, method, url, headersText, paramsText, bodyText,
+                                it, method, url, headersText, paramsText, bodyText, auth,
                             )
                         }
                         setSingleResponseMessage(responseLines, "已从剪贴板导入 cURL")
@@ -688,6 +752,10 @@ fun App() {
                             }
                         }
                     },
+                    onSettings = { sel ->
+                        collectionSettingsTarget = sel
+                        showCollectionSettings = true
+                    },
                     folderAddEnabled = repository.newFolderTarget(treeSelection) != null,
                     requestAddEnabled = repository.newRequestTarget(treeSelection) != null,
                     onExportRequestAsCurl = { rid ->
@@ -706,6 +774,41 @@ fun App() {
                         )
                         setSingleResponseMessage(responseLines, "已复制 cURL 到剪贴板")
                         responsePartialLine = null
+                    },
+                    onExportPostmanCollection = { collectionId ->
+                        val portable = repository.exportPortableCollection(collectionId)
+                            ?: return@CollectionTreeSidebar
+                        val json = portableCollectionToPostmanV21Json(portable)
+                        EventQueue.invokeLater {
+                            val chooser = JFileChooser()
+                            chooser.dialogTitle = "导出 Postman Collection v2.1"
+                            chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
+                            val safeBase = portable.name
+                                .replace(Regex("""[^\w\u4e00-\u9fff\-_. ]"""), "_")
+                                .trim()
+                                .ifEmpty { "collection" }
+                            chooser.selectedFile = java.io.File("$safeBase.postman_collection.json")
+                            if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
+                            var file = chooser.selectedFile
+                            if (!file.name.endsWith(".json", ignoreCase = true)) {
+                                file = java.io.File(file.parentFile, file.name + ".json")
+                            }
+                            try {
+                                Files.writeString(file.toPath(), json, StandardCharsets.UTF_8)
+                                setSingleResponseMessage(
+                                    responseLines,
+                                    "已导出 Postman v2.1：${file.absolutePath}",
+                                )
+                            } catch (e: Exception) {
+                                JOptionPane.showMessageDialog(
+                                    null,
+                                    e.message ?: e.toString(),
+                                    "导出失败",
+                                    JOptionPane.ERROR_MESSAGE,
+                                )
+                            }
+                            responsePartialLine = null
+                        }
                     },
                     onDuplicateRequestBelow = { rid ->
                         saveEditorIfBound()
@@ -783,13 +886,15 @@ fun App() {
                         if (!isLoading) startRequest() else cancelActiveRequest()
                     },
                     leftTabIndex = leftTabIndex,
-                    onLeftTabIndexChange = { leftTabIndex = it.coerceIn(0, 2) },
+                    onLeftTabIndexChange = { leftTabIndex = it.coerceIn(0, 3) },
                     bodyText = bodyText,
                     onBodyTextChange = { bodyText = it },
                     headersText = headersText,
                     onHeadersTextChange = { headersText = it },
                     paramsText = paramsText,
                     onParamsTextChange = { paramsText = it },
+                    auth = auth,
+                    onAuthChange = { auth = it },
                 )
                 Box(
                     modifier = Modifier
@@ -849,6 +954,18 @@ fun App() {
                 initial = environmentsState,
                 onCloseRequest = { showEnvironmentManager = false },
                 onSaved = { saved -> commitEnvironmentsState(saved) },
+            )
+            CollectionSettingsDialog(
+                visible = showCollectionSettings,
+                target = collectionSettingsTarget,
+                repository = repository,
+                isDarkTheme = isDarkTheme,
+                typographyBase = typographyFromSettings(appSettings),
+                exchangeMetrics = exchangeFontMetrics(appSettings.requestResponseFontSizeSp),
+                onCloseRequest = {
+                    showCollectionSettings = false
+                    refreshTree() // Refresh to reflect any changes if needed
+                },
             )
         }
     }

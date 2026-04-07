@@ -5,9 +5,15 @@ import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.Types
 import java.util.UUID
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import tree.PortableCollection
 import tree.PortableFolder
 import tree.PortableRequest
+import tree.PostmanAuth
 import tree.StoredHttpRequest
 import tree.TreeDragPayload
 import tree.TreeDropTarget
@@ -65,6 +71,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             ps.setString(1, id)
             ps.executeQuery().use { rs ->
                 if (!rs.next()) return null
+                val metaJson = rs.getString("meta_json") ?: "{}"
                 return StoredHttpRequest(
                     id = rs.getString("id"),
                     collectionId = rs.getString("collection_id"),
@@ -75,7 +82,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                     headersText = rs.getString("headers_text"),
                     paramsText = rs.getString("params_text"),
                     bodyText = rs.getString("body_text"),
-                    metaJson = rs.getString("meta_json"),
+                    metaJson = metaJson,
+                    auth = extractAuthFromMetaJson(metaJson),
                 )
             }
         }
@@ -88,11 +96,15 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         headersText: String,
         paramsText: String,
         bodyText: String,
+        auth: PostmanAuth?,
     ) {
         val now = System.currentTimeMillis()
+        val oldMetaJson = getRequestMetaJson(id)
+        val newMetaJson = mergeAuthIntoMetaJson(oldMetaJson, auth)
+
         conn.prepareStatement(
             """
-            UPDATE requests SET method = ?, url = ?, headers_text = ?, params_text = ?, body_text = ?, updated_at = ?
+            UPDATE requests SET method = ?, url = ?, headers_text = ?, params_text = ?, body_text = ?, meta_json = ?, updated_at = ?
             WHERE id = ?
             """.trimIndent()
         ).use { ps ->
@@ -101,9 +113,45 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             ps.setString(3, headersText)
             ps.setString(4, paramsText)
             ps.setString(5, bodyText)
-            ps.setLong(6, now)
-            ps.setString(7, id)
+            ps.setString(6, newMetaJson)
+            ps.setLong(7, now)
+            ps.setString(8, id)
             ps.executeUpdate()
+        }
+    }
+
+    private fun getRequestMetaJson(id: String): String {
+        conn.prepareStatement("SELECT meta_json FROM requests WHERE id = ?").use { ps ->
+            ps.setString(1, id)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) return rs.getString("meta_json") ?: "{}"
+            }
+        }
+        return "{}"
+    }
+
+    private fun mergeAuthIntoMetaJson(oldMetaJson: String, auth: PostmanAuth?): String {
+        val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+        val meta = try {
+            json.decodeFromString<JsonObject>(oldMetaJson.ifBlank { "{}" }).toMutableMap()
+        } catch (e: Exception) {
+            mutableMapOf<String, kotlinx.serialization.json.JsonElement>()
+        }
+        if (auth == null) {
+            meta.remove("auth")
+        } else {
+            meta["auth"] = json.encodeToJsonElement(auth)
+        }
+        return json.encodeToString(JsonObject(meta))
+    }
+
+    private fun extractAuthFromMetaJson(metaJson: String): PostmanAuth? {
+        val json = Json { ignoreUnknownKeys = true }
+        return try {
+            val meta = json.decodeFromString<JsonObject>(metaJson.ifBlank { "{}" })
+            meta["auth"]?.let { json.decodeFromJsonElement(PostmanAuth.serializer(), it) }
+        } catch (e: Exception) {
+            null
         }
     }
 
@@ -645,18 +693,20 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         return PortableCollection(
             name = row.name,
             collectionMetaJson = row.metaJson,
+            auth = extractAuthFromMetaJson(row.metaJson),
             folders = buildPortableFolderTree(collectionId, null),
             rootRequests = loadPortableRequests(collectionId, null),
         )
     }
 
-    /** 用于导入：新建一个集合并写入整棵树（事务内）；不覆盖已有集合。 */
-    fun importAsNewCollection(portable: PortableCollection, collectionName: String? = null) {
+    /** 用于导入：新建一个集合并写入整棵树（事务内）；不覆盖已有集合。返回新集合 id。 */
+    fun importAsNewCollection(portable: PortableCollection, collectionName: String? = null): String {
         conn.autoCommit = false
         try {
             val collId = newId()
             val now = System.currentTimeMillis()
             val name = collectionName ?: portable.name
+            val metaJson = mergeAuthIntoMetaJson(portable.collectionMetaJson, portable.auth)
             conn.prepareStatement(
                 """
                 INSERT INTO collections (id, name, sort_order, created_at, updated_at, meta_json)
@@ -668,7 +718,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 ps.setInt(3, nextCollectionSortOrder())
                 ps.setLong(4, now)
                 ps.setLong(5, now)
-                ps.setString(6, portable.collectionMetaJson.ifBlank { "{}" })
+                ps.setString(6, metaJson)
                 ps.executeUpdate()
             }
             insertPortableFolders(collId, null, portable.folders, now)
@@ -676,6 +726,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 insertPortableRequest(collId, null, req, now)
             }
             conn.commit()
+            return collId
         } catch (e: Exception) {
             conn.rollback()
             throw e
@@ -694,6 +745,86 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 return CollectionRow(rs.getString("name"), rs.getString("meta_json"))
             }
         }
+    }
+
+    fun resolveEffectiveAuth(requestId: String): PostmanAuth? {
+        // 1. Check request itself
+        val req = getRequest(requestId) ?: return null
+        val reqAuth = req.auth
+        if (reqAuth != null && reqAuth.type != "inherit") return reqAuth
+
+        // 2. Check folder (if any)
+        var currentFolderId = req.folderId
+        while (currentFolderId != null) {
+            val folderAuth = getFolderAuth(currentFolderId)
+            if (folderAuth != null && folderAuth.type != "inherit") return folderAuth
+            currentFolderId = getParentFolderId(currentFolderId)
+        }
+
+        // 3. Check collection
+        return getCollectionAuth(req.collectionId)
+    }
+
+    fun getCollectionAuth(collectionId: String): PostmanAuth? {
+        conn.prepareStatement("SELECT meta_json FROM collections WHERE id = ?").use { ps ->
+            ps.setString(1, collectionId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) return extractAuthFromMetaJson(rs.getString("meta_json") ?: "{}")
+            }
+        }
+        return null
+    }
+
+    fun updateCollectionAuth(collectionId: String, auth: PostmanAuth?) {
+        val oldMeta = conn.prepareStatement("SELECT meta_json FROM collections WHERE id = ?").use { ps ->
+            ps.setString(1, collectionId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) rs.getString("meta_json") ?: "{}" else "{}"
+            }
+        }
+        val newMeta = mergeAuthIntoMetaJson(oldMeta, auth)
+        conn.prepareStatement("UPDATE collections SET meta_json = ?, updated_at = ? WHERE id = ?").use { ps ->
+            ps.setString(1, newMeta)
+            ps.setLong(2, System.currentTimeMillis())
+            ps.setString(3, collectionId)
+            ps.executeUpdate()
+        }
+    }
+
+    fun getFolderAuth(folderId: String): PostmanAuth? {
+        conn.prepareStatement("SELECT meta_json FROM folders WHERE id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) return extractAuthFromMetaJson(rs.getString("meta_json") ?: "{}")
+            }
+        }
+        return null
+    }
+
+    fun updateFolderAuth(folderId: String, auth: PostmanAuth?) {
+        val oldMeta = conn.prepareStatement("SELECT meta_json FROM folders WHERE id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) rs.getString("meta_json") ?: "{}" else "{}"
+            }
+        }
+        val newMeta = mergeAuthIntoMetaJson(oldMeta, auth)
+        conn.prepareStatement("UPDATE folders SET meta_json = ?, updated_at = ? WHERE id = ?").use { ps ->
+            ps.setString(1, newMeta)
+            ps.setLong(2, System.currentTimeMillis())
+            ps.setString(3, folderId)
+            ps.executeUpdate()
+        }
+    }
+
+    private fun getParentFolderId(folderId: String): String? {
+        conn.prepareStatement("SELECT parent_folder_id FROM folders WHERE id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) return rs.getString("parent_folder_id")
+            }
+        }
+        return null
     }
 
     private fun buildPortableFolderTree(collectionId: String, parentFolderId: String?): List<PortableFolder> {
@@ -722,6 +853,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 name = row.name,
                 sortOrder = row.sortOrder,
                 metaJson = row.metaJson,
+                auth = extractAuthFromMetaJson(row.metaJson),
                 folders = buildPortableFolderTree(collectionId, row.id),
                 requests = loadPortableRequests(collectionId, row.id),
             )
@@ -748,6 +880,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             if (folderId != null) ps.setString(2, folderId)
             ps.executeQuery().use { rs ->
                 while (rs.next()) {
+                    val metaJson = rs.getString("meta_json") ?: "{}"
                     out += PortableRequest(
                         name = rs.getString("name"),
                         method = rs.getString("method"),
@@ -756,7 +889,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                         paramsText = rs.getString("params_text"),
                         bodyText = rs.getString("body_text"),
                         sortOrder = rs.getInt("sort_order"),
-                        metaJson = rs.getString("meta_json"),
+                        metaJson = metaJson,
+                        auth = extractAuthFromMetaJson(metaJson),
                     )
                 }
             }
@@ -779,6 +913,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     ) {
         for (pf in folders) {
             val fid = newId()
+            val metaJson = mergeAuthIntoMetaJson(pf.metaJson, pf.auth)
             conn.prepareStatement(
                 """
                 INSERT INTO folders (id, collection_id, parent_folder_id, name, sort_order, created_at, updated_at, meta_json)
@@ -793,7 +928,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 ps.setInt(5, pf.sortOrder)
                 ps.setLong(6, now)
                 ps.setLong(7, now)
-                ps.setString(8, pf.metaJson.ifBlank { "{}" })
+                ps.setString(8, metaJson)
                 ps.executeUpdate()
             }
             insertPortableFolders(collectionId, fid, pf.folders, now)
@@ -809,6 +944,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         pr: PortableRequest,
         now: Long,
     ) {
+        val metaJson = mergeAuthIntoMetaJson(pr.metaJson, pr.auth)
         conn.prepareStatement(
             """
             INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
@@ -828,7 +964,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             ps.setInt(10, pr.sortOrder)
             ps.setLong(11, now)
             ps.setLong(12, now)
-            ps.setString(13, pr.metaJson.ifBlank { "{}" })
+            ps.setString(13, metaJson)
             ps.executeUpdate()
         }
     }

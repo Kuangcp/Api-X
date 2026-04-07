@@ -1,6 +1,6 @@
 package tree
 
-/** 侧边栏树节点（集合 → 文件夹* → 请求*） */
+/** 侧边栏树 node（集合 → 文件夹* → 请求*） */
 data class UiCollection(
     val id: String,
     val name: String,
@@ -33,6 +33,7 @@ data class StoredHttpRequest(
     val paramsText: String,
     val bodyText: String,
     val metaJson: String,
+    val auth: PostmanAuth? = null,
 )
 
 sealed class TreeSelection {

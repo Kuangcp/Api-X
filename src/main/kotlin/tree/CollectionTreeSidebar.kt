@@ -159,7 +159,9 @@ fun CollectionTreeSidebar(
     onContextAddRequest: (TreeSelection) -> Unit,
     onRename: (TreeSelection, String) -> Unit,
     onDelete: (TreeSelection) -> Unit,
+    onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onExportPostmanCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     onApplyTreeDrop: (TreeDragPayload, TreeDropTarget) -> Boolean,
     folderAddEnabled: Boolean,
@@ -313,7 +315,9 @@ fun CollectionTreeSidebar(
                             },
                             onContextAddFolder = onContextAddFolder,
                             onContextAddRequest = onContextAddRequest,
+                            onSettings = onSettings,
                             onExportRequestAsCurl = onExportRequestAsCurl,
+                            onExportPostmanCollection = onExportPostmanCollection,
                             onDuplicateRequestBelow = onDuplicateRequestBelow,
                             dragging = treeDragPayload,
                             dropRegistry = dropRegistry,
@@ -424,7 +428,9 @@ private fun CollectionTreeBlock(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
+    onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onExportPostmanCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
@@ -461,6 +467,8 @@ private fun CollectionTreeBlock(
                 listOf(
                     ContextMenuItem("新建文件夹") { onContextAddFolder(collSel) },
                     ContextMenuItem("新建请求") { onContextAddRequest(collSel) },
+                    ContextMenuItem("导出 Postman v2.1…") { onExportPostmanCollection(collection.id) },
+                    ContextMenuItem("设置") { onSettings(collSel) },
                 )
             }
         ) {
@@ -515,6 +523,7 @@ private fun CollectionTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onContextAddFolder = onContextAddFolder,
                 onContextAddRequest = onContextAddRequest,
+                onSettings = onSettings,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 dragging = dragging,
@@ -577,6 +586,7 @@ private fun FolderTreeBlock(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
+    onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
@@ -603,6 +613,7 @@ private fun FolderTreeBlock(
             listOf(
                 ContextMenuItem("新建文件夹") { onContextAddFolder(folderSel) },
                 ContextMenuItem("新建请求") { onContextAddRequest(folderSel) },
+                ContextMenuItem("设置") { onSettings(folderSel) },
             )
         }
     ) {
@@ -680,6 +691,7 @@ private fun FolderTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onContextAddFolder = onContextAddFolder,
                 onContextAddRequest = onContextAddRequest,
+                onSettings = onSettings,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 dragging = dragging,

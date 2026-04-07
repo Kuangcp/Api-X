@@ -48,9 +48,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
 import app.EnvironmentsState
+import tree.PostmanAuth
+import tree.AuthProperty
+import tree.findValue
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -510,7 +514,7 @@ private fun HeaderLikeKeyValueEditor(
     }
 }
 
-/** 顶栏：环境、主题、设置、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
+/** 顶栏：环境、主题、设置、导入 Collection、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun RequestTopBar(
     isLoading: Boolean,
@@ -520,6 +524,7 @@ fun RequestTopBar(
     onManageEnvironmentsClick: () -> Unit,
     onThemeToggle: () -> Unit,
     onSettingsClick: () -> Unit,
+    onImportCollectionClick: () -> Unit,
     onImportCurlClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -625,6 +630,18 @@ fun RequestTopBar(
                 )
             }
             IconButton(
+                onClick = onImportCollectionClick,
+                enabled = !isLoading,
+                modifier = topBarIconButtonModifier
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LibraryAdd,
+                    contentDescription = "导入 Postman Collection…",
+                    modifier = topBarIconModifier,
+                    tint = topBarIconTint
+                )
+            }
+            IconButton(
                 onClick = onImportCurlClick,
                 enabled = !isLoading,
                 modifier = topBarIconButtonModifier
@@ -668,6 +685,8 @@ fun RequestSidePanel(
     onHeadersTextChange: (String) -> Unit,
     paramsText: String,
     onParamsTextChange: (String) -> Unit,
+    auth: PostmanAuth?,
+    onAuthChange: (PostmanAuth?) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -739,6 +758,8 @@ fun RequestSidePanel(
             onHeadersTextChange = onHeadersTextChange,
             paramsText = paramsText,
             onParamsTextChange = onParamsTextChange,
+            auth = auth,
+            onAuthChange = onAuthChange,
         )
     }
 }
@@ -758,10 +779,13 @@ fun RequestEditorPane(
     onHeadersTextChange: (String) -> Unit,
     paramsText: String,
     onParamsTextChange: (String) -> Unit,
+    auth: PostmanAuth?,
+    onAuthChange: (PostmanAuth?) -> Unit,
 ) {
     val bodyScrollState = rememberScrollState()
     val headersScrollState = rememberScrollState()
     val paramsScrollState = rememberScrollState()
+    val authScrollState = rememberScrollState()
 
     Column(modifier = modifier.fillMaxWidth().fillMaxHeight()) {
         Row(
@@ -771,77 +795,32 @@ fun RequestEditorPane(
                 .clip(RoundedCornerShape(4.dp))
                 .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(
-                        if (leftTabIndex == 0) {
-                            MaterialTheme.colors.primary.copy(alpha = 0.14f)
+            val tabs = listOf("Body", "Headers", "Params", "Auth")
+            tabs.forEachIndexed { index, title ->
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(
+                            if (leftTabIndex == index) {
+                                MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                            } else {
+                                Color.Transparent
+                            }
+                        )
+                        .clickable(enabled = !isLoading) { onLeftTabIndexChange(index) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        title,
+                        fontSize = exchangeMetrics.tab,
+                        color = if (leftTabIndex == index) {
+                            MaterialTheme.colors.onSurface
                         } else {
-                            Color.Transparent
+                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                         }
                     )
-                    .clickable(enabled = !isLoading) { onLeftTabIndexChange(0) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Body",
-                    fontSize = exchangeMetrics.tab,
-                    color = if (leftTabIndex == 0) {
-                        MaterialTheme.colors.onSurface
-                    } else {
-                        MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                    }
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(
-                        if (leftTabIndex == 1) {
-                            MaterialTheme.colors.primary.copy(alpha = 0.14f)
-                        } else {
-                            Color.Transparent
-                        }
-                    )
-                    .clickable(enabled = !isLoading) { onLeftTabIndexChange(1) },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    "Headers",
-                    fontSize = exchangeMetrics.tab,
-                    color = if (leftTabIndex == 1) {
-                        MaterialTheme.colors.onSurface
-                    } else {
-                        MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                    }
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(
-                        if (leftTabIndex == 2) {
-                            MaterialTheme.colors.primary.copy(alpha = 0.14f)
-                        } else {
-                            Color.Transparent
-                        },
-                    )
-                    .clickable(enabled = !isLoading) { onLeftTabIndexChange(2) },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    "Params",
-                    fontSize = exchangeMetrics.tab,
-                    color = if (leftTabIndex == 2) {
-                        MaterialTheme.colors.onSurface
-                    } else {
-                        MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                    },
-                )
+                }
             }
         }
         Box(
@@ -927,6 +906,18 @@ fun RequestEditorPane(
                     VerticalScrollbar(
                         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
                         adapter = rememberScrollbarAdapter(paramsScrollState),
+                    )
+                }
+                3 -> {
+                    AuthEditor(
+                        auth = auth,
+                        onAuthChange = onAuthChange,
+                        exchangeMetrics = exchangeMetrics,
+                        modifier = Modifier.fillMaxSize().padding(end = 10.dp).verticalScroll(authScrollState)
+                    )
+                    VerticalScrollbar(
+                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        adapter = rememberScrollbarAdapter(authScrollState),
                     )
                 }
             }
@@ -1023,5 +1014,161 @@ private fun UrlInputWithInlineSend(
                 )
             }
         }
+    }
+}
+
+@Composable
+fun AuthEditor(
+    auth: PostmanAuth?,
+    onAuthChange: (PostmanAuth?) -> Unit,
+    exchangeMetrics: ExchangeFontMetrics,
+    modifier: Modifier = Modifier
+) {
+    var showTypeMenu by remember { mutableStateOf(false) }
+    val currentType = auth?.type ?: "noauth"
+    val typeLabel = when (currentType) {
+        "inherit" -> "Inherit from parent"
+        "basic" -> "Basic Auth"
+        "bearer" -> "Bearer Token"
+        "apikey" -> "API Key"
+        else -> "No Auth"
+    }
+
+    Column(modifier = modifier.padding(8.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Type: ", fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+            Box {
+                TextButton(onClick = { showTypeMenu = true }) {
+                    Text(typeLabel, fontSize = exchangeMetrics.tab)
+                    Icon(Icons.Default.ArrowDropDown, null)
+                }
+                DropdownMenu(expanded = showTypeMenu, onDismissRequest = { showTypeMenu = false }) {
+                    listOf(
+                        "inherit" to "Inherit from parent",
+                        "noauth" to "No Auth",
+                        "basic" to "Basic Auth",
+                        "bearer" to "Bearer Token",
+                        "apikey" to "API Key"
+                    ).forEach { (type, label) ->
+                        DropdownMenuItem(onClick = {
+                            showTypeMenu = false
+                            if (type == "noauth") onAuthChange(null)
+                            else if (type == "inherit") onAuthChange(PostmanAuth(type = "inherit"))
+                            else onAuthChange(PostmanAuth(type = type))
+                        }) {
+                            Text(label, fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        when (currentType) {
+            "basic" -> {
+                AuthField(
+                    label = "Username",
+                    value = auth?.basic.findValue("username") ?: "",
+                    onValueChange = { nv ->
+                        val props = (auth?.basic?.filter { it.key != "username" } ?: emptyList()) + AuthProperty("username", nv, "string")
+                        onAuthChange(auth?.copy(basic = props))
+                    },
+                    exchangeMetrics = exchangeMetrics
+                )
+                AuthField(
+                    label = "Password",
+                    value = auth?.basic.findValue("password") ?: "",
+                    isPassword = true,
+                    onValueChange = { nv ->
+                        val props = (auth?.basic?.filter { it.key != "password" } ?: emptyList()) + AuthProperty("password", nv, "string")
+                        onAuthChange(auth?.copy(basic = props))
+                    },
+                    exchangeMetrics = exchangeMetrics
+                )
+            }
+            "bearer" -> {
+                AuthField(
+                    label = "Token",
+                    value = auth?.bearer.findValue("token") ?: "",
+                    onValueChange = { nv ->
+                        val props = (auth?.bearer?.filter { it.key != "token" } ?: emptyList()) + AuthProperty("token", nv, "string")
+                        onAuthChange(auth?.copy(bearer = props))
+                    },
+                    exchangeMetrics = exchangeMetrics
+                )
+            }
+            "apikey" -> {
+                AuthField(
+                    label = "Key",
+                    value = auth?.apikey.findValue("key") ?: "",
+                    onValueChange = { nv ->
+                        val props = (auth?.apikey?.filter { it.key != "key" } ?: emptyList()) + AuthProperty("key", nv, "string")
+                        onAuthChange(auth?.copy(apikey = props))
+                    },
+                    exchangeMetrics = exchangeMetrics
+                )
+                AuthField(
+                    label = "Value",
+                    value = auth?.apikey.findValue("value") ?: "",
+                    onValueChange = { nv ->
+                        val props = (auth?.apikey?.filter { it.key != "value" } ?: emptyList()) + AuthProperty("value", nv, "string")
+                        onAuthChange(auth?.copy(apikey = props))
+                    },
+                    exchangeMetrics = exchangeMetrics
+                )
+                AuthField(
+                    label = "Add to",
+                    value = auth?.apikey.findValue("in") ?: "header",
+                    onValueChange = { nv ->
+                        val props = (auth?.apikey?.filter { it.key != "in" } ?: emptyList()) + AuthProperty("in", nv, "string")
+                        onAuthChange(auth?.copy(apikey = props))
+                    },
+                    exchangeMetrics = exchangeMetrics,
+                    hint = "header or query"
+                )
+            }
+            "inherit" -> {
+                Text(
+                    "This request will use the authentication settings from its parent collection or folder.",
+                    fontSize = exchangeMetrics.body,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(vertical = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun AuthField(
+    label: String,
+    value: String,
+    onValueChange: (String) -> Unit,
+    exchangeMetrics: ExchangeFontMetrics,
+    isPassword: Boolean = false,
+    hint: String? = null
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
+        Text(label, fontSize = exchangeMetrics.tiny, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            singleLine = true,
+            visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+            textStyle = MaterialTheme.typography.body2.copy(fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface),
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.12f), RoundedCornerShape(4.dp))
+                .padding(8.dp),
+            decorationBox = { innerTextField ->
+                Box {
+                    if (value.isEmpty() && hint != null) {
+                        Text(hint, fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface.copy(alpha = 0.3f))
+                    }
+                    innerTextField()
+                }
+            }
+        )
     }
 }

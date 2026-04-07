@@ -11,6 +11,7 @@ package tree
 data class PortableCollection(
     val name: String,
     val collectionMetaJson: String = "{}",
+    val auth: PostmanAuth? = null,
     val folders: List<PortableFolder> = emptyList(),
     val rootRequests: List<PortableRequest> = emptyList(),
 )
@@ -19,6 +20,7 @@ data class PortableFolder(
     val name: String,
     val sortOrder: Int = 0,
     val metaJson: String = "{}",
+    val auth: PostmanAuth? = null,
     val folders: List<PortableFolder> = emptyList(),
     val requests: List<PortableRequest> = emptyList(),
 )
@@ -32,4 +34,5 @@ data class PortableRequest(
     val bodyText: String = "",
     val sortOrder: Int = 0,
     val metaJson: String = "{}",
+    val auth: PostmanAuth? = null,
 )
