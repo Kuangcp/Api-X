@@ -77,6 +77,7 @@ import tree.PostmanAuth
 import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
 import http.closeQuietly
+import http.ensureDefaultHttpScheme
 import http.mergeUrlWithParams
 import http.parseHeadersForSend
 import http.parseCurlCommand
@@ -345,8 +346,9 @@ fun App() {
         val varMap = environmentsState.substitutionMapForActive()
         val reqUrlSnap = applyEnvironmentVariables(url, varMap)
         val reqParamsSnap = applyEnvironmentVariables(paramsText, varMap)
-        val effectiveRequestUrl =
-            mergeUrlWithParams(reqUrlSnap, parseHeadersForSend(reqParamsSnap))
+        val effectiveRequestUrl = ensureDefaultHttpScheme(
+            mergeUrlWithParams(reqUrlSnap, parseHeadersForSend(reqParamsSnap)),
+        )
         val reqHeadersFullSnap = applyEnvironmentVariables(headersText, varMap)
         
         // Resolve effective auth (handling inheritance)
@@ -932,7 +934,29 @@ fun App() {
                     isSseResponse = isSseResponse,
                     isResponseLoading = isLoading,
                     responseListState = responseListState,
-                    responseHeadersListState = responseHeadersListState
+                    responseHeadersListState = responseHeadersListState,
+                    copyResponseBodyEnabled = editorRequestId != null &&
+                        responseBodyTextForClipboard(responseLines, responsePartialLine).isNotBlank(),
+                    onCopyResponseBody = copy@{
+                        if (editorRequestId == null) return@copy
+                        val text = responseBodyTextForClipboard(responseLines, responsePartialLine)
+                        if (text.isBlank()) return@copy
+                        writeClipboardText(text)
+                    },
+                    clearResponseLogsEnabled = editorRequestId != null && !isLoading,
+                    onClearResponseLogs = clear@{
+                        val id = editorRequestId ?: return@clear
+                        RequestResponseStore.clearResponseAndBenchLogs(id)
+                        responseLines.clear()
+                        responseLines.add("响应结果会显示在这里")
+                        responseHeaderLines.clear()
+                        responseHeaderLines.add("(暂无响应头)")
+                        responsePartialLine = null
+                        statusCodeText = ""
+                        responseTimeText = ""
+                        responseSizeText = ""
+                        isSseResponse = false
+                    },
                 )
             }
         }
@@ -1069,6 +1093,15 @@ private fun formatBytes(bytes: Long): String {
         else -> String.format("%.2f GB", b / (1024.0 * 1024.0 * 1024.0))
     }
 }
+
+private fun responseBodyTextForClipboard(lines: List<String>, partial: String?): String =
+    buildString {
+        append(lines.joinToString("\n"))
+        partial?.let { p ->
+            if (lines.isNotEmpty()) append('\n')
+            append(p)
+        }
+    }
 
 private fun readClipboardText(): String {
     val clipboard = Toolkit.getDefaultToolkit().systemClipboard

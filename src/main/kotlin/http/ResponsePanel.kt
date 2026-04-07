@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
@@ -21,8 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ContentAlpha
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -60,7 +66,11 @@ fun ResponsePanel(
     /** 为 true 时不做 JSON 高亮（流式未完成或正加载）。 */
     isResponseLoading: Boolean = false,
     responseListState: LazyListState,
-    responseHeadersListState: LazyListState
+    responseHeadersListState: LazyListState,
+    copyResponseBodyEnabled: Boolean,
+    onCopyResponseBody: () -> Unit,
+    clearResponseLogsEnabled: Boolean,
+    onClearResponseLogs: () -> Unit,
 ) {
     // mutableStateListOf 引用不变，不能以列表引用作为 remember 键，否则头/正文更新后仍用旧缓存。
     val headersSnapshot = responseHeaderLines.toList()
@@ -106,13 +116,17 @@ fun ResponsePanel(
         modifier = modifier.fillMaxHeight().fillMaxWidth().padding(start = 6.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(exchangeMetrics.urlBarHeight),
-            contentAlignment = Alignment.CenterStart
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 val darkTheme = !MaterialTheme.colors.isLight
                 val metaColor = MaterialTheme.colors.onSurface
                 val tab = exchangeMetrics.tab
@@ -132,6 +146,33 @@ fun ResponsePanel(
                 Text(" ", fontSize = tab, color = metaColor)
                 Text("$responseTimeText ", fontSize = tab, color = metaColor)
                 Text(responseSizeText, fontSize = tab, color = metaColor)
+            }
+            val iconTint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+            val iconBtnMod = Modifier.size(32.dp)
+            val iconMod = Modifier.size(17.dp)
+            IconButton(
+                onClick = onCopyResponseBody,
+                enabled = copyResponseBodyEnabled,
+                modifier = iconBtnMod,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ContentCopy,
+                    contentDescription = "复制响应正文到剪贴板",
+                    modifier = iconMod,
+                    tint = iconTint,
+                )
+            }
+            IconButton(
+                onClick = onClearResponseLogs,
+                enabled = clearResponseLogsEnabled,
+                modifier = iconBtnMod,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Delete,
+                    contentDescription = "删除响应与压测日志文件",
+                    modifier = iconMod,
+                    tint = iconTint,
+                )
             }
         }
         Column(

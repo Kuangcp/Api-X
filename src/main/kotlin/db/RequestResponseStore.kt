@@ -117,4 +117,20 @@ object RequestResponseStore {
             }
         }
     }
+
+    /** 删除该请求下已落盘的响应 HAR/JSON 与 bench 目录内全部内容（含子目录）。 */
+    fun clearResponseAndBenchLogs(requestId: String) {
+        val id = requestId.trim()
+        if (id.isEmpty()) return
+        fun wipeSubtree(root: Path) {
+            if (root.notExists()) return
+            Files.walk(root).use { stream ->
+                stream.sorted(Comparator.reverseOrder()).forEach { p ->
+                    runCatching { Files.deleteIfExists(p) }
+                }
+            }
+        }
+        wipeSubtree(responseDir(id))
+        wipeSubtree(benchDir(id))
+    }
 }

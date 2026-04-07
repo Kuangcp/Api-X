@@ -63,3 +63,15 @@ fun splitUrlQueryForParamsEditor(urlString: String): Pair<String, String> {
     }
     return "$pathPart$fragment" to lines.joinToString("\n")
 }
+
+/**
+ * 发起请求时：若 URL 不以 `http://` 或 `https://` 开头（忽略大小写），则前置 `http://`。
+ * 空白字符串原样返回。
+ */
+fun ensureDefaultHttpScheme(url: String): String {
+    val u = url.trim()
+    if (u.isEmpty()) return u
+    val low = u.lowercase()
+    if (low.startsWith("http://") || low.startsWith("https://")) return u
+    return "http://$u"
+}
