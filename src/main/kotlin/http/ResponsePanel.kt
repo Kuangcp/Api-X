@@ -60,6 +60,8 @@ fun ResponsePanel(
     responseLines: List<String>,
     responsePartialLine: String?,
     responseHeaderLines: List<String>,
+    /** 最近一次实际发出的请求（METHOD URL + 头 + 正文），纯文本。 */
+    requestPlainText: String,
     rightTabIndex: Int,
     onRightTabIndexChange: (Int) -> Unit,
     isSseResponse: Boolean,
@@ -102,6 +104,7 @@ fun ResponsePanel(
         }
     }
     val jsonBodyScrollState = rememberScrollState()
+    val requestScrollState = rememberScrollState()
 
     LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonAnnotatedBody) {
         if (isSseResponse && rightTabIndex == 0 && jsonAnnotatedBody == null) {
@@ -235,6 +238,30 @@ fun ResponsePanel(
                         }
                     )
                 }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .background(
+                            if (rightTabIndex == 2) {
+                                MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                            } else {
+                                Color.Transparent
+                            }
+                        )
+                        .clickable { onRightTabIndexChange(2) },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        "Request",
+                        fontSize = exchangeMetrics.tab,
+                        color = if (rightTabIndex == 2) {
+                            MaterialTheme.colors.onSurface
+                        } else {
+                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                        }
+                    )
+                }
             }
             Box(
                 modifier = Modifier
@@ -244,8 +271,74 @@ fun ResponsePanel(
                     .background(MaterialTheme.colors.surface)
                     .padding(12.dp)
             ) {
-                when (rightTabIndex) {
-                    0 -> {
+                when {
+                    rightTabIndex == 2 -> {
+                        val reqStyle = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = exchangeMetrics.body,
+                            color = MaterialTheme.colors.onSurface,
+                        )
+                        SelectionContainer {
+                            Text(
+                                text = requestPlainText,
+                                style = reqStyle,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(requestScrollState)
+                                    .padding(end = 12.dp),
+                            )
+                        }
+                        VerticalScrollbar(
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            adapter = rememberScrollbarAdapter(requestScrollState),
+                        )
+                    }
+                    rightTabIndex == 1 -> {
+                        val headerStyle = TextStyle(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = exchangeMetrics.body,
+                            color = MaterialTheme.colors.onSurface,
+                        )
+                        SelectionContainer {
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(end = 12.dp),
+                                state = responseHeadersListState
+                            ) {
+                                items(
+                                    count = responseHeaderLines.size,
+                                    key = { it },
+                                ) { index ->
+                                    val (name, value) = splitResponseHeaderLine(responseHeaderLines[index])
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 1.dp),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        Text(
+                                            text = name,
+                                            modifier = Modifier.weight(1f),
+                                            style = headerStyle,
+                                            textAlign = TextAlign.Start,
+                                        )
+                                        Text(
+                                            text = value,
+                                            modifier = Modifier.weight(1f),
+                                            style = headerStyle,
+                                            textAlign = TextAlign.Start,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        VerticalScrollbar(
+                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                            adapter = rememberScrollbarAdapter(responseHeadersListState)
+                        )
+                    }
+                    else -> {
                         if (jsonAnnotatedBody != null) {
                             SelectionContainer {
                                 Text(
@@ -296,51 +389,6 @@ fun ResponsePanel(
                                 adapter = rememberScrollbarAdapter(responseListState),
                             )
                         }
-                    }
-                    else -> {
-                        val headerStyle = TextStyle(
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = exchangeMetrics.body,
-                            color = MaterialTheme.colors.onSurface,
-                        )
-                        SelectionContainer {
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(end = 12.dp),
-                                state = responseHeadersListState
-                            ) {
-                                items(
-                                    count = responseHeaderLines.size,
-                                    key = { it },
-                                ) { index ->
-                                    val (name, value) = splitResponseHeaderLine(responseHeaderLines[index])
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 1.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        Text(
-                                            text = name,
-                                            modifier = Modifier.weight(1f),
-                                            style = headerStyle,
-                                            textAlign = TextAlign.Start,
-                                        )
-                                        Text(
-                                            text = value,
-                                            modifier = Modifier.weight(1f),
-                                            style = headerStyle,
-                                            textAlign = TextAlign.Start,
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                        VerticalScrollbar(
-                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                            adapter = rememberScrollbarAdapter(responseHeadersListState)
-                        )
                     }
                 }
             }

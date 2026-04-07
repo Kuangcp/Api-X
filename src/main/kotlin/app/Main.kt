@@ -60,7 +60,6 @@ import javax.swing.filechooser.FileNameExtensionFilter
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import db.AppPaths
-import db.CachedHttpResponse
 import db.CollectionRepository
 import db.HarLogCodec
 import db.HarSnapshot
@@ -78,6 +77,7 @@ import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
 import http.closeQuietly
 import http.ensureDefaultHttpScheme
+import http.formatActualRequestPlainText
 import http.mergeUrlWithParams
 import http.parseHeadersForSend
 import http.parseCurlCommand
@@ -233,7 +233,16 @@ fun App() {
     var contentRowWidthPx by remember { mutableStateOf(1f) }
     var leftTabIndex by remember { mutableStateOf(0) }
     var rightTabIndex by remember(responseScopeKey) {
-        mutableStateOf(cachedResponse?.rightTabIndex?.coerceIn(0, 1) ?: 0)
+        mutableStateOf(cachedResponse?.rightTabIndex?.coerceIn(0, 2) ?: 0)
+    }
+    var exchangeRequestPlainText by remember(responseScopeKey) {
+        mutableStateOf(
+            when {
+                editorRequestId == null -> "请先选择或创建一个请求"
+                !cachedResponse?.requestPlainText.isNullOrBlank() -> cachedResponse!!.requestPlainText
+                else -> "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
+            },
+        )
     }
     val responseHeaderLines = remember(responseScopeKey) {
         mutableStateListOf<String>().apply {
@@ -365,6 +374,12 @@ fun App() {
         }
 
         val reqBodySnap = applyEnvironmentVariables(bodyText, varMap)
+        exchangeRequestPlainText = formatActualRequestPlainText(
+            reqMethodSnap,
+            effectiveRequestUrl,
+            finalHeaders,
+            reqBodySnap,
+        )
         val control = RequestControl()
         control.startTimeMs = System.currentTimeMillis()
         activeRequestControl = control
@@ -473,7 +488,7 @@ fun App() {
                             responseSizeBytes = control.totalBytes,
                             responseTimeLabel = timeText,
                             responseSizeLabel = formatBytes(control.totalBytes),
-                            rightTabIndex = tabAtStart.coerceIn(0, 1),
+                            rightTabIndex = tabAtStart.coerceIn(0, 2),
                             isSseResponse = control.responseWasSse,
                         ),
                     )
@@ -557,7 +572,7 @@ fun App() {
                 responseTimeLabel = timeText,
                 responseSizeLabel = formatBytes(control.totalBytes),
                 rightTabIndex = if (editorRequestId == boundId) {
-                    rightTabIndex.coerceIn(0, 1)
+                    rightTabIndex.coerceIn(0, 2)
                 } else {
                     0
                 },
@@ -929,8 +944,9 @@ fun App() {
                     responseLines = responseLines,
                     responsePartialLine = responsePartialLine,
                     responseHeaderLines = responseHeaderLines,
+                    requestPlainText = exchangeRequestPlainText,
                     rightTabIndex = rightTabIndex,
-                    onRightTabIndexChange = { rightTabIndex = it },
+                    onRightTabIndexChange = { rightTabIndex = it.coerceIn(0, 2) },
                     isSseResponse = isSseResponse,
                     isResponseLoading = isLoading,
                     responseListState = responseListState,
@@ -956,6 +972,8 @@ fun App() {
                         responseTimeText = ""
                         responseSizeText = ""
                         isSseResponse = false
+                        exchangeRequestPlainText =
+                            "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
                     },
                 )
             }

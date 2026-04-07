@@ -90,6 +90,39 @@ private fun guessRequestMime(headersSent: List<Pair<String, String>>): String =
     headersSent.firstOrNull { it.first.equals("Content-Type", ignoreCase = true) }?.second
         ?.substringBefore(';').orEmpty().ifBlank { "application/octet-stream" }
 
+private fun requestPlainTextFromHarRequest(request: JsonObject): String {
+    val method = request["method"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    val url = request["url"]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
+    val headerArr = request["headers"]?.jsonArray ?: JsonArray(emptyList())
+    val headerLines = buildString {
+        for (el in headerArr) {
+            val ho = el.jsonObject
+            val n = ho["name"]?.jsonPrimitive?.contentOrNull ?: continue
+            val v = ho["value"]?.jsonPrimitive?.contentOrNull ?: ""
+            append(n)
+            append(": ")
+            append(v)
+            append('\n')
+        }
+    }.trimEnd()
+    val body = request["postData"]?.jsonObject?.get("text")?.jsonPrimitive?.contentOrNull.orEmpty()
+    return buildString {
+        append(method)
+        append(' ')
+        append(url)
+        append("\n\n")
+        if (headerLines.isNotBlank()) {
+            append(headerLines)
+        } else {
+            append("(无请求头)")
+        }
+        if (body.isNotBlank()) {
+            append("\n\n")
+            append(body)
+        }
+    }
+}
+
 private fun guessResponseMime(lines: List<String>): String {
     for (line in lines) {
         val p = parseHeaderLine(line) ?: continue
@@ -206,6 +239,8 @@ object HarLogCodec {
             val apiX = log["_apiX"]?.jsonObject
             val entries = log["entries"]?.jsonArray ?: return null
             val entry = entries.firstOrNull()?.jsonObject ?: return null
+            val request = entry["request"]?.jsonObject
+            val requestPlain = request?.let { requestPlainTextFromHarRequest(it) } ?: ""
             val response = entry["response"]?.jsonObject ?: return null
             val status = response["status"]?.jsonPrimitive?.intOrNull ?: 0
             val content = response["content"]?.jsonObject
@@ -234,6 +269,7 @@ object HarLogCodec {
                 responseHeaderLines = headerLines,
                 isSseResponse = sse,
                 rightTabIndex = tab,
+                requestPlainText = requestPlain,
             )
         }
         return runCatching {

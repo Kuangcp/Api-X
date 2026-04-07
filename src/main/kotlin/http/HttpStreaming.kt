@@ -68,6 +68,35 @@ fun parseHeadersForSend(headersText: String): List<Pair<String, String>> =
         .filterNot { it.startsWith("! ") }
         .mapNotNull { parseHeaderLine(it) }
 
+/** 与 [sendRequestStreaming] 一致：解析编辑器头后去掉 Java HttpClient 不允许设置的逐跳头。 */
+fun headersAppliedByHttpClient(headersText: String): List<Pair<String, String>> =
+    parseHeadersForSend(headersText).filterNot { (name, _) ->
+        name.lowercase() in RESTRICTED_HEADERS
+    }
+
+/** 展示「实际发出」的请求：METHOD + URL、过滤后的请求头、正文（与发送逻辑一致）。 */
+fun formatActualRequestPlainText(method: String, url: String, headersText: String, body: String): String {
+    val m = method.trim().uppercase()
+    val u = url.trim()
+    val pairs = headersAppliedByHttpClient(headersText)
+    val headerBlock = pairs.joinToString("\n") { "${it.first}: ${it.second}" }
+    return buildString {
+        append(m)
+        append(' ')
+        append(u)
+        append("\n\n")
+        if (headerBlock.isNotBlank()) {
+            append(headerBlock)
+        } else {
+            append("(无请求头)")
+        }
+        if (body.isNotBlank()) {
+            append("\n\n")
+            append(body)
+        }
+    }
+}
+
 fun parseHeaders(headersText: String): List<Pair<String, String>> = parseHeadersForSend(headersText)
 
 /** 拆成可进表单的合法行（含是否发送），与无法解析的孤儿行。 */
@@ -203,9 +232,7 @@ fun sendRequestStreaming(
         val client = streamingHttpClient
         val builder = HttpRequest.newBuilder().uri(URI.create(url.trim()))
 
-        val allowedHeaders = parseHeadersForSend(headersText).filterNot { (name, _) ->
-            name.lowercase() in RESTRICTED_HEADERS
-        }
+        val allowedHeaders = headersAppliedByHttpClient(headersText)
         allowedHeaders.forEach { (name, value) ->
             builder.header(name, value)
         }

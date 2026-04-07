@@ -18,6 +18,8 @@ data class CachedHttpResponse(
     val responseHeaderLines: List<String>,
     val isSseResponse: Boolean,
     val rightTabIndex: Int,
+    /** 最近一次交换中实际发出的请求（纯文本），从 HAR 的 request 段还原。 */
+    val requestPlainText: String = "",
 )
 
 object RequestResponseStore {
