@@ -17,8 +17,7 @@ request body 功能丰富
 request body json高亮
 - 支持更多参数格式, 表单, 多表单
 
-删除一个Request 需要删掉整个 主目录下 这个request的文件夹, 并且需要二次确认.
-
+增加快捷键处理 Ctrl Tab 切换Request， 切换时需要弹出一个下拉列表，简洁的展示最近使用的Request，这样就能知道要按几下tab键了，也就是说需要记录最近的Request的打开查看时间，基于这个做倒排， 下拉列表展示Top30 
 
 Request 加Params Tab 功能和交互和Header是一样的, 但是区别是这里填的内容是 拼接在 URL后的, 例如这里配置了 k1:value1 k2:value2 两行, 在url就是 url?k1=value1&k2=value2
 

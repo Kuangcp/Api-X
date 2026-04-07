@@ -36,6 +36,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -165,6 +166,7 @@ fun App() {
         paramsText = r.paramsText
         bodyText = r.bodyText
         auth = r.auth
+        RecentRequestUsageStore.touch(reqId)
     }
 
     fun selectTreeNode(sel: TreeSelection) {
@@ -200,6 +202,14 @@ fun App() {
         applyRequestToEditor(rid)
         treeSelection = TreeSelection.Request(rid)
     }
+
+    fun mruRequestIdsForSwitcher(): List<String> {
+        val ordered = RecentRequestUsageStore.orderedIdsNewestFirst { repository.getRequest(it) != null }
+        val cur = editorRequestId ?: return ordered
+        val without = ordered.filter { it != cur }
+        return (listOf(cur) + without).distinct().take(30)
+    }
+
     val responseScopeKey = editorRequestId ?: ""
     val cachedResponse = remember(responseScopeKey) {
         editorRequestId?.let { RequestResponseStore.loadLatest(it) }
@@ -263,6 +273,9 @@ fun App() {
     var showSettings by remember { mutableStateOf(false) }
     var showEnvironmentManager by remember { mutableStateOf(false) }
     var showGlobalSearch by remember { mutableStateOf(false) }
+    var recentSwitcherActive by remember { mutableStateOf(false) }
+    var recentSwitcherIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var recentSwitcherIndex by remember { mutableStateOf(0) }
     var showCollectionSettings by remember { mutableStateOf(false) }
     var collectionSettingsTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var environmentsState by remember {
@@ -603,25 +616,94 @@ fun App() {
                 .background(MaterialTheme.colors.background)
                 .padding(10.dp)
                 .onPreviewKeyEvent { event ->
-                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    when {
-                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> {
-                            showGlobalSearch = true
-                            true
-                        }
-                        event.isCtrlPressed && event.key == Key.Enter -> {
-                            startRequest()
-                            true
-                        }
-                        event.key == Key.Escape -> {
-                            if (isLoading) {
-                                cancelActiveRequest()
-                                true
-                            } else {
-                                false
+                    if (recentSwitcherActive) {
+                        when (event.type) {
+                            KeyEventType.KeyDown -> {
+                                when {
+                                    event.key == Key.Escape -> {
+                                        recentSwitcherActive = false
+                                        true
+                                    }
+                                    event.isCtrlPressed && event.key == Key.Tab -> {
+                                        val list = recentSwitcherIds
+                                        if (list.isEmpty()) {
+                                            recentSwitcherActive = false
+                                            true
+                                        } else {
+                                            val forward = !event.isShiftPressed
+                                            recentSwitcherIndex =
+                                                if (forward) {
+                                                    (recentSwitcherIndex + 1) % list.size
+                                                } else {
+                                                    (recentSwitcherIndex - 1 + list.size) % list.size
+                                                }
+                                            true
+                                        }
+                                    }
+                                    else -> false
+                                }
                             }
+                            KeyEventType.KeyUp -> {
+                                if (event.key == Key.CtrlLeft || event.key == Key.CtrlRight) {
+                                    val list = recentSwitcherIds
+                                    recentSwitcherActive = false
+                                    if (list.isNotEmpty()) {
+                                        val id = list[recentSwitcherIndex.coerceIn(0, list.lastIndex)]
+                                        if (repository.getRequest(id) != null) {
+                                            expandSetsForRequest(tree, id)?.let { (cols, folders) ->
+                                                expandedCollectionIds = expandedCollectionIds + cols
+                                                expandedFolderIds = expandedFolderIds + folders
+                                            }
+                                            selectTreeNode(TreeSelection.Request(id))
+                                        }
+                                    }
+                                    true
+                                } else {
+                                    false
+                                }
+                            }
+                            else -> false
                         }
-                        else -> false
+                    } else {
+                        if (event.type == KeyEventType.KeyDown) {
+                            when {
+                                event.isCtrlPressed && event.key == Key.Tab -> {
+                                    val list = mruRequestIdsForSwitcher()
+                                    if (list.isEmpty()) {
+                                        false
+                                    } else {
+                                        recentSwitcherIds = list
+                                        recentSwitcherActive = true
+                                        recentSwitcherIndex =
+                                            when {
+                                                list.size == 1 -> 0
+                                                !event.isShiftPressed -> 1
+                                                else -> list.lastIndex
+                                            }
+                                        true
+                                    }
+                                }
+                                (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> {
+                                    showGlobalSearch = true
+                                    true
+                                }
+                                event.isCtrlPressed && event.key == Key.Enter -> {
+                                    startRequest()
+                                    true
+                                }
+                                event.key == Key.Escape -> {
+                                    if (isLoading) {
+                                        cancelActiveRequest()
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                }
+                                else -> false
+                            }
+                        } else {
+                            false
+                        }
                     }
                 },
             verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -753,6 +835,7 @@ fun App() {
                             is TreeSelection.Folder -> repository.deleteFolder(sel.id)
                             is TreeSelection.Request -> {
                                 repository.deleteRequest(sel.id)
+                                RecentRequestUsageStore.remove(sel.id)
                                 RequestResponseStore.deleteRequestArtifacts(sel.id)
                             }
                         }
@@ -984,6 +1067,14 @@ fun App() {
                 )
             }
         }
+            if (recentSwitcherActive && recentSwitcherIds.isNotEmpty()) {
+                RecentRequestSwitcherOverlay(
+                    requestIds = recentSwitcherIds,
+                    highlightIndex = recentSwitcherIndex,
+                    tree = tree,
+                    repository = repository,
+                )
+            }
             SettingsDialogWindow(
                 visible = showSettings,
                 isDarkTheme = isDarkTheme,
