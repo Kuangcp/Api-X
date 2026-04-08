@@ -46,7 +46,10 @@ compose.desktop {
             "-Xmx700m",
             "-Xss512k",
             "-XX:MaxDirectMemorySize=512M",
-            "-XX:+UseG1GC"
+            "-XX:+UseG1GC",
+            "-XX:NativeMemoryTracking=detail",
+            // Skiko：默认 Linux 为 OPENGL；SOFTWARE 走 CPU 光栅，可对比 RSS（试完可改回 OPENGL 或 SOFTWARE_FAST）
+            "-Dskiko.renderApi=SOFTWARE",
         )
 
         nativeDistributions {
