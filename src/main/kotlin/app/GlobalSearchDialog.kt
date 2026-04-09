@@ -234,19 +234,24 @@ private fun GlobalSearchDialogBody(
                         .weight(1f, fill = true),
                 ) {
                     itemsIndexed(filtered, key = { _, row -> row.id }) { index, row ->
-                        GlobalSearchResultRow(
-                            method = row.method,
-                            name = row.name,
-                            location = requestParentLocationLabel(tree, row.collectionId, row.folderId),
-                            selected = index == selectedResultIndex,
-                            onClick = {
-                                onPickRequest(row.id)
-                                onCloseRequest()
-                            },
-                        )
-                        Divider(
-                            color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f),
-                        )
+                        val location = remember(tree, row.collectionId, row.folderId) {
+                            requestParentLocationLabel(tree, row.collectionId, row.folderId)
+                        }
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            GlobalSearchResultRow(
+                                method = row.method,
+                                name = row.name,
+                                location = location,
+                                selected = index == selectedResultIndex,
+                                onClick = {
+                                    onPickRequest(row.id)
+                                    onCloseRequest()
+                                },
+                            )
+                            Divider(
+                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f),
+                            )
+                        }
                     }
                 }
             }
