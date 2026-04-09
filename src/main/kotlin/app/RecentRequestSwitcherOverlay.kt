@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,7 +27,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import db.CollectionRepository
-import kotlinx.coroutines.delay
 import tree.UiCollection
 import tree.requestParentLocationLabel
 
@@ -170,87 +168,6 @@ fun RecentRequestSwitcherOverlay(
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
-        }
-    }
-}
-
-/**
- * 仅当高亮项未完全落在可视区内时才滚动：向下切换时尽量让列表「顶住」视口上沿，
- * 只有高亮行超出下边界才上移滚动，避免每次把选中项对齐到顶部造成抖动。
- */
-private suspend fun LazyListState.ensureHighlightVisible(
-    highlightIndex: Int,
-    defaultItemHeightPx: Int,
-) {
-    if (layoutInfo.totalItemsCount == 0) return
-    delay(16)
-    var wait = 0
-    while (layoutInfo.visibleItemsInfo.isEmpty() && wait < 8) {
-        delay(16)
-        wait++
-    }
-    fun fullyVisible(): Boolean {
-        val info = layoutInfo
-        val vpStart = info.viewportStartOffset
-        val vpEnd = info.viewportEndOffset
-        val item = info.visibleItemsInfo.find { it.index == highlightIndex } ?: return false
-        val top = item.offset
-        val bottom = top + item.size
-        return top >= vpStart && bottom <= vpEnd
-    }
-    if (fullyVisible()) return
-
-    val info = layoutInfo
-    val vpStart = info.viewportStartOffset
-    val vpEnd = info.viewportEndOffset
-    val vpHeight = (vpEnd - vpStart).coerceAtLeast(1)
-    val visible = info.visibleItemsInfo
-
-    val itemInfo = visible.find { it.index == highlightIndex }
-    if (itemInfo != null) {
-        val top = itemInfo.offset
-        val bottom = top + itemInfo.size
-        when {
-            top < vpStart -> scrollToItem(highlightIndex, scrollOffset = 0)
-            bottom > vpEnd -> scrollToItem(
-                highlightIndex,
-                scrollOffset = (vpHeight - itemInfo.size).coerceAtLeast(0),
-            )
-        }
-        return
-    }
-
-    if (visible.isEmpty()) {
-        scrollToItem(highlightIndex)
-        return
-    }
-    val firstIdx = visible.first().index
-    val lastIdx = visible.last().index
-    when {
-        highlightIndex < firstIdx -> scrollToItem(highlightIndex, scrollOffset = 0)
-        highlightIndex > lastIdx -> {
-            val refH = visible.last().size.takeIf { it > 0 } ?: defaultItemHeightPx
-            scrollToItem(
-                highlightIndex,
-                scrollOffset = (vpHeight - refH).coerceAtLeast(0),
-            )
-            delay(16)
-            val info2 = layoutInfo
-            val item2 = info2.visibleItemsInfo.find { it.index == highlightIndex }
-            if (item2 != null) {
-                val vpE = info2.viewportEndOffset
-                val vpS = info2.viewportStartOffset
-                val vpH = (vpE - vpS).coerceAtLeast(1)
-                val bottom = item2.offset + item2.size
-                if (bottom > vpE) {
-                    scrollToItem(
-                        highlightIndex,
-                        scrollOffset = (vpH - item2.size).coerceAtLeast(0),
-                    )
-                } else if (item2.offset < vpS) {
-                    scrollToItem(highlightIndex, scrollOffset = 0)
-                }
-            }
         }
     }
 }

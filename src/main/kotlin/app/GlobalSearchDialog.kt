@@ -10,7 +10,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
@@ -22,10 +24,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -85,7 +90,13 @@ private fun GlobalSearchDialogBody(
 ) {
     var query by remember { mutableStateOf("") }
     var rows by remember { mutableStateOf<List<GlobalSearchRequestRow>>(emptyList()) }
+    var selectedResultIndex by remember { mutableIntStateOf(-1) }
     val focusRequester = remember { FocusRequester() }
+    val listState = rememberLazyListState()
+    val density = LocalDensity.current
+    val defaultRowHeightPx = remember(density) {
+        with(density) { 68.dp.roundToPx() }.coerceAtLeast(24)
+    }
 
     LaunchedEffect(tree) {
         rows = repository.loadAllRequestsForGlobalSearch()
@@ -101,9 +112,27 @@ private fun GlobalSearchDialogBody(
             val q = query.trim()
             if (q.isEmpty()) emptyList()
             else rows.filter {
-                matchesGlobalSearchQuery(q, it.url, it.headersText, it.bodyText)
+                matchesGlobalSearchQuery(q, it.name, it.url, it.headersText, it.bodyText)
             }
         }
+    }
+
+    LaunchedEffect(query) {
+        selectedResultIndex = -1
+    }
+
+    LaunchedEffect(filtered) {
+        if (filtered.isEmpty()) {
+            selectedResultIndex = -1
+        } else if (selectedResultIndex >= filtered.size) {
+            selectedResultIndex = filtered.lastIndex
+        }
+    }
+
+    LaunchedEffect(selectedResultIndex, filtered.size) {
+        if (selectedResultIndex < 0 || filtered.isEmpty()) return@LaunchedEffect
+        val idx = selectedResultIndex.coerceIn(0, filtered.lastIndex)
+        listState.ensureHighlightVisible(idx, defaultRowHeightPx)
     }
 
     Column(
@@ -125,8 +154,45 @@ private fun GlobalSearchDialogBody(
             onValueChange = { query = it },
             modifier = Modifier
                 .fillMaxWidth()
-                .focusRequester(focusRequester),
-            label = { Text("搜索（URL、Body、Headers；空格分隔关键词，须全部命中）") },
+                .focusRequester(focusRequester)
+                .onPreviewKeyEvent { ev ->
+                    if (ev.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (ev.key) {
+                        Key.DirectionDown -> {
+                            if (filtered.isEmpty()) return@onPreviewKeyEvent false
+                            selectedResultIndex = when {
+                                selectedResultIndex < 0 -> 0
+                                selectedResultIndex < filtered.lastIndex -> selectedResultIndex + 1
+                                else -> selectedResultIndex
+                            }
+                            true
+                        }
+                        Key.DirectionUp -> {
+                            if (filtered.isEmpty()) return@onPreviewKeyEvent false
+                            if (selectedResultIndex <= 0) {
+                                selectedResultIndex = -1
+                            } else {
+                                selectedResultIndex--
+                            }
+                            true
+                        }
+                        Key.Enter, Key.NumPadEnter -> {
+                            if (filtered.isEmpty()) return@onPreviewKeyEvent false
+                            val idx = if (selectedResultIndex >= 0) {
+                                selectedResultIndex
+                            } else {
+                                0
+                            }
+                            if (idx in filtered.indices) {
+                                onPickRequest(filtered[idx].id)
+                                onCloseRequest()
+                            }
+                            true
+                        }
+                        else -> false
+                    }
+                },
+            label = { Text("搜索（名称、URL、Body、Headers；空格分隔关键词，须全部命中）") },
             singleLine = true,
             colors = TextFieldDefaults.outlinedTextFieldColors(
                 textColor = MaterialTheme.colors.onSurface,
@@ -162,15 +228,17 @@ private fun GlobalSearchDialogBody(
             }
             else -> {
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f, fill = true),
                 ) {
-                    items(filtered, key = { it.id }) { row ->
+                    itemsIndexed(filtered, key = { _, row -> row.id }) { index, row ->
                         GlobalSearchResultRow(
                             method = row.method,
                             name = row.name,
                             location = requestParentLocationLabel(tree, row.collectionId, row.folderId),
+                            selected = index == selectedResultIndex,
                             onClick = {
                                 onPickRequest(row.id)
                                 onCloseRequest()
@@ -191,11 +259,20 @@ private fun GlobalSearchResultRow(
     method: String,
     name: String,
     location: String,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                if (selected) {
+                    MaterialTheme.colors.primary.copy(alpha = 0.14f)
+                } else {
+                    Color.Transparent
+                },
+                RoundedCornerShape(6.dp),
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = 4.dp, vertical = 10.dp),
     ) {
@@ -228,11 +305,12 @@ private fun GlobalSearchResultRow(
 }
 
 /**
- * 在 URL、Headers、Body 三处做不区分大小写的子串匹配（模糊）；
+ * 在请求名称、URL、Headers、Body 四处做不区分大小写的子串匹配（模糊）；
  * 多个词以空白分隔，每个词均须在合并文本某处出现（AND）。
  */
 private fun matchesGlobalSearchQuery(
     query: String,
+    name: String,
     url: String,
     headersText: String,
     body: String,
@@ -240,6 +318,8 @@ private fun matchesGlobalSearchQuery(
     val tokens = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (tokens.isEmpty()) return false
     val hay = buildString {
+        append(name.lowercase())
+        append('\n')
         append(url.lowercase())
         append('\n')
         append(headersText.lowercase())
