@@ -21,13 +21,15 @@ data class UiRequestSummary(
     val method: String,
 )
 
-/** 全局搜索：从 DB 批量加载的请求名称与 Body（用于与侧边栏树路径组合展示）。 */
+/** 全局搜索：从 DB 批量加载的请求字段（用于与侧边栏树路径组合展示）。 */
 data class GlobalSearchRequestRow(
     val id: String,
     val collectionId: String,
     val folderId: String?,
     val name: String,
     val method: String,
+    val url: String,
+    val headersText: String,
     val bodyText: String,
 )
 

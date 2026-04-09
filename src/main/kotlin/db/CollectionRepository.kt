@@ -94,7 +94,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val out = mutableListOf<GlobalSearchRequestRow>()
         conn.prepareStatement(
             """
-            SELECT id, collection_id, folder_id, name, method, body_text
+            SELECT id, collection_id, folder_id, name, method, url, headers_text, body_text
             FROM requests
             ORDER BY collection_id, folder_id, name
             """.trimIndent(),
@@ -107,6 +107,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                         folderId = rs.getString("folder_id").takeUnless { rs.wasNull() },
                         name = rs.getString("name"),
                         method = rs.getString("method"),
+                        url = rs.getString("url") ?: "",
+                        headersText = rs.getString("headers_text") ?: "",
                         bodyText = rs.getString("body_text") ?: "",
                     )
                 }

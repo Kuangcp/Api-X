@@ -100,7 +100,9 @@ private fun GlobalSearchDialogBody(
         derivedStateOf {
             val q = query.trim()
             if (q.isEmpty()) emptyList()
-            else rows.filter { matchesGlobalSearchQuery(q, it.name, it.bodyText) }
+            else rows.filter {
+                matchesGlobalSearchQuery(q, it.url, it.headersText, it.bodyText)
+            }
         }
     }
 
@@ -124,7 +126,7 @@ private fun GlobalSearchDialogBody(
             modifier = Modifier
                 .fillMaxWidth()
                 .focusRequester(focusRequester),
-            label = { Text("搜索（请求名称与 Body，空格分隔多个关键词）") },
+            label = { Text("搜索（URL、Body、Headers；空格分隔关键词，须全部命中）") },
             singleLine = true,
             colors = TextFieldDefaults.outlinedTextFieldColors(
                 textColor = MaterialTheme.colors.onSurface,
@@ -225,13 +227,24 @@ private fun GlobalSearchResultRow(
     }
 }
 
-private fun matchesGlobalSearchQuery(query: String, name: String, body: String): Boolean {
+/**
+ * 在 URL、Headers、Body 三处做不区分大小写的子串匹配（模糊）；
+ * 多个词以空白分隔，每个词均须在合并文本某处出现（AND）。
+ */
+private fun matchesGlobalSearchQuery(
+    query: String,
+    url: String,
+    headersText: String,
+    body: String,
+): Boolean {
     val tokens = query.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
     if (tokens.isEmpty()) return false
-    val hayName = name.lowercase()
-    val hayBody = body.lowercase()
-    return tokens.all { tok ->
-        val t = tok.lowercase()
-        hayName.contains(t) || hayBody.contains(t)
+    val hay = buildString {
+        append(url.lowercase())
+        append('\n')
+        append(headersText.lowercase())
+        append('\n')
+        append(body.lowercase())
     }
+    return tokens.all { tok -> hay.contains(tok.lowercase()) }
 }
