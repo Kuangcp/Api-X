@@ -227,12 +227,12 @@ fun sendRequestStreaming(
     try {
         if (control.cancelled) return
         val s = AppSettingsStore.snapshot()
-        val connectSec = s.httpConnectTimeoutSeconds.coerceIn(1L, 86400L)
+        val connectMs = s.httpConnectTimeoutMillis.coerceIn(1L, 86_400_000L)
         val requestTimeoutMs = s.httpRequestTimeoutMillis.coerceIn(1L, 86_400_000L)
         val readTimeoutMs = s.httpReadTimeoutMillis.coerceIn(1L, 86_400_000L)
         val bodyReadLimitMs = minOf(readTimeoutMs, requestTimeoutMs)
         val client = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(connectSec))
+            .connectTimeout(Duration.ofMillis(connectMs))
             .proxy(ApiXProxySelector)
             .build()
         val builder = HttpRequest.newBuilder()

@@ -13,8 +13,8 @@ data class AppSettings(
     val requestResponseFontSizeSp: Float = 13f,
     /** 主窗口背景色，如 `#282923`；空则跟随主题默认。 */
     val backgroundHex: String = "",
-    /** 建立连接阶段超时（秒）。 */
-    val httpConnectTimeoutSeconds: Long = 10L,
+    /** 建立连接阶段超时（毫秒）。 */
+    val httpConnectTimeoutMillis: Long = 10_000L,
     /** 读取响应正文流的最长时间（毫秒）；SSE 流式响应不单独套用此项。 */
     val httpReadTimeoutMillis: Long = 6000L,
     /** 从发起请求到整次交换结束（含正文）的最长时间（毫秒），对应 [java.net.http.HttpRequest.Builder.timeout]。 */
@@ -29,7 +29,9 @@ data class AppSettings(
         private const val KEY_FONT_SIZE = "ui.fontSizeSp"
         private const val KEY_REQ_RESP_FONT = "ui.requestResponseFontSizeSp"
         private const val KEY_BACKGROUND = "ui.backgroundHex"
-        private const val KEY_HTTP_CONNECT_SEC = "http.connectTimeoutSeconds"
+        private const val KEY_HTTP_CONNECT_MS = "http.connectTimeoutMillis"
+        /** 旧版为秒，加载时换算为毫秒。 */
+        private const val KEY_HTTP_CONNECT_SEC_LEGACY = "http.connectTimeoutSeconds"
         private const val KEY_HTTP_READ_MS = "http.readTimeoutMillis"
         private const val KEY_HTTP_REQUEST_MS = "http.requestTimeoutMillis"
         private const val KEY_HTTP_PROXY = "proxy.http"
@@ -50,8 +52,13 @@ data class AppSettings(
                     requestResponseFontSizeSp = props.getProperty(KEY_REQ_RESP_FONT)?.toFloatOrNull()?.coerceIn(9f, 28f)
                         ?: 13f,
                     backgroundHex = props.getProperty(KEY_BACKGROUND, "").trim(),
-                    httpConnectTimeoutSeconds = props.getProperty(KEY_HTTP_CONNECT_SEC)?.toLongOrNull()?.coerceIn(1L, 86400L)
-                        ?: 10L,
+                    httpConnectTimeoutMillis = run {
+                        props.getProperty(KEY_HTTP_CONNECT_MS)?.toLongOrNull()?.let {
+                            it.coerceIn(1L, 86_400_000L)
+                        } ?: props.getProperty(KEY_HTTP_CONNECT_SEC_LEGACY)?.toLongOrNull()?.let { legacy ->
+                            if (legacy in 1L..86400L) legacy * 1000L else legacy.coerceIn(1L, 86_400_000L)
+                        } ?: 10_000L
+                    },
                     httpReadTimeoutMillis = props.getProperty(KEY_HTTP_READ_MS)?.toLongOrNull()?.coerceIn(1L, 86_400_000L)
                         ?: 6000L,
                     httpRequestTimeoutMillis = props.getProperty(KEY_HTTP_REQUEST_MS)?.toLongOrNull()
@@ -70,7 +77,7 @@ data class AppSettings(
                 props.setProperty(KEY_FONT_SIZE, settings.fontSizeSp.toString())
                 props.setProperty(KEY_REQ_RESP_FONT, settings.requestResponseFontSizeSp.toString())
                 props.setProperty(KEY_BACKGROUND, settings.backgroundHex)
-                props.setProperty(KEY_HTTP_CONNECT_SEC, settings.httpConnectTimeoutSeconds.toString())
+                props.setProperty(KEY_HTTP_CONNECT_MS, settings.httpConnectTimeoutMillis.toString())
                 props.setProperty(KEY_HTTP_READ_MS, settings.httpReadTimeoutMillis.toString())
                 props.setProperty(KEY_HTTP_REQUEST_MS, settings.httpRequestTimeoutMillis.toString())
                 props.setProperty(KEY_HTTP_PROXY, settings.httpProxyUrl)

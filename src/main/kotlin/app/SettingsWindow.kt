@@ -88,8 +88,8 @@ private fun SettingsDialogBody(
         mutableFloatStateOf(AppSettingsStore.snapshot().requestResponseFontSizeSp)
     }
     var backgroundHex by remember { mutableStateOf(AppSettingsStore.snapshot().backgroundHex) }
-    var connectTimeoutSec by remember {
-        mutableStateOf(AppSettingsStore.snapshot().httpConnectTimeoutSeconds.toString())
+    var connectTimeoutMs by remember {
+        mutableStateOf(AppSettingsStore.snapshot().httpConnectTimeoutMillis.toString())
     }
     var readTimeoutMs by remember {
         mutableStateOf(AppSettingsStore.snapshot().httpReadTimeoutMillis.toString())
@@ -263,16 +263,16 @@ private fun SettingsDialogBody(
                             color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                         )
                         Text(
-                            "连接超时：建立 TCP/TLS 连接的最长时间。读取超时：从开始读响应正文起，非 SSE 响应在正文流上允许的最长耗时。请求总超时：从发起到本次交换结束（含正文）的上限，对应 HttpClient 对单次请求的全局时限。",
+                            "以下三项单位均为毫秒。连接超时：建立 TCP/TLS 连接的最长时间。读取超时：从开始读响应正文起，非 SSE 响应在正文流上允许的最长耗时。请求总超时：从发起到本次交换结束（含正文）的上限，对应 HttpClient 对单次请求的全局时限。",
                             style = MaterialTheme.typography.caption,
                             color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                         )
                         OutlinedTextField(
-                            value = connectTimeoutSec,
-                            onValueChange = { v -> connectTimeoutSec = v.filter { ch -> ch.isDigit() } },
+                            value = connectTimeoutMs,
+                            onValueChange = { v -> connectTimeoutMs = v.filter { ch -> ch.isDigit() } },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("连接超时（秒）") },
-                            placeholder = { Text("默认 10") },
+                            label = { Text("连接超时（毫秒）") },
+                            placeholder = { Text("默认 10000") },
                             singleLine = true,
                             colors = outlinedFieldColors,
                         )
@@ -352,7 +352,7 @@ private fun SettingsDialogBody(
             }
             TextButton(
                 onClick = {
-                    val err = validateHttpTimeouts(connectTimeoutSec, readTimeoutMs, requestTimeoutMs)
+                    val err = validateHttpTimeouts(connectTimeoutMs, readTimeoutMs, requestTimeoutMs)
                         ?: validateBypassLines(bypassText)
                         ?: validateBackgroundHexField(backgroundHex)
                     if (err != null) {
@@ -360,7 +360,7 @@ private fun SettingsDialogBody(
                         return@TextButton
                     }
                     errorText = null
-                    val cSec = connectTimeoutSec.trim().toLong()
+                    val cMs = connectTimeoutMs.trim().toLong()
                     val rMs = readTimeoutMs.trim().toLong()
                     val tMs = requestTimeoutMs.trim().toLong()
                     onSave(
@@ -369,7 +369,7 @@ private fun SettingsDialogBody(
                             fontSizeSp = fontSize.coerceIn(8f, 32f),
                             requestResponseFontSizeSp = requestResponseFontSize.coerceIn(9f, 28f),
                             backgroundHex = backgroundHex.trim(),
-                            httpConnectTimeoutSeconds = cSec.coerceIn(1L, 86400L),
+                            httpConnectTimeoutMillis = cMs.coerceIn(1L, 86_400_000L),
                             httpReadTimeoutMillis = rMs.coerceIn(1L, 86_400_000L),
                             httpRequestTimeoutMillis = tMs.coerceIn(1L, 86_400_000L),
                             httpProxyUrl = httpProxy.trim(),
@@ -425,10 +425,10 @@ private val BACKGROUND_COLOR_PRESETS = listOf(
     "Gruvbox" to "#282828",
 )
 
-private fun validateHttpTimeouts(connectSec: String, readMs: String, requestMs: String): String? {
-    val c = connectSec.trim().toLongOrNull()
-        ?: return "连接超时须为整数（秒）"
-    if (c < 1 || c > 86400) return "连接超时须在 1～86400 秒之间"
+private fun validateHttpTimeouts(connectMs: String, readMs: String, requestMs: String): String? {
+    val c = connectMs.trim().toLongOrNull()
+        ?: return "连接超时须为整数（毫秒）"
+    if (c < 1 || c > 86_400_000L) return "连接超时须在 1～86400000 毫秒之间"
     val r = readMs.trim().toLongOrNull()
         ?: return "读取超时须为整数（毫秒）"
     if (r < 1 || r > 86_400_000L) return "读取超时须在 1～86400000 毫秒之间"
