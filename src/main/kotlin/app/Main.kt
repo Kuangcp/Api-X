@@ -122,6 +122,7 @@ fun App() {
     var persistTreeExpand by remember { mutableStateOf(expandLoaded.fromSavedFile) }
     var didApplyDefaultTreeExpand by remember { mutableStateOf(false) }
     var treeSplitRatio by remember { mutableStateOf(0.2f) }
+    var treeSidebarVisible by remember { mutableStateOf(true) }
     var didPickInitialRequest by remember { mutableStateOf(false) }
 
     val editorIdSnap by rememberUpdatedState(editorRequestId)
@@ -712,6 +713,8 @@ fun App() {
             RequestTopBar(
                 isLoading = isLoading,
                 isDarkTheme = isDarkTheme,
+                treeSidebarVisible = treeSidebarVisible,
+                onTreeSidebarToggle = { treeSidebarVisible = !treeSidebarVisible },
                 environmentsState = environmentsState,
                 onActiveEnvironmentChange = { id ->
                     commitEnvironmentsState(environmentsState.copy(activeEnvironmentId = id))
@@ -792,7 +795,8 @@ fun App() {
                     .weight(1f)
                     .onSizeChanged { contentRowWidthPx = it.width.toFloat().coerceAtLeast(1f) }
             ) {
-                val middleFraction = 1f - treeSplitRatio
+                val middleFraction = if (treeSidebarVisible) 1f - treeSplitRatio else 1f
+                if (treeSidebarVisible) {
                 CollectionTreeSidebar(
                     modifier = Modifier.weight(treeSplitRatio),
                     tree = tree,
@@ -977,6 +981,7 @@ fun App() {
                             .fillMaxHeight()
                             .background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f))
                     )
+                }
                 }
                 RequestSidePanel(
                     modifier = Modifier.weight(middleFraction * splitRatio),

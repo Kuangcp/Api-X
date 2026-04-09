@@ -48,6 +48,8 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
@@ -514,11 +516,13 @@ private fun HeaderLikeKeyValueEditor(
     }
 }
 
-/** 顶栏：环境、主题、设置、导入 Collection、从剪贴板导入 cURL（图标按钮，全宽；与下方左右分栏组成 T 形布局） */
+/** 顶栏：左侧切换请求树、导入、右侧设置/主题/环境（全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun RequestTopBar(
     isLoading: Boolean,
     isDarkTheme: Boolean,
+    treeSidebarVisible: Boolean,
+    onTreeSidebarToggle: () -> Unit,
     environmentsState: EnvironmentsState,
     onActiveEnvironmentChange: (String?) -> Unit,
     onManageEnvironmentsClick: () -> Unit,
@@ -544,6 +548,71 @@ fun RequestTopBar(
             horizontalArrangement = Arrangement.spacedBy(0.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            IconButton(
+                onClick = onTreeSidebarToggle,
+                enabled = !isLoading,
+                modifier = topBarIconButtonModifier,
+            ) {
+                Icon(
+                    imageVector = if (treeSidebarVisible) {
+                        Icons.Filled.KeyboardArrowLeft
+                    } else {
+                        Icons.Filled.KeyboardArrowRight
+                    },
+                    contentDescription = if (treeSidebarVisible) "隐藏请求树" else "显示请求树",
+                    modifier = topBarIconModifier,
+                    tint = topBarIconTint,
+                )
+            }
+            IconButton(
+                onClick = onImportCollectionClick,
+                enabled = !isLoading,
+                modifier = topBarIconButtonModifier
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.LibraryAdd,
+                    contentDescription = "导入 Postman Collection…",
+                    modifier = topBarIconModifier,
+                    tint = topBarIconTint
+                )
+            }
+            IconButton(
+                onClick = onImportCurlClick,
+                enabled = !isLoading,
+                modifier = topBarIconButtonModifier
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.ContentPaste,
+                    contentDescription = "从剪贴板导入 cURL",
+                    modifier = topBarIconModifier,
+                    tint = topBarIconTint
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            IconButton(
+                onClick = onSettingsClick,
+                enabled = !isLoading,
+                modifier = topBarIconButtonModifier
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = "设置",
+                    modifier = topBarIconModifier,
+                    tint = topBarIconTint
+                )
+            }
+            IconButton(
+                onClick = onThemeToggle,
+                enabled = !isLoading,
+                modifier = topBarIconButtonModifier
+            ) {
+                Icon(
+                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                    contentDescription = if (isDarkTheme) "切换浅色主题" else "切换深色主题",
+                    modifier = topBarIconModifier,
+                    tint = topBarIconTint
+                )
+            }
             Box {
                 TextButton(
                     onClick = { envMenuExpanded = true },
@@ -604,54 +673,6 @@ fun RequestTopBar(
                         Text("管理环境…")
                     }
                 }
-            }
-            IconButton(
-                onClick = onThemeToggle,
-                enabled = !isLoading,
-                modifier = topBarIconButtonModifier
-            ) {
-                Icon(
-                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                    contentDescription = if (isDarkTheme) "切换浅色主题" else "切换深色主题",
-                    modifier = topBarIconModifier,
-                    tint = topBarIconTint
-                )
-            }
-            IconButton(
-                onClick = onSettingsClick,
-                enabled = !isLoading,
-                modifier = topBarIconButtonModifier
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "设置",
-                    modifier = topBarIconModifier,
-                    tint = topBarIconTint
-                )
-            }
-            IconButton(
-                onClick = onImportCollectionClick,
-                enabled = !isLoading,
-                modifier = topBarIconButtonModifier
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.LibraryAdd,
-                    contentDescription = "导入 Postman Collection…",
-                    modifier = topBarIconModifier,
-                    tint = topBarIconTint
-                )
-            }
-            IconButton(
-                onClick = onImportCurlClick,
-                enabled = !isLoading,
-                modifier = topBarIconButtonModifier
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.ContentPaste,
-                    contentDescription = "从剪贴板导入 cURL",
-                    modifier = topBarIconModifier,
-                    tint = topBarIconTint
-                )
             }
         }
         Divider(

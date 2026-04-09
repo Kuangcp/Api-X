@@ -2,6 +2,7 @@ package app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -198,22 +199,47 @@ private fun EnvironmentManagerDialogBody(
                 ) {
                     for (env in draft.environments) {
                         val sel = env.id == selectedId
+                        val isReallyActive = env.id == draft.activeEnvironmentId
                         TextButton(
                             onClick = {
                                 draft = persistCurrentEnvIntoDraft()
                                 selectedId = env.id
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(
+                                    if (sel) {
+                                        Modifier.background(
+                                            MaterialTheme.colors.primary.copy(alpha = 0.10f),
+                                            RoundedCornerShape(6.dp),
+                                        )
+                                    } else {
+                                        Modifier
+                                    },
+                                ),
                         ) {
-                            Text(
-                                env.name.ifBlank { "(未命名)" },
-                                color = if (sel) {
-                                    MaterialTheme.colors.primary
-                                } else {
-                                    MaterialTheme.colors.onSurface
-                                },
-                                maxLines = 2,
-                            )
+                            val nameColor =
+                                if (sel) MaterialTheme.colors.primary
+                                else MaterialTheme.colors.onSurface
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                // if (isReallyActive) {
+                                //     Text(
+                                //         "*",
+                                //         color = nameColor,
+                                //         modifier = Modifier.padding(end = 4.dp),
+                                //         maxLines = 1,
+                                //     )
+                                // }
+                                Text(
+                                    env.name.ifBlank { "(未命名)" },
+                                    modifier = Modifier.weight(1f),
+                                    color = nameColor,
+                                    maxLines = 2,
+                                )
+                            }
                         }
                     }
                 }
