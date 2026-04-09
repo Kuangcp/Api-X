@@ -91,12 +91,16 @@ private fun EnvTextField(
         singleLine = singleLine,
         colors = TextFieldDefaults.outlinedTextFieldColors(
             textColor = MaterialTheme.colors.onSurface,
+            disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
             cursorColor = MaterialTheme.colors.primary,
             focusedBorderColor = MaterialTheme.colors.primary.copy(alpha = ContentAlpha.high),
             unfocusedBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+            disabledBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
             placeholderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            disabledPlaceholderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
             focusedLabelColor = MaterialTheme.colors.primary.copy(alpha = ContentAlpha.high),
             unfocusedLabelColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            disabledLabelColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
         )
     )
 }

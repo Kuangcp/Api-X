@@ -1,5 +1,6 @@
 package http
 
+import app.AppSettingsStore
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStream
@@ -23,15 +24,11 @@ private val RESTRICTED_HEADERS = setOf(
     "upgrade"
 )
 
+private fun requestWallClockExceeded(control: RequestControl, requestTimeoutMs: Long): Boolean =
+    System.currentTimeMillis() - control.startTimeMs > requestTimeoutMs
+
 /** 非 HTTP 状态（连接失败、解析错误等）时在状态区展示的占位符。 */
 const val HttpExchangeErrorStatusMark = "✕"
-
-private val streamingHttpClient: HttpClient by lazy {
-    HttpClient.newBuilder()
-        .connectTimeout(Duration.ofSeconds(30))
-        .proxy(ApiXProxySelector)
-        .build()
-}
 
 fun formatHttpResponseHeaders(headers: HttpHeaders): List<String> {
     val out = mutableListOf<String>()
@@ -229,8 +226,18 @@ fun sendRequestStreaming(
 ) {
     try {
         if (control.cancelled) return
-        val client = streamingHttpClient
-        val builder = HttpRequest.newBuilder().uri(URI.create(url.trim()))
+        val s = AppSettingsStore.snapshot()
+        val connectSec = s.httpConnectTimeoutSeconds.coerceIn(1L, 86400L)
+        val requestTimeoutMs = s.httpRequestTimeoutMillis.coerceIn(1L, 86_400_000L)
+        val readTimeoutMs = s.httpReadTimeoutMillis.coerceIn(1L, 86_400_000L)
+        val bodyReadLimitMs = minOf(readTimeoutMs, requestTimeoutMs)
+        val client = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(connectSec))
+            .proxy(ApiXProxySelector)
+            .build()
+        val builder = HttpRequest.newBuilder()
+            .uri(URI.create(url.trim()))
+            .timeout(Duration.ofMillis(requestTimeoutMs))
 
         val allowedHeaders = headersAppliedByHttpClient(headersText)
         allowedHeaders.forEach { (name, value) ->
@@ -282,6 +289,11 @@ fun sendRequestStreaming(
                 BufferedReader(InputStreamReader(stream)).use { reader ->
                     while (true) {
                         if (control.cancelled || Thread.currentThread().isInterrupted) break
+                        if (requestWallClockExceeded(control, requestTimeoutMs)) {
+                            control.requestFailed = true
+                            onChunk("\n[请求总超时]\n")
+                            break
+                        }
                         val line = reader.readLine() ?: break
                         if (!firstSseEventArrived && line.isNotBlank()) {
                             firstSseEventArrived = true
@@ -296,8 +308,19 @@ fun sendRequestStreaming(
             } else {
                 val reader = InputStreamReader(stream, StandardCharsets.UTF_8)
                 val buffer = CharArray(2048)
+                val bodyReadStart = System.currentTimeMillis()
                 while (true) {
                     if (control.cancelled || Thread.currentThread().isInterrupted) break
+                    if (requestWallClockExceeded(control, requestTimeoutMs)) {
+                        control.requestFailed = true
+                        onChunk("\n[请求总超时]\n")
+                        break
+                    }
+                    if (System.currentTimeMillis() - bodyReadStart > bodyReadLimitMs) {
+                        control.requestFailed = true
+                        onChunk("\n[读取响应超时]\n")
+                        break
+                    }
                     val readCount = reader.read(buffer)
                     if (readCount <= 0) break
                     val chunk = String(buffer, 0, readCount)

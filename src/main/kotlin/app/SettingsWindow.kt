@@ -24,6 +24,7 @@ import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Slider
+import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.Typography
@@ -87,10 +88,33 @@ private fun SettingsDialogBody(
         mutableFloatStateOf(AppSettingsStore.snapshot().requestResponseFontSizeSp)
     }
     var backgroundHex by remember { mutableStateOf(AppSettingsStore.snapshot().backgroundHex) }
+    var connectTimeoutSec by remember {
+        mutableStateOf(AppSettingsStore.snapshot().httpConnectTimeoutSeconds.toString())
+    }
+    var readTimeoutMs by remember {
+        mutableStateOf(AppSettingsStore.snapshot().httpReadTimeoutMillis.toString())
+    }
+    var requestTimeoutMs by remember {
+        mutableStateOf(AppSettingsStore.snapshot().httpRequestTimeoutMillis.toString())
+    }
     var httpProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpProxyUrl) }
     var httpsProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpsProxyUrl) }
     var bypassText by remember { mutableStateOf(AppSettingsStore.snapshot().bypassRegexLines) }
     var errorText by remember { mutableStateOf<String?>(null) }
+
+    val outlinedFieldColors = TextFieldDefaults.outlinedTextFieldColors(
+        textColor = MaterialTheme.colors.onSurface,
+        disabledTextColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+        cursorColor = MaterialTheme.colors.primary,
+        focusedBorderColor = MaterialTheme.colors.primary.copy(alpha = ContentAlpha.high),
+        unfocusedBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+        disabledBorderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+        placeholderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+        disabledPlaceholderColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+        focusedLabelColor = MaterialTheme.colors.primary.copy(alpha = ContentAlpha.high),
+        unfocusedLabelColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+        disabledLabelColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
+    )
 
     Column(
         modifier = Modifier
@@ -116,9 +140,14 @@ private fun SettingsDialogBody(
                     onClick = { section = 0; errorText = null },
                 )
                 NavRow(
-                    label = "代理",
+                    label = "网络",
                     selected = section == 1,
                     onClick = { section = 1; errorText = null },
+                )
+                NavRow(
+                    label = "代理",
+                    selected = section == 2,
+                    onClick = { section = 2; errorText = null },
                 )
             }
             Divider(
@@ -148,6 +177,7 @@ private fun SettingsDialogBody(
                             label = { Text("字体名称") },
                             placeholder = { Text("留空为系统默认，如 Segoe UI、Microsoft YaHei UI") },
                             singleLine = true,
+                            colors = outlinedFieldColors,
                         )
                         Text(
                             "字体大小（sp）: ${"%.0f".format(fontSize)}",
@@ -222,8 +252,48 @@ private fun SettingsDialogBody(
                                 label = { Text("HEX") },
                                 placeholder = { Text("#282923 或留空用主题默认") },
                                 singleLine = true,
+                                colors = outlinedFieldColors,
                             )
                         }
+                    }
+                    1 -> {
+                        Text(
+                            "HTTP 超时",
+                            style = MaterialTheme.typography.subtitle2,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        Text(
+                            "连接超时：建立 TCP/TLS 连接的最长时间。读取超时：从开始读响应正文起，非 SSE 响应在正文流上允许的最长耗时。请求总超时：从发起到本次交换结束（含正文）的上限，对应 HttpClient 对单次请求的全局时限。",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        OutlinedTextField(
+                            value = connectTimeoutSec,
+                            onValueChange = { v -> connectTimeoutSec = v.filter { ch -> ch.isDigit() } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("连接超时（秒）") },
+                            placeholder = { Text("默认 10") },
+                            singleLine = true,
+                            colors = outlinedFieldColors,
+                        )
+                        OutlinedTextField(
+                            value = readTimeoutMs,
+                            onValueChange = { v -> readTimeoutMs = v.filter { ch -> ch.isDigit() } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("读取超时（毫秒）") },
+                            placeholder = { Text("默认 6000") },
+                            singleLine = true,
+                            colors = outlinedFieldColors,
+                        )
+                        OutlinedTextField(
+                            value = requestTimeoutMs,
+                            onValueChange = { v -> requestTimeoutMs = v.filter { ch -> ch.isDigit() } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("请求总超时（毫秒）") },
+                            placeholder = { Text("默认 10000") },
+                            singleLine = true,
+                            colors = outlinedFieldColors,
+                        )
                     }
                     else -> {
                         Text(
@@ -238,6 +308,7 @@ private fun SettingsDialogBody(
                             label = { Text("HTTP 代理") },
                             placeholder = { Text("例如 http://127.0.0.1:7890 或 127.0.0.1:7890") },
                             singleLine = true,
+                            colors = outlinedFieldColors,
                         )
                         OutlinedTextField(
                             value = httpsProxy,
@@ -246,6 +317,7 @@ private fun SettingsDialogBody(
                             label = { Text("HTTPS 代理") },
                             placeholder = { Text("可与 HTTP 不同；留空则回退到 HTTP 代理") },
                             singleLine = true,
+                            colors = outlinedFieldColors,
                         )
                         OutlinedTextField(
                             value = bypassText,
@@ -256,6 +328,7 @@ private fun SettingsDialogBody(
                                 Text("每行一条正则，匹配请求主机名时直连、不走代理\n例：.*\\.local\nexample\\.com")
                             },
                             maxLines = 8,
+                            colors = outlinedFieldColors,
                         )
                     }
                 }
@@ -279,19 +352,26 @@ private fun SettingsDialogBody(
             }
             TextButton(
                 onClick = {
-                    val err = validateBypassLines(bypassText)
+                    val err = validateHttpTimeouts(connectTimeoutSec, readTimeoutMs, requestTimeoutMs)
+                        ?: validateBypassLines(bypassText)
                         ?: validateBackgroundHexField(backgroundHex)
                     if (err != null) {
                         errorText = err
                         return@TextButton
                     }
                     errorText = null
+                    val cSec = connectTimeoutSec.trim().toLong()
+                    val rMs = readTimeoutMs.trim().toLong()
+                    val tMs = requestTimeoutMs.trim().toLong()
                     onSave(
                         AppSettings(
                             fontFamilyName = fontFamily.trim(),
                             fontSizeSp = fontSize.coerceIn(8f, 32f),
                             requestResponseFontSizeSp = requestResponseFontSize.coerceIn(9f, 28f),
                             backgroundHex = backgroundHex.trim(),
+                            httpConnectTimeoutSeconds = cSec.coerceIn(1L, 86400L),
+                            httpReadTimeoutMillis = rMs.coerceIn(1L, 86_400_000L),
+                            httpRequestTimeoutMillis = tMs.coerceIn(1L, 86_400_000L),
                             httpProxyUrl = httpProxy.trim(),
                             httpsProxyUrl = httpsProxy.trim(),
                             bypassRegexLines = bypassText.trimEnd(),
@@ -344,6 +424,19 @@ private val BACKGROUND_COLOR_PRESETS = listOf(
     "Solarized Dark" to "#002b36",
     "Gruvbox" to "#282828",
 )
+
+private fun validateHttpTimeouts(connectSec: String, readMs: String, requestMs: String): String? {
+    val c = connectSec.trim().toLongOrNull()
+        ?: return "连接超时须为整数（秒）"
+    if (c < 1 || c > 86400) return "连接超时须在 1～86400 秒之间"
+    val r = readMs.trim().toLongOrNull()
+        ?: return "读取超时须为整数（毫秒）"
+    if (r < 1 || r > 86_400_000L) return "读取超时须在 1～86400000 毫秒之间"
+    val t = requestMs.trim().toLongOrNull()
+        ?: return "请求总超时须为整数（毫秒）"
+    if (t < 1 || t > 86_400_000L) return "请求总超时须在 1～86400000 毫秒之间"
+    return null
+}
 
 private fun validateBypassLines(text: String): String? {
     for (line in text.lines()) {
