@@ -12,8 +12,9 @@ fun requestToCurlCommand(method: String, url: String, headersText: String, bodyT
     for ((name, value) in parseHeaders(headersText)) {
         sb.append(" -H ").append(shellSingleQuote("$name: $value"))
     }
-    if (bodyText.isNotBlank() && m in CURL_BODY_METHODS) {
-        sb.append(" --data ").append(shellSingleQuote(bodyText))
+    val wireBody = bodyWirePayloadForHttp(bodyText, headersText)
+    if (wireBody.isNotBlank() && m in CURL_BODY_METHODS) {
+        sb.append(" --data ").append(shellSingleQuote(wireBody))
     }
     return sb.toString()
 }

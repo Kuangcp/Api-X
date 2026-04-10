@@ -1,5 +1,6 @@
 package tree
 
+import http.bodyWirePayloadForHttp
 import http.mergeUrlWithParams
 import http.parseHeaderLine
 import http.parseHeadersForSend
@@ -125,9 +126,10 @@ private fun bodyToPostmanObject(headersText: String, bodyText: String): JsonObje
         ct.contains("html", ignoreCase = true) -> "html"
         else -> "text"
     }
+    val rawForPostman = bodyWirePayloadForHttp(bodyText, headersText)
     return buildJsonObject {
         put("mode", "raw")
-        put("raw", bodyText)
+        put("raw", rawForPostman)
         put(
             "options",
             buildJsonObject {
