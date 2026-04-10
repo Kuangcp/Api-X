@@ -106,10 +106,10 @@ fun App() {
     var url by remember { mutableStateOf("https://httpbin.org/get") }
     var headersText by remember {
         mutableStateOf(
-            "Content-Type: application/json\nAccept: application/json"
+            "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
         )
     }
-    var bodyText by remember { mutableStateOf("{\n  \"name\": \"api-x\"\n}") }
+    var bodyText by remember { mutableStateOf("key=value") }
     var paramsText by remember { mutableStateOf("") }
     var auth by remember { mutableStateOf<PostmanAuth?>(null) }
 
@@ -243,7 +243,7 @@ fun App() {
     var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
     var splitRatio by remember { mutableStateOf(0.5f) }
     var contentRowWidthPx by remember { mutableStateOf(1f) }
-    var leftTabIndex by remember { mutableStateOf(0) }
+    var leftTabIndex by remember { mutableStateOf(1) }
     var rightTabIndex by remember(responseScopeKey) {
         mutableStateOf(cachedResponse?.rightTabIndex?.coerceIn(0, 2) ?: 0)
     }

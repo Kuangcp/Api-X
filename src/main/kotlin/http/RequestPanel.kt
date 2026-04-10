@@ -785,6 +785,57 @@ fun RequestSidePanel(
     }
 }
 
+@Composable
+private fun BodyContentKindSelector(
+    exchangeMetrics: ExchangeFontMetrics,
+    headersText: String,
+    onHeadersTextChange: (String) -> Unit,
+    enabled: Boolean,
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    val kind = inferBodyKindFromHeaders(headersText)
+    val typeLabel = when (kind) {
+        BodyContentKind.FormUrlEncoded -> "表单"
+        BodyContentKind.Json -> "JSON"
+        BodyContentKind.Xml -> "XML"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Type: ",
+            fontSize = exchangeMetrics.tab,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+        )
+        Box {
+            TextButton(
+                onClick = { showMenu = true },
+                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(typeLabel, fontSize = exchangeMetrics.tab)
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                listOf(
+                    BodyContentKind.FormUrlEncoded to "表单",
+                    BodyContentKind.Json to "JSON",
+                    BodyContentKind.Xml to "XML",
+                ).forEach { (k, label) ->
+                    DropdownMenuItem(
+                        onClick = {
+                            showMenu = false
+                            onHeadersTextChange(
+                                upsertContentTypeHeader(headersText, contentTypeValueForBodyKind(k)),
+                            )
+                        },
+                    ) {
+                        Text(label, fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** 左侧 Body / Headers / Params 编辑区（分割条左侧） */
 @Composable
 fun RequestEditorPane(
@@ -857,11 +908,17 @@ fun RequestEditorPane(
                             .fillMaxSize()
                             .padding(end = 10.dp)
                     ) {
+                        BodyContentKindSelector(
+                            exchangeMetrics = exchangeMetrics,
+                            headersText = headersText,
+                            onHeadersTextChange = onHeadersTextChange,
+                            enabled = !isLoading,
+                        )
                         Text(
                             "Body（POST / PUT 等会携带）",
                             fontSize = exchangeMetrics.tab,
                             color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                            modifier = Modifier.padding(bottom = 4.dp, start = 2.dp)
+                            modifier = Modifier.padding(bottom = 4.dp, start = 2.dp, top = 4.dp)
                         )
                         Box(
                             modifier = Modifier
