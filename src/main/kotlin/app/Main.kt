@@ -1,6 +1,5 @@
 package app
 
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -47,6 +46,7 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -100,8 +100,10 @@ import tree.expandSetsForRequest
 import tree.firstRequestSelection
 
 @Composable
-@Preview
-fun App() {
+fun WindowScope.App(
+    mainWindowState: WindowState = rememberWindowState(),
+    onWindowCloseRequest: () -> Unit = {},
+) {
     val repository = remember { CollectionRepository(AppPaths.collectionDatabasePath()) }
 
     var method by remember { mutableStateOf("GET") }
@@ -629,7 +631,8 @@ fun App() {
             modifier = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colors.background)
-                .padding(10.dp)
+                // 顶栏贴窗口上缘（无边框窗口下最小化/最大化/关闭更紧凑）；左右与底部仍留白
+                .padding(start = 10.dp, end = 10.dp, bottom = 10.dp)
                 .onPreviewKeyEvent { event ->
                     if (recentSwitcherActive) {
                         when (event.type) {
@@ -735,6 +738,8 @@ fun App() {
                 onManageEnvironmentsClick = { showEnvironmentManager = true },
                 onThemeToggle = { isDarkTheme = !isDarkTheme },
                 onSettingsClick = { showSettings = true },
+                mainWindowState = mainWindowState,
+                onWindowCloseRequest = onWindowCloseRequest,
                 onImportCollectionClick = {
                     EventQueue.invokeLater {
                         val chooser = JFileChooser()
@@ -1315,12 +1320,19 @@ fun main() = application {
         title = "Api-X",
         icon = windowIcon,
         state = windowState,
+        undecorated = true,
         onCloseRequest = {
             persistWindowGeometry(windowState)
             exitApplication()
         },
     ) {
-        App()
+        App(
+            mainWindowState = windowState,
+            onWindowCloseRequest = {
+                persistWindowGeometry(windowState)
+                exitApplication()
+            },
+        )
     }
 }
 

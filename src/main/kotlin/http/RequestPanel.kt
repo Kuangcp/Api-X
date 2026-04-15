@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
@@ -47,10 +48,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LibraryAdd
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Settings
 import app.EnvironmentsState
@@ -58,6 +62,7 @@ import tree.PostmanAuth
 import tree.AuthProperty
 import tree.findValue
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.window.WindowScope
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -73,6 +78,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.WindowPlacement
+import androidx.compose.ui.window.WindowState
 import kotlin.math.min
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
@@ -522,7 +529,7 @@ private fun HeaderLikeKeyValueEditor(
 
 /** 顶栏：左侧切换请求树、导入、右侧设置/主题/环境（全宽；与下方左右分栏组成 T 形布局） */
 @Composable
-fun RequestTopBar(
+fun WindowScope.RequestTopBar(
     isLoading: Boolean,
     isDarkTheme: Boolean,
     treeSidebarVisible: Boolean,
@@ -532,6 +539,8 @@ fun RequestTopBar(
     onManageEnvironmentsClick: () -> Unit,
     onThemeToggle: () -> Unit,
     onSettingsClick: () -> Unit,
+    mainWindowState: WindowState,
+    onWindowCloseRequest: () -> Unit,
     onImportCollectionClick: () -> Unit,
     onImportCurlClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -546,137 +555,193 @@ fun RequestTopBar(
         ?: "无环境"
     val envButtonText = "环境: $activeLabel"
 
+    val isWindowMaximized = mainWindowState.placement == WindowPlacement.Maximized ||
+        mainWindowState.placement == WindowPlacement.Fullscreen
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(0.dp),
-            verticalAlignment = Alignment.CenterVertically
+            // 与 Top 对齐：避免环境按钮较高时整行垂直居中，导致窗口控制键上方出现空白
+            verticalAlignment = Alignment.Top
         ) {
+            WindowDraggableArea(
+                modifier = Modifier.weight(1f),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(0.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(
+                        onClick = onTreeSidebarToggle,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier,
+                    ) {
+                        Icon(
+                            imageVector = if (treeSidebarVisible) {
+                                Icons.Filled.KeyboardArrowLeft
+                            } else {
+                                Icons.Filled.KeyboardArrowRight
+                            },
+                            contentDescription = if (treeSidebarVisible) "隐藏请求树" else "显示请求树",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint,
+                        )
+                    }
+                    IconButton(
+                        onClick = onImportCollectionClick,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.LibraryAdd,
+                            contentDescription = "导入 Postman Collection…",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
+                    IconButton(
+                        onClick = onImportCurlClick,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.ContentPaste,
+                            contentDescription = "从剪贴板导入 cURL",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
+                    Spacer(modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = onSettingsClick,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Settings,
+                            contentDescription = "设置",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
+                    IconButton(
+                        onClick = onThemeToggle,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            contentDescription = if (isDarkTheme) "切换浅色主题" else "切换深色主题",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
+                    Box {
+                        TextButton(
+                            onClick = { envMenuExpanded = true },
+                            enabled = !isLoading,
+                            modifier = Modifier.widthIn(max = 200.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                            ) {
+                                Text(
+                                    envButtonText,
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.body2,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                                )
+                                Icon(
+                                    imageVector = Icons.Filled.ArrowDropDown,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = topBarIconTint,
+                                )
+                            }
+                        }
+                        DropdownMenu(
+                            expanded = envMenuExpanded,
+                            onDismissRequest = { envMenuExpanded = false },
+                        ) {
+                            DropdownMenuItem(
+                                onClick = {
+                                    onActiveEnvironmentChange(null)
+                                    envMenuExpanded = false
+                                },
+                            ) {
+                                Text("无环境")
+                            }
+                            if (environmentsState.environments.isNotEmpty()) {
+                                Divider()
+                                for (env in environmentsState.environments) {
+                                    DropdownMenuItem(
+                                        onClick = {
+                                            onActiveEnvironmentChange(env.id)
+                                            envMenuExpanded = false
+                                        },
+                                    ) {
+                                        Text(env.name.ifBlank { "(未命名)" })
+                                    }
+                                }
+                            }
+                            Divider()
+                            DropdownMenuItem(
+                                onClick = {
+                                    envMenuExpanded = false
+                                    onManageEnvironmentsClick()
+                                },
+                            ) {
+                                Text("管理环境…")
+                            }
+                        }
+                    }
+                }
+            }
             IconButton(
-                onClick = onTreeSidebarToggle,
+                onClick = { mainWindowState.isMinimized = true },
                 enabled = !isLoading,
                 modifier = topBarIconButtonModifier,
             ) {
                 Icon(
-                    imageVector = if (treeSidebarVisible) {
-                        Icons.Filled.KeyboardArrowLeft
-                    } else {
-                        Icons.Filled.KeyboardArrowRight
-                    },
-                    contentDescription = if (treeSidebarVisible) "隐藏请求树" else "显示请求树",
+                    imageVector = Icons.Filled.Remove,
+                    contentDescription = "最小化",
                     modifier = topBarIconModifier,
                     tint = topBarIconTint,
                 )
             }
             IconButton(
-                onClick = onImportCollectionClick,
+                onClick = {
+                    mainWindowState.placement = if (isWindowMaximized) {
+                        WindowPlacement.Floating
+                    } else {
+                        WindowPlacement.Maximized
+                    }
+                },
                 enabled = !isLoading,
-                modifier = topBarIconButtonModifier
+                modifier = topBarIconButtonModifier,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.LibraryAdd,
-                    contentDescription = "导入 Postman Collection…",
+                    imageVector = if (isWindowMaximized) Icons.Filled.FilterNone else Icons.Filled.CropSquare,
+                    contentDescription = if (isWindowMaximized) "还原" else "最大化",
                     modifier = topBarIconModifier,
-                    tint = topBarIconTint
+                    tint = topBarIconTint,
                 )
             }
             IconButton(
-                onClick = onImportCurlClick,
+                onClick = onWindowCloseRequest,
                 enabled = !isLoading,
-                modifier = topBarIconButtonModifier
+                modifier = topBarIconButtonModifier,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.ContentPaste,
-                    contentDescription = "从剪贴板导入 cURL",
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "关闭",
                     modifier = topBarIconModifier,
-                    tint = topBarIconTint
+                    tint = topBarIconTint,
                 )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            IconButton(
-                onClick = onSettingsClick,
-                enabled = !isLoading,
-                modifier = topBarIconButtonModifier
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = "设置",
-                    modifier = topBarIconModifier,
-                    tint = topBarIconTint
-                )
-            }
-            IconButton(
-                onClick = onThemeToggle,
-                enabled = !isLoading,
-                modifier = topBarIconButtonModifier
-            ) {
-                Icon(
-                    imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
-                    contentDescription = if (isDarkTheme) "切换浅色主题" else "切换深色主题",
-                    modifier = topBarIconModifier,
-                    tint = topBarIconTint
-                )
-            }
-            Box {
-                TextButton(
-                    onClick = { envMenuExpanded = true },
-                    enabled = !isLoading,
-                    modifier = Modifier.widthIn(max = 200.dp),
-                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(2.dp),
-                    ) {
-                        Text(
-                            envButtonText,
-                            maxLines = 1,
-                            style = MaterialTheme.typography.body2,
-                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
-                        )
-                        Icon(
-                            imageVector = Icons.Filled.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = topBarIconTint,
-                        )
-                    }
-                }
-                DropdownMenu(
-                    expanded = envMenuExpanded,
-                    onDismissRequest = { envMenuExpanded = false },
-                ) {
-                    DropdownMenuItem(
-                        onClick = {
-                            onActiveEnvironmentChange(null)
-                            envMenuExpanded = false
-                        },
-                    ) {
-                        Text("无环境")
-                    }
-                    if (environmentsState.environments.isNotEmpty()) {
-                        Divider()
-                        for (env in environmentsState.environments) {
-                            DropdownMenuItem(
-                                onClick = {
-                                    onActiveEnvironmentChange(env.id)
-                                    envMenuExpanded = false
-                                },
-                            ) {
-                                Text(env.name.ifBlank { "(未命名)" })
-                            }
-                        }
-                    }
-                    Divider()
-                    DropdownMenuItem(
-                        onClick = {
-                            envMenuExpanded = false
-                            onManageEnvironmentsClick()
-                        },
-                    ) {
-                        Text("管理环境…")
-                    }
-                }
             }
         }
         Divider(
