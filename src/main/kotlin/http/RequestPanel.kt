@@ -120,6 +120,7 @@ private fun HeaderLikeKeyValueEditor(
     exchangeMetrics: ExchangeFontMetrics,
     editorRequestId: String?,
     isLoading: Boolean,
+    isDarkTheme: Boolean,
     text: String,
     onTextChange: (String) -> Unit,
     scrollState: ScrollState,
@@ -258,10 +259,12 @@ private fun HeaderLikeKeyValueEditor(
         ) {
             when (editMode) {
                 KeyValueEditorMode.Text -> {
+                    val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
                     BasicTextField(
                         value = text,
                         onValueChange = onTextChange,
                         enabled = !isLoading,
+                        cursorBrush = cursorBrush,
                         textStyle = MaterialTheme.typography.body2.copy(
                             fontSize = exchangeMetrics.body,
                             color = MaterialTheme.colors.onSurface.copy(
@@ -386,7 +389,7 @@ private fun HeaderLikeKeyValueEditor(
                                             enabled = !isLoading,
                                             singleLine = true,
                                             textStyle = rowFieldStyle,
-                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                            cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .fillMaxHeight()
@@ -438,7 +441,7 @@ private fun HeaderLikeKeyValueEditor(
                                             enabled = !isLoading,
                                             singleLine = true,
                                             textStyle = rowFieldStyle,
-                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                            cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .fillMaxHeight()
@@ -692,6 +695,7 @@ fun RequestSidePanel(
     exchangeMetrics: ExchangeFontMetrics,
     editorRequestId: String?,
     isLoading: Boolean,
+    isDarkTheme: Boolean,
     method: String,
     methodMenuExpanded: Boolean,
     onMethodMenuExpandedChange: (Boolean) -> Unit,
@@ -758,6 +762,7 @@ fun RequestSidePanel(
                 }
                 UrlInputWithInlineSend(
                     exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                     url = url,
                     onUrlChange = onUrlChange,
                     urlFieldEnabled = !isLoading,
@@ -772,6 +777,7 @@ fun RequestSidePanel(
             exchangeMetrics = exchangeMetrics,
             editorRequestId = editorRequestId,
             isLoading = isLoading,
+            isDarkTheme = isDarkTheme,
             leftTabIndex = leftTabIndex,
             onLeftTabIndexChange = onLeftTabIndexChange,
             bodyText = bodyText,
@@ -844,6 +850,7 @@ fun RequestEditorPane(
     exchangeMetrics: ExchangeFontMetrics,
     editorRequestId: String?,
     isLoading: Boolean,
+    isDarkTheme: Boolean,
     leftTabIndex: Int,
     onLeftTabIndexChange: (Int) -> Unit,
     bodyText: String,
@@ -927,6 +934,7 @@ fun RequestEditorPane(
                                 exchangeMetrics = exchangeMetrics,
                                 editorRequestId = editorRequestId,
                                 isLoading = isLoading,
+                                isDarkTheme = isDarkTheme,
                                 text = bodyText,
                                 onTextChange = onBodyTextChange,
                                 scrollState = bodyScrollState,
@@ -948,10 +956,12 @@ fun RequestEditorPane(
                                     )
                                     .background(MaterialTheme.colors.surface)
                             ) {
+                                val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
                                 BasicTextField(
                                     value = bodyText,
                                     onValueChange = onBodyTextChange,
                                     enabled = !isLoading,
+                                    cursorBrush = cursorBrush,
                                     textStyle = MaterialTheme.typography.body2.copy(
                                         fontSize = exchangeMetrics.body,
                                         color = MaterialTheme.colors.onSurface.copy(
@@ -976,6 +986,7 @@ fun RequestEditorPane(
                         exchangeMetrics = exchangeMetrics,
                         editorRequestId = editorRequestId,
                         isLoading = isLoading,
+                        isDarkTheme = isDarkTheme,
                         text = headersText,
                         onTextChange = onHeadersTextChange,
                         scrollState = headersScrollState,
@@ -993,6 +1004,7 @@ fun RequestEditorPane(
                         exchangeMetrics = exchangeMetrics,
                         editorRequestId = editorRequestId,
                         isLoading = isLoading,
+                        isDarkTheme = isDarkTheme,
                         text = paramsText,
                         onTextChange = onParamsTextChange,
                         scrollState = paramsScrollState,
@@ -1010,6 +1022,7 @@ fun RequestEditorPane(
                         auth = auth,
                         onAuthChange = onAuthChange,
                         exchangeMetrics = exchangeMetrics,
+                        isDarkTheme = isDarkTheme,
                         modifier = Modifier.fillMaxSize().padding(end = 10.dp).verticalScroll(authScrollState)
                     )
                     VerticalScrollbar(
@@ -1028,6 +1041,7 @@ fun RequestEditorPane(
 @Composable
 private fun UrlInputWithInlineSend(
     exchangeMetrics: ExchangeFontMetrics,
+    isDarkTheme: Boolean,
     url: String,
     onUrlChange: (String) -> Unit,
     urlFieldEnabled: Boolean,
@@ -1038,6 +1052,7 @@ private fun UrlInputWithInlineSend(
     val borderColor = MaterialTheme.colors.onSurface.copy(
         alpha = if (urlFieldEnabled) ContentAlpha.medium else ContentAlpha.disabled
     )
+        val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
     Row(
         modifier = modifier
             .height(exchangeMetrics.urlBarHeight)
@@ -1049,6 +1064,7 @@ private fun UrlInputWithInlineSend(
         BasicTextField(
             value = url,
             onValueChange = onUrlChange,
+            cursorBrush = cursorBrush,
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
@@ -1119,6 +1135,7 @@ fun AuthEditor(
     auth: PostmanAuth?,
     onAuthChange: (PostmanAuth?) -> Unit,
     exchangeMetrics: ExchangeFontMetrics,
+    isDarkTheme: Boolean,
     modifier: Modifier = Modifier
 ) {
     var showTypeMenu by remember { mutableStateOf(false) }
@@ -1171,7 +1188,8 @@ fun AuthEditor(
                         val props = (auth?.basic?.filter { it.key != "username" } ?: emptyList()) + AuthProperty("username", nv, "string")
                         onAuthChange(auth?.copy(basic = props))
                     },
-                    exchangeMetrics = exchangeMetrics
+                    exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                 )
                 AuthField(
                     label = "Password",
@@ -1181,7 +1199,8 @@ fun AuthEditor(
                         val props = (auth?.basic?.filter { it.key != "password" } ?: emptyList()) + AuthProperty("password", nv, "string")
                         onAuthChange(auth?.copy(basic = props))
                     },
-                    exchangeMetrics = exchangeMetrics
+                    exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                 )
             }
             "bearer" -> {
@@ -1192,7 +1211,8 @@ fun AuthEditor(
                         val props = (auth?.bearer?.filter { it.key != "token" } ?: emptyList()) + AuthProperty("token", nv, "string")
                         onAuthChange(auth?.copy(bearer = props))
                     },
-                    exchangeMetrics = exchangeMetrics
+                    exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                 )
             }
             "apikey" -> {
@@ -1203,7 +1223,8 @@ fun AuthEditor(
                         val props = (auth?.apikey?.filter { it.key != "key" } ?: emptyList()) + AuthProperty("key", nv, "string")
                         onAuthChange(auth?.copy(apikey = props))
                     },
-                    exchangeMetrics = exchangeMetrics
+                    exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                 )
                 AuthField(
                     label = "Value",
@@ -1212,7 +1233,8 @@ fun AuthEditor(
                         val props = (auth?.apikey?.filter { it.key != "value" } ?: emptyList()) + AuthProperty("value", nv, "string")
                         onAuthChange(auth?.copy(apikey = props))
                     },
-                    exchangeMetrics = exchangeMetrics
+                    exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                 )
                 AuthField(
                     label = "Add to",
@@ -1222,6 +1244,7 @@ fun AuthEditor(
                         onAuthChange(auth?.copy(apikey = props))
                     },
                     exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                     hint = "header or query"
                 )
             }
@@ -1243,14 +1266,17 @@ fun AuthField(
     value: String,
     onValueChange: (String) -> Unit,
     exchangeMetrics: ExchangeFontMetrics,
+    isDarkTheme: Boolean,
     isPassword: Boolean = false,
     hint: String? = null
 ) {
     Column(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Text(label, fontSize = exchangeMetrics.tiny, color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f))
+        val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
         BasicTextField(
             value = value,
             onValueChange = onValueChange,
+            cursorBrush = cursorBrush,
             singleLine = true,
             visualTransformation = if (isPassword) androidx.compose.ui.text.input.PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
             textStyle = MaterialTheme.typography.body2.copy(fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface),

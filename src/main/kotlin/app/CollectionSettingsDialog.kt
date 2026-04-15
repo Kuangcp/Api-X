@@ -49,6 +49,7 @@ fun CollectionSettingsDialog(
                     target = target,
                     repository = repository,
                     exchangeMetrics = exchangeMetrics,
+                    isDarkTheme = isDarkTheme,
                     onCancel = onCloseRequest,
                     onSave = {
                         onCloseRequest()
@@ -64,6 +65,7 @@ private fun CollectionSettingsBody(
     target: TreeSelection,
     repository: CollectionRepository,
     exchangeMetrics: ExchangeFontMetrics,
+    isDarkTheme: Boolean,
     onCancel: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -113,6 +115,7 @@ private fun CollectionSettingsBody(
                             auth = authState,
                             onAuthChange = { authState = it },
                             exchangeMetrics = exchangeMetrics,
+                            isDarkTheme = isDarkTheme,
                             modifier = Modifier.fillMaxSize()
                         )
                     }

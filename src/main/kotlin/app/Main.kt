@@ -1020,6 +1020,7 @@ fun App() {
                     onParamsTextChange = { paramsText = it },
                     auth = auth,
                     onAuthChange = { auth = it },
+                    isDarkTheme = isDarkTheme,
                 )
                 Box(
                     modifier = Modifier
