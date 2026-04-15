@@ -65,6 +65,7 @@ import db.AppPaths
 import db.CollectionRepository
 import db.HarLogCodec
 import db.HarSnapshot
+import db.HistoryEntry
 import db.RequestResponseStore
 import http.applyEnvironmentVariables
 import http.resolveAuthToHeaders
@@ -215,6 +216,10 @@ fun App() {
     val cachedResponse = remember(responseScopeKey) {
         editorRequestId?.let { RequestResponseStore.loadLatest(it) }
     }
+    val historyEntries by remember(responseScopeKey) {
+        mutableStateOf(editorRequestId?.let { RequestResponseStore.listHistory(it) } ?: emptyList())
+    }
+    var selectedHistoryEpochMs by remember { mutableStateOf<Long?>(null) }
     val responseLines = remember(responseScopeKey) {
         mutableStateListOf<String>().apply {
             when {
@@ -1072,6 +1077,32 @@ fun App() {
                     },
                     jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
                     onJsonSyntaxHighlightEnabledChange = { jsonSyntaxHighlightEnabled = it },
+                    historyEntries = historyEntries,
+                    selectedHistoryEpochMs = selectedHistoryEpochMs,
+                    onHistorySelected = { epochMs ->
+                        selectedHistoryEpochMs = epochMs
+                        val requestId = editorRequestId ?: return@ResponsePanel
+                        val response = if (epochMs == null) {
+                            RequestResponseStore.loadLatest(requestId)
+                        } else {
+                            RequestResponseStore.loadByTimestamp(requestId, epochMs)
+                        }
+                        if (response != null) {
+                            responseLines.clear()
+                            responseLines.addAll(response.responseBodyLines)
+                            responseHeaderLines.clear()
+                            responseHeaderLines.addAll(response.responseHeaderLines)
+                            responsePartialLine = null
+                            statusCodeText = response.statusCodeText
+                            responseTimeText = response.responseTimeText
+                            responseSizeText = response.responseSizeText
+                            isSseResponse = response.isSseResponse
+                            rightTabIndex = response.rightTabIndex.coerceIn(0, 2)
+                            exchangeRequestPlainText = response.requestPlainText.ifBlank {
+                                "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
+                            }
+                        }
+                    },
                 )
             }
         }

@@ -29,11 +29,18 @@ import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
+import androidx.compose.material.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +49,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import db.HistoryEntry
 
 /** 响应头展示用：按第一个 `:` 拆成 name / value（value 内可含冒号）。 */
 private fun splitResponseHeaderLine(line: String): Pair<String, String> {
@@ -78,6 +86,12 @@ fun ResponsePanel(
     /** 为 false 时 Body 始终按纯文本展示（不做 JSON 语法高亮），默认 true。 */
     jsonSyntaxHighlightEnabled: Boolean = true,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit = {},
+    /** 可选的响应历史记录列表。 */
+    historyEntries: List<db.HistoryEntry> = emptyList(),
+    /** 当前选中的历史时间戳，null 表示最新。 */
+    selectedHistoryEpochMs: Long? = null,
+    /** 选中某个历史时的回调，参数为 epochMs，null 表示选择"最新"。 */
+    onHistorySelected: (Long?) -> Unit = {},
 ) {
     // mutableStateListOf 引用不变，不能以列表引用作为 remember 键，否则头/正文更新后仍用旧缓存。
     val headersSnapshot = responseHeaderLines.toList()
@@ -182,6 +196,63 @@ fun ResponsePanel(
                     modifier = iconMod,
                     tint = iconTint,
                 )
+            }
+            var historyMenuExpanded by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { historyMenuExpanded = true },
+                    enabled = historyEntries.isNotEmpty(),
+                    modifier = iconBtnMod,
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.AccessTime,
+                        contentDescription = "选择历史响应",
+                        modifier = iconMod,
+                        tint = if (historyEntries.isNotEmpty()) iconTint else iconTint.copy(alpha = 0.3f),
+                    )
+                }
+                DropdownMenu(
+                    expanded = historyMenuExpanded,
+                    onDismissRequest = { historyMenuExpanded = false },
+                ) {
+                    val latestEntry = historyEntries.firstOrNull()
+                    val isLatestSelected = selectedHistoryEpochMs == null ||
+                        (latestEntry != null && selectedHistoryEpochMs == latestEntry.epochMs)
+                    DropdownMenuItem(
+                        onClick = {
+                            onHistorySelected(null)
+                            historyMenuExpanded = false
+                        },
+                        modifier = Modifier.height(28.dp),
+                    ) {
+                        Text(
+                            "最新",
+                            fontSize = exchangeMetrics.tab,
+                            color = if (isLatestSelected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
+                        )
+                    }
+                    if (historyEntries.isNotEmpty()) {
+                        DropdownMenuItem(onClick = {}, enabled = false, modifier = Modifier.height(20.dp)) {
+                            Divider()
+                        }
+                        for (entry in historyEntries) {
+                            val isSelected = selectedHistoryEpochMs == entry.epochMs
+                            DropdownMenuItem(
+                                onClick = {
+                                    onHistorySelected(entry.epochMs)
+                                    historyMenuExpanded = false
+                                },
+                                modifier = Modifier.height(28.dp),
+                            ) {
+                                Text(
+                                    entry.displayTime,
+                                    fontSize = exchangeMetrics.tab,
+                                    color = if (isSelected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
         Column(

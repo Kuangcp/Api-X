@@ -3,10 +3,37 @@ package db
 import kotlinx.serialization.Serializable
 import java.nio.file.Files
 import java.nio.file.Path
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 import java.util.Comparator
 import java.util.stream.Collectors
 import kotlin.io.path.isDirectory
 import kotlin.io.path.notExists
+
+private val historyTimeFormatter: DateTimeFormatter by lazy {
+    DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault())
+}
+
+private val historyDateTimeFormatter: DateTimeFormatter by lazy {
+    DateTimeFormatter.ofPattern("MM-dd HH:mm:ss").withZone(ZoneId.systemDefault())
+}
+
+fun formatHistoryTime(epochMs: Long, todayMs: Long): String {
+    val instant = Instant.ofEpochMilli(epochMs)
+    val today = Instant.ofEpochMilli(todayMs)
+    val todayStart = today.atZone(ZoneId.systemDefault()).toLocalDate().atStartOfDay(ZoneId.systemDefault()).toInstant()
+    return if (epochMs >= todayStart.toEpochMilli()) {
+        historyTimeFormatter.format(instant)
+    } else {
+        historyDateTimeFormatter.format(instant)
+    }
+}
+
+data class HistoryEntry(
+    val epochMs: Long,
+    val displayTime: String,
+)
 
 @Serializable
 data class CachedHttpResponse(
@@ -85,6 +112,38 @@ object RequestResponseStore {
             val text = Files.readString(latest, Charsets.UTF_8)
             HarLogCodec.parseToCachedResponse(text)
         }.getOrNull()
+    }
+
+    fun listHistory(requestId: String): List<HistoryEntry> {
+        val id = requestId.trim()
+        if (id.isEmpty()) return emptyList()
+        val dir = responseDir(id)
+        val files = listResponseLogFiles(dir)
+        if (files.isEmpty()) return emptyList()
+        val todayMs = System.currentTimeMillis()
+        return files.mapNotNull { path ->
+            val epochMs = responseLogStemEpochMs(path.fileName.toString())
+            if (epochMs > 0) {
+                HistoryEntry(epochMs, formatHistoryTime(epochMs, todayMs))
+            } else null
+        }.sortedByDescending { it.epochMs }.take(10)
+    }
+
+    fun loadByTimestamp(requestId: String, epochMs: Long): CachedHttpResponse? {
+        val id = requestId.trim()
+        if (id.isEmpty()) return null
+        val dir = responseDir(id)
+        val fileName = "$epochMs.har"
+        val jsonFileName = "$epochMs.json"
+        val file = dir.resolve(fileName)
+        val jsonFile = dir.resolve(jsonFileName)
+        val targetFile = if (Files.exists(file)) file else if (Files.exists(jsonFile)) jsonFile else null
+        return targetFile?.let { f ->
+            runCatching {
+                val text = Files.readString(f, Charsets.UTF_8)
+                HarLogCodec.parseToCachedResponse(text)
+            }.getOrNull()
+        }
     }
 
     fun save(requestId: String, snapshot: HarSnapshot) {
