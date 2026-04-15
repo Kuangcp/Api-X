@@ -2,6 +2,7 @@ package http
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.verticalScroll
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.ui.draw.scale
@@ -41,6 +43,7 @@ import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
+import androidx.compose.material.ripple
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
@@ -86,6 +89,13 @@ private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE"
 
 /** Header 表单：勾选框左右与 Key 列、容器边缘的间隔 */
 private val HeaderFormCheckboxToKeyGap = 12.dp
+
+/**
+ * 顶栏环境下拉菜单项内边距。
+ * 注意：[DropdownMenuItem] 内部固定 `minHeight`（约 48.dp），仅改 `contentPadding` 无法压低行高；
+ * 环境列表改用 [EnvironmentDropdownMenuItem]。
+ */
+private val EnvironmentDropdownMenuItemPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
 
 private data class HeaderFormFocusedCell(val rowIndex: Int, val isValueColumn: Boolean)
 
@@ -527,6 +537,29 @@ private fun HeaderLikeKeyValueEditor(
     }
 }
 
+/** 环境下拉项：无 Material [DropdownMenuItem] 的 48.dp 最小高度，行高随文字 + padding。 */
+@Composable
+private fun EnvironmentDropdownMenuItem(
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                enabled = enabled,
+                interactionSource = interactionSource,
+                indication = ripple(bounded = true),
+                onClick = onClick,
+            )
+            .padding(EnvironmentDropdownMenuItemPadding),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
 /** 顶栏：左侧切换请求树、导入、右侧设置/主题/环境（全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun WindowScope.RequestTopBar(
@@ -667,35 +700,50 @@ fun WindowScope.RequestTopBar(
                             expanded = envMenuExpanded,
                             onDismissRequest = { envMenuExpanded = false },
                         ) {
-                            DropdownMenuItem(
+                            EnvironmentDropdownMenuItem(
                                 onClick = {
                                     onActiveEnvironmentChange(null)
                                     envMenuExpanded = false
                                 },
                             ) {
-                                Text("无环境")
+                                Text(
+                                    "无环境",
+                                    style = MaterialTheme.typography.body2,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                                )
                             }
                             if (environmentsState.environments.isNotEmpty()) {
                                 Divider()
                                 for (env in environmentsState.environments) {
-                                    DropdownMenuItem(
+                                    EnvironmentDropdownMenuItem(
                                         onClick = {
                                             onActiveEnvironmentChange(env.id)
                                             envMenuExpanded = false
                                         },
                                     ) {
-                                        Text(env.name.ifBlank { "(未命名)" })
+                                        Text(
+                                            env.name.ifBlank { "(未命名)" },
+                                            style = MaterialTheme.typography.body2,
+                                            maxLines = 1,
+                                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                                        )
                                     }
                                 }
                             }
                             Divider()
-                            DropdownMenuItem(
+                            EnvironmentDropdownMenuItem(
                                 onClick = {
                                     envMenuExpanded = false
                                     onManageEnvironmentsClick()
                                 },
                             ) {
-                                Text("管理环境…")
+                                Text(
+                                    "管理环境…",
+                                    style = MaterialTheme.typography.body2,
+                                    maxLines = 1,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                                )
                             }
                         }
                     }

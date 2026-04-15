@@ -10,6 +10,9 @@ alwaysApply: true
 - **使用**：`gradle`（系统已安装的 Gradle），例如 `gradle build`、`gradle test`、`gradle run`。
 - **不要使用**：`./gradlew`、`gradlew.bat` 或项目根目录下的 `gradle/wrapper` 调用方式。
 
+
+当检查代码是否有编译报错时 必须是执行 `gradle compileKotlin` 命令
+
 ## 原因
 
 项目约定由本机/CI 上的 Gradle 发行版驱动构建，避免通过 Wrapper 脚本调用。
