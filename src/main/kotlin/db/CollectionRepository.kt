@@ -347,6 +347,89 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
+    /**
+     * 在同一集合、同一文件夹（含根）内，在指定请求正下方插入一条新请求；
+     * 默认字段与 [createRequest] 一致（GET、示例 URL、默认 headers/body），名称为「新请求」。
+     */
+    fun createRequestBelow(sourceId: String): String? {
+        val row = conn.prepareStatement(
+            """
+            SELECT collection_id, folder_id, sort_order
+            FROM requests WHERE id = ?
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, sourceId)
+            ps.executeQuery().use { rs ->
+                if (!rs.next()) return null
+                object {
+                    val collectionId = rs.getString("collection_id")
+                    val folderId = rs.getString("folder_id").takeUnless { rs.wasNull() }
+                    val sortOrder = rs.getInt("sort_order")
+                }
+            }
+        }
+        val newId = newId()
+        val insertAt = row.sortOrder + 1
+        val now = System.currentTimeMillis()
+        val defaultHeaders = "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
+        val defaultBody = "key: value"
+        val oldAutoCommit = conn.autoCommit
+        return try {
+            conn.autoCommit = false
+            if (row.folderId == null) {
+                conn.prepareStatement(
+                    """
+                    UPDATE requests SET sort_order = sort_order + 1, updated_at = ?
+                    WHERE collection_id = ? AND folder_id IS NULL AND sort_order >= ?
+                    """.trimIndent()
+                ).use { ps ->
+                    ps.setLong(1, now)
+                    ps.setString(2, row.collectionId)
+                    ps.setInt(3, insertAt)
+                    ps.executeUpdate()
+                }
+            } else {
+                conn.prepareStatement(
+                    """
+                    UPDATE requests SET sort_order = sort_order + 1, updated_at = ?
+                    WHERE collection_id = ? AND folder_id = ? AND sort_order >= ?
+                    """.trimIndent()
+                ).use { ps ->
+                    ps.setLong(1, now)
+                    ps.setString(2, row.collectionId)
+                    ps.setString(3, row.folderId)
+                    ps.setInt(4, insertAt)
+                    ps.executeUpdate()
+                }
+            }
+            conn.prepareStatement(
+                """
+                INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
+                VALUES (?, ?, ?, ?, 'GET', 'https://httpbin.org/get', ?, '', ?, ?, ?, ?, '{}')
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, newId)
+                ps.setString(2, row.collectionId)
+                if (row.folderId == null) ps.setNull(3, java.sql.Types.VARCHAR)
+                else ps.setString(3, row.folderId)
+                ps.setString(4, "新请求")
+                ps.setString(5, defaultHeaders)
+                ps.setString(6, defaultBody)
+                ps.setInt(7, insertAt)
+                ps.setLong(8, now)
+                ps.setLong(9, now)
+                ps.executeUpdate()
+            }
+            conn.commit()
+            newId
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = oldAutoCommit
+        }
+    }
+
     fun renameCollection(id: String, name: String) {
         val now = System.currentTimeMillis()
         conn.prepareStatement("UPDATE collections SET name = ?, updated_at = ? WHERE id = ?").use { ps ->

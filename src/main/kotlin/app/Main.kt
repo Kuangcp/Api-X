@@ -776,10 +776,28 @@ fun WindowScope.App(
                         responsePartialLine = null
                     }
                 },
-                onImportCurlClick = {
+                onImportCurlClick = importCurl@{
                     try {
+                        val activeId = editorRequestId
+                        if (activeId == null) {
+                            setSingleResponseMessage(responseLines, "请先在编辑器中打开一个请求后再导入 cURL")
+                            responsePartialLine = null
+                            return@importCurl
+                        }
                         val clipboardText = readClipboardText()
                         val parsed = parseCurlCommand(clipboardText)
+                        saveEditorIfBound()
+                        val newId = repository.createRequestBelow(activeId)
+                            ?: throw IllegalStateException("无法在当前请求下新建条目")
+                        refreshTree()
+                        val placed = repository.getRequest(newId)
+                            ?: throw IllegalStateException("新建请求后无法读取")
+                        expandedCollectionIds = expandedCollectionIds + placed.collectionId
+                        if (placed.folderId != null) {
+                            expandedFolderIds = expandedFolderIds + placed.folderId
+                        }
+                        applyRequestToEditor(newId)
+                        treeSelection = TreeSelection.Request(newId)
                         method = parsed.method
                         val rawUrl = parsed.url.ifBlank { url }
                         val (urlNoQuery, queryParamsText) = splitUrlQueryForParamsEditor(rawUrl)
@@ -787,12 +805,10 @@ fun WindowScope.App(
                         paramsText = queryParamsText
                         headersText = parsed.headers.joinToString("\n")
                         bodyText = migrateFormBodyToEditorLinesIfNeeded(parsed.body, headersText)
-                        editorRequestId?.let {
-                            repository.saveRequestEditorFields(
-                                it, method, url, headersText, paramsText, bodyText, auth,
-                            )
-                        }
-                        setSingleResponseMessage(responseLines, "已从剪贴板导入 cURL")
+                        repository.saveRequestEditorFields(
+                            newId, method, url, headersText, paramsText, bodyText, auth,
+                        )
+                        setSingleResponseMessage(responseLines, "已新建请求并导入剪贴板中的 cURL")
                         responsePartialLine = null
                         responseHeaderLines.clear()
                         responseHeaderLines.add("(暂无响应头)")
