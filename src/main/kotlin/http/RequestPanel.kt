@@ -981,6 +981,7 @@ fun RequestEditorPane(
                         scrollState = headersScrollState,
                         hintLine = "",
                         modifier = Modifier.fillMaxSize(),
+                        defaultEditMode = KeyValueEditorMode.Form,
                     )
                     VerticalScrollbar(
                         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
@@ -997,6 +998,7 @@ fun RequestEditorPane(
                         scrollState = paramsScrollState,
                         hintLine = "可与 URL 栏内已有 ?query 用 & 合并。",
                         modifier = Modifier.fillMaxSize(),
+                        defaultEditMode = KeyValueEditorMode.Form,
                     )
                     VerticalScrollbar(
                         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
