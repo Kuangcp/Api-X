@@ -591,18 +591,26 @@ fun WindowScope.RequestTopBar(
     val isWindowMaximized = mainWindowState.placement == WindowPlacement.Maximized ||
         mainWindowState.placement == WindowPlacement.Fullscreen
 
+    /** 与窗口控制按钮同一行、同一高度带，避免左侧控件与右侧「最小化/最大化/关闭」视觉错位 */
+    val topBarHeight = 36.dp
+
     Column(modifier = modifier.fillMaxWidth()) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(topBarHeight),
             horizontalArrangement = Arrangement.spacedBy(0.dp),
-            // 与 Top 对齐：避免环境按钮较高时整行垂直居中，导致窗口控制键上方出现空白
-            verticalAlignment = Alignment.Top
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             WindowDraggableArea(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
             ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .fillMaxHeight(),
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -676,7 +684,7 @@ fun WindowScope.RequestTopBar(
                             onClick = { envMenuExpanded = true },
                             enabled = !isLoading,
                             modifier = Modifier.widthIn(max = 200.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -793,7 +801,6 @@ fun WindowScope.RequestTopBar(
             }
         }
         Divider(
-            modifier = Modifier.padding(top = 2.dp),
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
         )
     }
