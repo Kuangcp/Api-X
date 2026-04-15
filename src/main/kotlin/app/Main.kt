@@ -68,6 +68,8 @@ import db.HarSnapshot
 import db.HistoryEntry
 import db.RequestResponseStore
 import http.applyEnvironmentVariables
+import http.bodyWirePayloadForHttp
+import http.migrateFormBodyToEditorLinesIfNeeded
 import http.resolveAuthToHeaders
 import http.BufferUpdate
 import http.RequestControl
@@ -107,10 +109,10 @@ fun App() {
     var url by remember { mutableStateOf("https://httpbin.org/get") }
     var headersText by remember {
         mutableStateOf(
-            "Content-Type: application/json\nAccept: application/json"
+            "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
         )
     }
-    var bodyText by remember { mutableStateOf("{\n  \"name\": \"api-x\"\n}") }
+    var bodyText by remember { mutableStateOf("key: value") }
     var paramsText by remember { mutableStateOf("") }
     var auth by remember { mutableStateOf<PostmanAuth?>(null) }
 
@@ -166,7 +168,7 @@ fun App() {
         url = r.url
         headersText = r.headersText
         paramsText = r.paramsText
-        bodyText = r.bodyText
+        bodyText = migrateFormBodyToEditorLinesIfNeeded(r.bodyText, r.headersText)
         auth = r.auth
         RecentRequestUsageStore.touch(reqId)
     }
@@ -248,7 +250,7 @@ fun App() {
     var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
     var splitRatio by remember { mutableStateOf(0.5f) }
     var contentRowWidthPx by remember { mutableStateOf(1f) }
-    var leftTabIndex by remember { mutableStateOf(0) }
+    var leftTabIndex by remember { mutableStateOf(1) }
     var rightTabIndex by remember(responseScopeKey) {
         mutableStateOf(cachedResponse?.rightTabIndex?.coerceIn(0, 2) ?: 0)
     }
@@ -395,7 +397,10 @@ fun App() {
             else reqHeadersFullSnap + "\n" + authHeaders.joinToString("\n") { "${it.first}: ${it.second}" }
         }
 
-        val reqBodySnap = applyEnvironmentVariables(bodyText, varMap)
+        val reqBodySnap = bodyWirePayloadForHttp(
+            applyEnvironmentVariables(bodyText, varMap),
+            finalHeaders,
+        )
         exchangeRequestPlainText = formatActualRequestPlainText(
             reqMethodSnap,
             effectiveRequestUrl,
@@ -572,7 +577,10 @@ fun App() {
         val resolvedParams = applyEnvironmentVariables(paramsText, varMap)
         val cancelUrl = mergeUrlWithParams(resolvedUrl, parseHeadersForSend(resolvedParams))
         val resolvedHeaders = applyEnvironmentVariables(headersText, varMap)
-        val resolvedBody = applyEnvironmentVariables(bodyText, varMap)
+        val resolvedBody = bodyWirePayloadForHttp(
+            applyEnvironmentVariables(bodyText, varMap),
+            resolvedHeaders,
+        )
         RequestResponseStore.save(
             boundId,
             HarSnapshot(
@@ -773,7 +781,7 @@ fun App() {
                         url = urlNoQuery.ifBlank { rawUrl }
                         paramsText = queryParamsText
                         headersText = parsed.headers.joinToString("\n")
-                        bodyText = parsed.body
+                        bodyText = migrateFormBodyToEditorLinesIfNeeded(parsed.body, headersText)
                         editorRequestId?.let {
                             repository.saveRequestEditorFields(
                                 it, method, url, headersText, paramsText, bodyText, auth,

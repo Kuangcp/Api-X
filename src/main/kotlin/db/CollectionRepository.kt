@@ -231,8 +231,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val now = System.currentTimeMillis()
         val sort = nextRequestSortOrder(collectionId, folderId)
         // 须用 Kotlin 普通字符串里的真实换行；勿写在 """ """ SQL 里，否则 \n 会按字面存入库
-        val defaultHeaders = "Content-Type: application/json\nAccept: application/json"
-        val defaultBody = "{\n  \"name\": \"api-x\"\n}"
+        val defaultHeaders = "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
+        val defaultBody = "key: value"
         conn.prepareStatement(
             """
             INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)

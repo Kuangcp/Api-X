@@ -125,8 +125,9 @@ private fun HeaderLikeKeyValueEditor(
     scrollState: ScrollState,
     hintLine: String,
     modifier: Modifier = Modifier,
+    defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
 ) {
-    var editMode by remember { mutableStateOf(KeyValueEditorMode.Text) }
+    var editMode by remember(editorRequestId, defaultEditMode) { mutableStateOf(defaultEditMode) }
     val formRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
     val formOrphans = remember { mutableStateListOf<String>() }
 
@@ -785,6 +786,57 @@ fun RequestSidePanel(
     }
 }
 
+@Composable
+private fun BodyContentKindSelector(
+    exchangeMetrics: ExchangeFontMetrics,
+    headersText: String,
+    onHeadersTextChange: (String) -> Unit,
+    enabled: Boolean,
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    val kind = inferBodyKindFromHeaders(headersText)
+    val typeLabel = when (kind) {
+        BodyContentKind.FormUrlEncoded -> "表单"
+        BodyContentKind.Json -> "JSON"
+        BodyContentKind.Xml -> "XML"
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            "Type: ",
+            fontSize = exchangeMetrics.tab,
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.6f),
+        )
+        Box {
+            TextButton(
+                onClick = { showMenu = true },
+                enabled = enabled,
+                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+            ) {
+                Text(typeLabel, fontSize = exchangeMetrics.tab)
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                listOf(
+                    BodyContentKind.FormUrlEncoded to "表单",
+                    BodyContentKind.Json to "JSON",
+                    BodyContentKind.Xml to "XML",
+                ).forEach { (k, label) ->
+                    DropdownMenuItem(
+                        onClick = {
+                            showMenu = false
+                            onHeadersTextChange(
+                                upsertContentTypeHeader(headersText, contentTypeValueForBodyKind(k)),
+                            )
+                        },
+                    ) {
+                        Text(label, fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
+                    }
+                }
+            }
+        }
+    }
+}
+
 /** 左侧 Body / Headers / Params 编辑区（分割条左侧） */
 @Composable
 fun RequestEditorPane(
@@ -852,44 +904,66 @@ fun RequestEditorPane(
         ) {
             when (leftTabIndex) {
                 0 -> {
+                    val bodyKind = inferBodyKindFromHeaders(headersText)
                     Column(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(end = 10.dp)
+                        modifier = Modifier.fillMaxSize()
                     ) {
+                        Box(modifier = Modifier.padding(end = 10.dp)) {
+                            BodyContentKindSelector(
+                                exchangeMetrics = exchangeMetrics,
+                                headersText = headersText,
+                                onHeadersTextChange = onHeadersTextChange,
+                                enabled = !isLoading,
+                            )
+                        }
                         Text(
                             "Body（POST / PUT 等会携带）",
                             fontSize = exchangeMetrics.tab,
                             color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                            modifier = Modifier.padding(bottom = 4.dp, start = 2.dp)
+                            modifier = Modifier.padding(bottom = 4.dp, start = 2.dp, top = 4.dp, end = 10.dp)
                         )
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(4.dp))
-                                .border(
-                                    1.dp,
-                                    MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                                    RoundedCornerShape(4.dp)
-                                )
-                                .background(MaterialTheme.colors.surface)
-                        ) {
-                            BasicTextField(
-                                value = bodyText,
-                                onValueChange = onBodyTextChange,
-                                enabled = !isLoading,
-                                textStyle = MaterialTheme.typography.body2.copy(
-                                    fontSize = exchangeMetrics.body,
-                                    color = MaterialTheme.colors.onSurface.copy(
-                                        alpha = if (!isLoading) 1f else ContentAlpha.disabled
-                                    )
-                                ),
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .verticalScroll(bodyScrollState)
-                                    .padding(10.dp)
+                        if (bodyKind == BodyContentKind.FormUrlEncoded) {
+                            HeaderLikeKeyValueEditor(
+                                exchangeMetrics = exchangeMetrics,
+                                editorRequestId = editorRequestId,
+                                isLoading = isLoading,
+                                text = bodyText,
+                                onTextChange = onBodyTextChange,
+                                scrollState = bodyScrollState,
+                                hintLine = "",
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                                defaultEditMode = KeyValueEditorMode.Form,
                             )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxWidth()
+                                    .padding(end = 10.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .border(
+                                        1.dp,
+                                        MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                        RoundedCornerShape(4.dp)
+                                    )
+                                    .background(MaterialTheme.colors.surface)
+                            ) {
+                                BasicTextField(
+                                    value = bodyText,
+                                    onValueChange = onBodyTextChange,
+                                    enabled = !isLoading,
+                                    textStyle = MaterialTheme.typography.body2.copy(
+                                        fontSize = exchangeMetrics.body,
+                                        color = MaterialTheme.colors.onSurface.copy(
+                                            alpha = if (!isLoading) 1f else ContentAlpha.disabled
+                                        )
+                                    ),
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(bodyScrollState)
+                                        .padding(10.dp)
+                                )
+                            }
                         }
                     }
                     VerticalScrollbar(
