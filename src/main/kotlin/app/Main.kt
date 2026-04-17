@@ -59,6 +59,7 @@ import java.nio.file.Files
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
+import java.net.URI
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import db.AppPaths
@@ -800,6 +801,21 @@ fun WindowScope.App(
                         treeSelection = TreeSelection.Request(newId)
                         method = parsed.method
                         val rawUrl = parsed.url.ifBlank { url }
+                        val urlForName = parsed.url.ifBlank { rawUrl }
+                        if (urlForName.isNotBlank()) {
+                            try {
+                                val uri = URI(urlForName)
+                                val path = uri.path
+                                if (!path.isNullOrBlank()) {
+                                    val name = path.substringAfterLast('/')
+                                    if (name.isNotBlank()) {
+                                        repository.renameRequest(newId, name)
+                                        refreshTree()
+                                    }
+                                }
+                            } catch (_: Exception) {
+                            }
+                        }
                         val (urlNoQuery, queryParamsText) = splitUrlQueryForParamsEditor(rawUrl)
                         url = urlNoQuery.ifBlank { rawUrl }
                         paramsText = queryParamsText
