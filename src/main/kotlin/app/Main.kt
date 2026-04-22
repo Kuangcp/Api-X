@@ -37,7 +37,6 @@ import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -46,7 +45,6 @@ import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
-import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -101,10 +99,22 @@ import tree.expandSetsForRequest
 import tree.firstRequestSelection
 
 @Composable
-fun WindowScope.App(
-    mainWindowState: WindowState = rememberWindowState(),
-    onWindowCloseRequest: () -> Unit = {},
-) {
+fun App(onExitRequest: () -> Unit) {
+    val loaded = remember { WindowPrefs.load() }
+    val hasWindowIcon = remember {
+        AppClasspathAnchor::class.java.classLoader?.getResource("app-icon.png") != null
+    }
+    val windowIcon = if (hasWindowIcon) painterResource("app-icon.png") else null
+    val windowState = rememberWindowState(
+        position = if (loaded.xDp != null && loaded.yDp != null) {
+            WindowPosition.Absolute(loaded.xDp.dp, loaded.yDp.dp)
+        } else {
+            WindowPosition.PlatformDefault
+        },
+        width = loaded.widthDp.dp,
+        height = loaded.heightDp.dp,
+    )
+
     val repository = remember { CollectionRepository(AppPaths.collectionDatabasePath()) }
 
     var method by remember { mutableStateOf("GET") }
@@ -620,6 +630,107 @@ fun WindowScope.App(
         activeRequestThread = null
     }
 
+    Window(
+        title = "Api-X",
+        icon = windowIcon,
+        state = windowState,
+        undecorated = true,
+        onCloseRequest = {
+            persistWindowGeometry(windowState)
+            onExitRequest()
+        },
+        onPreviewKeyEvent = { event ->
+            if (recentSwitcherActive) {
+                when (event.type) {
+                    KeyEventType.KeyDown -> {
+                        when {
+                            event.key == Key.Escape -> {
+                                recentSwitcherActive = false
+                                true
+                            }
+                            event.isCtrlPressed && event.key == Key.Tab -> {
+                                val list = recentSwitcherIds
+                                if (list.isEmpty()) {
+                                    recentSwitcherActive = false
+                                    true
+                                } else {
+                                    val forward = !event.isShiftPressed
+                                    recentSwitcherIndex =
+                                        if (forward) {
+                                            (recentSwitcherIndex + 1) % list.size
+                                        } else {
+                                            (recentSwitcherIndex - 1 + list.size) % list.size
+                                        }
+                                    true
+                                }
+                            }
+                            else -> false
+                        }
+                    }
+                    KeyEventType.KeyUp -> {
+                        if (event.key == Key.CtrlLeft || event.key == Key.CtrlRight) {
+                            val list = recentSwitcherIds
+                            recentSwitcherActive = false
+                            if (list.isNotEmpty()) {
+                                val id = list[recentSwitcherIndex.coerceIn(0, list.lastIndex)]
+                                if (repository.getRequest(id) != null) {
+                                    expandSetsForRequest(tree, id)?.let { (cols, folders) ->
+                                        expandedCollectionIds = expandedCollectionIds + cols
+                                        expandedFolderIds = expandedFolderIds + folders
+                                    }
+                                    selectTreeNode(TreeSelection.Request(id))
+                                }
+                            }
+                            true
+                        } else {
+                            false
+                        }
+                    }
+                    else -> false
+                }
+            } else {
+                if (event.type == KeyEventType.KeyDown) {
+                    when {
+                        event.isCtrlPressed && event.key == Key.Tab -> {
+                            val list = mruRequestIdsForSwitcher()
+                            if (list.isEmpty()) {
+                                false
+                            } else {
+                                recentSwitcherIds = list
+                                recentSwitcherActive = true
+                                recentSwitcherIndex =
+                                    when {
+                                        list.size == 1 -> 0
+                                        !event.isShiftPressed -> 1
+                                        else -> list.lastIndex
+                                    }
+                                true
+                            }
+                        }
+                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> {
+                            showGlobalSearch = true
+                            true
+                        }
+                        event.isCtrlPressed && event.key == Key.Enter -> {
+                            startRequest()
+                            true
+                        }
+                        event.key == Key.Escape -> {
+                            if (isLoading) {
+                                cancelActiveRequest()
+                                true
+                            } else {
+                                false
+                            }
+                        }
+                        else -> false
+                    }
+                } else {
+                    false
+                }
+            }
+        },
+    ) {
     MaterialTheme(
         colors = appMaterialColors(isDarkTheme, appSettings.backgroundHex),
         typography = typographyFromSettings(appSettings),
@@ -633,98 +744,7 @@ fun WindowScope.App(
                 .fillMaxSize()
                 .background(MaterialTheme.colors.background)
                 // 顶栏贴窗口上缘（无边框窗口下最小化/最大化/关闭更紧凑）；左右与底部仍留白
-                .padding(start = 10.dp, end = 10.dp, bottom = 10.dp)
-                .onPreviewKeyEvent { event ->
-                    if (recentSwitcherActive) {
-                        when (event.type) {
-                            KeyEventType.KeyDown -> {
-                                when {
-                                    event.key == Key.Escape -> {
-                                        recentSwitcherActive = false
-                                        true
-                                    }
-                                    event.isCtrlPressed && event.key == Key.Tab -> {
-                                        val list = recentSwitcherIds
-                                        if (list.isEmpty()) {
-                                            recentSwitcherActive = false
-                                            true
-                                        } else {
-                                            val forward = !event.isShiftPressed
-                                            recentSwitcherIndex =
-                                                if (forward) {
-                                                    (recentSwitcherIndex + 1) % list.size
-                                                } else {
-                                                    (recentSwitcherIndex - 1 + list.size) % list.size
-                                                }
-                                            true
-                                        }
-                                    }
-                                    else -> false
-                                }
-                            }
-                            KeyEventType.KeyUp -> {
-                                if (event.key == Key.CtrlLeft || event.key == Key.CtrlRight) {
-                                    val list = recentSwitcherIds
-                                    recentSwitcherActive = false
-                                    if (list.isNotEmpty()) {
-                                        val id = list[recentSwitcherIndex.coerceIn(0, list.lastIndex)]
-                                        if (repository.getRequest(id) != null) {
-                                            expandSetsForRequest(tree, id)?.let { (cols, folders) ->
-                                                expandedCollectionIds = expandedCollectionIds + cols
-                                                expandedFolderIds = expandedFolderIds + folders
-                                            }
-                                            selectTreeNode(TreeSelection.Request(id))
-                                        }
-                                    }
-                                    true
-                                } else {
-                                    false
-                                }
-                            }
-                            else -> false
-                        }
-                    } else {
-                        if (event.type == KeyEventType.KeyDown) {
-                            when {
-                                event.isCtrlPressed && event.key == Key.Tab -> {
-                                    val list = mruRequestIdsForSwitcher()
-                                    if (list.isEmpty()) {
-                                        false
-                                    } else {
-                                        recentSwitcherIds = list
-                                        recentSwitcherActive = true
-                                        recentSwitcherIndex =
-                                            when {
-                                                list.size == 1 -> 0
-                                                !event.isShiftPressed -> 1
-                                                else -> list.lastIndex
-                                            }
-                                        true
-                                    }
-                                }
-                                (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> {
-                                    showGlobalSearch = true
-                                    true
-                                }
-                                event.isCtrlPressed && event.key == Key.Enter -> {
-                                    startRequest()
-                                    true
-                                }
-                                event.key == Key.Escape -> {
-                                    if (isLoading) {
-                                        cancelActiveRequest()
-                                        true
-                                    } else {
-                                        false
-                                    }
-                                }
-                                else -> false
-                            }
-                        } else {
-                            false
-                        }
-                    }
-                },
+                .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             RequestTopBar(
@@ -739,8 +759,11 @@ fun WindowScope.App(
                 onManageEnvironmentsClick = { showEnvironmentManager = true },
                 onThemeToggle = { isDarkTheme = !isDarkTheme },
                 onSettingsClick = { showSettings = true },
-                mainWindowState = mainWindowState,
-                onWindowCloseRequest = onWindowCloseRequest,
+                mainWindowState = windowState,
+                onWindowCloseRequest = {
+                    persistWindowGeometry(windowState)
+                    onExitRequest()
+                },
                 onImportCollectionClick = {
                     EventQueue.invokeLater {
                         val chooser = JFileChooser()
@@ -1209,6 +1232,7 @@ fun WindowScope.App(
             )
         }
     }
+    }
 }
 
 private const val UI_REFRESH_INTERVAL_MS = 100L
@@ -1334,38 +1358,7 @@ private fun writeClipboardText(text: String) {
 private object AppClasspathAnchor
 
 fun main() = application {
-    val loaded = remember { WindowPrefs.load() }
-    val hasWindowIcon = remember {
-        AppClasspathAnchor::class.java.classLoader?.getResource("app-icon.png") != null
-    }
-    val windowIcon = if (hasWindowIcon) painterResource("app-icon.png") else null
-    val windowState = rememberWindowState(
-        position = if (loaded.xDp != null && loaded.yDp != null) {
-            WindowPosition.Absolute(loaded.xDp.dp, loaded.yDp.dp)
-        } else {
-            WindowPosition.PlatformDefault
-        },
-        width = loaded.widthDp.dp,
-        height = loaded.heightDp.dp,
-    )
-    Window(
-        title = "Api-X",
-        icon = windowIcon,
-        state = windowState,
-        undecorated = true,
-        onCloseRequest = {
-            persistWindowGeometry(windowState)
-            exitApplication()
-        },
-    ) {
-        App(
-            mainWindowState = windowState,
-            onWindowCloseRequest = {
-                persistWindowGeometry(windowState)
-                exitApplication()
-            },
-        )
-    }
+    App(onExitRequest = { exitApplication() })
 }
 
 private fun persistWindowGeometry(state: WindowState) {
