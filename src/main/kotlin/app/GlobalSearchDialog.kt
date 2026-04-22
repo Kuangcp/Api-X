@@ -95,7 +95,8 @@ private fun GlobalSearchDialogBody(
     val listState = rememberLazyListState()
     val density = LocalDensity.current
     val defaultRowHeightPx = remember(density) {
-        with(density) { 68.dp.roundToPx() }.coerceAtLeast(24)
+        // 三行元数据：方法+名称、URL、路径
+        with(density) { 90.dp.roundToPx() }.coerceAtLeast(24)
     }
 
     LaunchedEffect(tree) {
@@ -241,6 +242,7 @@ private fun GlobalSearchDialogBody(
                             GlobalSearchResultRow(
                                 method = row.method,
                                 name = row.name,
+                                url = row.url,
                                 location = location,
                                 selected = index == selectedResultIndex,
                                 onClick = {
@@ -259,10 +261,23 @@ private fun GlobalSearchDialogBody(
     }
 }
 
+/** 过长时在中间用省略号，避免一行全是 query 时两端都看不到。 */
+private const val GlobalSearchUrlDisplayMaxChars = 120
+
+private fun ellipsizeUrlForRow(url: String, maxChars: Int): String {
+    val t = url.trim()
+    if (t.length <= maxChars) return t
+    val head = maxOf(8, (maxChars - 1) / 2)
+    val tail = maxChars - 1 - head
+    if (tail <= 0) return t.take(maxChars - 1) + "…"
+    return t.take(head) + "…" + t.takeLast(tail)
+}
+
 @Composable
 private fun GlobalSearchResultRow(
     method: String,
     name: String,
+    url: String,
     location: String,
     selected: Boolean,
     onClick: () -> Unit,
@@ -298,13 +313,26 @@ private fun GlobalSearchResultRow(
                 modifier = Modifier.weight(1f),
             )
         }
+        val displayUrl = url.trim()
+        if (displayUrl.isNotEmpty()) {
+            Text(
+                ellipsizeUrlForRow(displayUrl, GlobalSearchUrlDisplayMaxChars),
+                fontSize = 12.sp,
+                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+            )
+        }
         Text(
             location,
             fontSize = 12.sp,
             color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = if (displayUrl.isNotEmpty()) 2.dp else 4.dp),
         )
     }
 }

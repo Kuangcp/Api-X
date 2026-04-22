@@ -14,8 +14,9 @@ gradle createDistributable 打包
 
 > Request
 request body 功能丰富
-request body json高亮
-- 支持更多参数格式, 表单, 多表单
+request body json高亮 格式化
+
+[X] 支持更多参数格式, 表单, 多表单
 
 [X] 增加快捷键处理 Ctrl Tab 切换Request， 切换时需要弹出一个下拉列表，简洁的展示最近使用的Request，这样就能知道要按几下tab键了，也就是说需要记录最近的Request的打开查看时间，基于这个做倒排， 下拉列表展示Top30 
 
@@ -23,7 +24,7 @@ request body json高亮
 
 > 响应区域
 
-响应区域 默认展示Raw格式, 考虑性能问题, 需要手动切换到 格式化高亮形式
+[X] 响应区域 默认展示Raw格式, 考虑性能问题, 需要手动切换到 格式化高亮形式
 [X] 需要加一个 Request 的tab 展示实际发送请求的request内容, 因为左侧现在有变量和勾选的机制, 不知道实际的请求情况
 
 
