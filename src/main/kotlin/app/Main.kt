@@ -295,6 +295,8 @@ fun App(onExitRequest: () -> Unit) {
     var showSettings by remember { mutableStateOf(false) }
     var showEnvironmentManager by remember { mutableStateOf(false) }
     var showGlobalSearch by remember { mutableStateOf(false) }
+    /** 非 null 时，左侧树在布局后将该请求滚入可视区（如全局搜索选中后同步滚动）。 */
+    var treeScrollToRequestId by remember { mutableStateOf<String?>(null) }
     var recentSwitcherActive by remember { mutableStateOf(false) }
     var recentSwitcherIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var recentSwitcherIndex by remember { mutableStateOf(0) }
@@ -679,6 +681,7 @@ fun App(onExitRequest: () -> Unit) {
                                         expandedFolderIds = expandedFolderIds + folders
                                     }
                                     selectTreeNode(TreeSelection.Request(id))
+                                    treeScrollToRequestId = id
                                 }
                             }
                             true
@@ -874,6 +877,8 @@ fun App(onExitRequest: () -> Unit) {
                     modifier = Modifier.weight(treeSplitRatio),
                     tree = tree,
                     selectedNode = treeSelection,
+                    treeScrollToRequestId = treeScrollToRequestId,
+                    onTreeScrollToRequestHandled = { treeScrollToRequestId = null },
                     editorBoundRequestId = editorRequestId,
                     expandedCollectionIds = expandedCollectionIds,
                     expandedFolderIds = expandedFolderIds,
@@ -1216,6 +1221,7 @@ fun App(onExitRequest: () -> Unit) {
                         expandedFolderIds = expandedFolderIds + folders
                     }
                     selectTreeNode(TreeSelection.Request(id))
+                    treeScrollToRequestId = id
                 },
             )
             CollectionSettingsDialog(

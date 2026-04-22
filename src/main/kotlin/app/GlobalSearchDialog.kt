@@ -246,8 +246,8 @@ private fun GlobalSearchDialogBody(
                                 location = location,
                                 selected = index == selectedResultIndex,
                                 onClick = {
+                                    selectedResultIndex = index
                                     onPickRequest(row.id)
-                                    onCloseRequest()
                                 },
                             )
                             Divider(

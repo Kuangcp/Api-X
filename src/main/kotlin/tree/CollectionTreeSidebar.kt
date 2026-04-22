@@ -21,6 +21,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
@@ -78,6 +80,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.LayoutCoordinates
+import kotlinx.coroutines.delay
 
 private class DropZoneRegistry {
     val zones = mutableStateMapOf<String, Pair<Rect, TreeDropTarget>>()
@@ -145,6 +148,9 @@ private fun TreeDropGap(
 fun CollectionTreeSidebar(
     tree: List<UiCollection>,
     selectedNode: TreeSelection?,
+    /** 非 null 时由对应 Request 行滚入树可视区，之后应调用 [onTreeScrollToRequestHandled]。 */
+    treeScrollToRequestId: String?,
+    onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
@@ -303,6 +309,8 @@ fun CollectionTreeSidebar(
                             collection = coll,
                             depth = 0,
                             selectedNode = selectedNode,
+                            treeScrollToRequestId = treeScrollToRequestId,
+                            onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                             editorBoundRequestId = editorBoundRequestId,
                             expandedCollectionIds = expandedCollectionIds,
                             expandedFolderIds = expandedFolderIds,
@@ -419,6 +427,8 @@ private fun CollectionTreeBlock(
     collection: UiCollection,
     depth: Int,
     selectedNode: TreeSelection?,
+    treeScrollToRequestId: String?,
+    onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
@@ -516,6 +526,8 @@ private fun CollectionTreeBlock(
                 folder = folder,
                 depth = depth + 1,
                 selectedNode = selectedNode,
+                treeScrollToRequestId = treeScrollToRequestId,
+                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
@@ -553,6 +565,8 @@ private fun CollectionTreeBlock(
                 req = req,
                 depth = depth + 1,
                 selectedNode = selectedNode,
+                treeScrollToRequestId = treeScrollToRequestId,
+                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
@@ -579,6 +593,8 @@ private fun FolderTreeBlock(
     folder: UiFolder,
     depth: Int,
     selectedNode: TreeSelection?,
+    treeScrollToRequestId: String?,
+    onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     expandedFolderIds: Set<String>,
     onToggleFolder: (String) -> Unit,
@@ -684,6 +700,8 @@ private fun FolderTreeBlock(
                 folder = child,
                 depth = depth + 1,
                 selectedNode = selectedNode,
+                treeScrollToRequestId = treeScrollToRequestId,
+                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 expandedFolderIds = expandedFolderIds,
                 onToggleFolder = onToggleFolder,
@@ -721,6 +739,8 @@ private fun FolderTreeBlock(
                 req = req,
                 depth = depth + 1,
                 selectedNode = selectedNode,
+                treeScrollToRequestId = treeScrollToRequestId,
+                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
@@ -746,6 +766,8 @@ private fun RequestTreeRow(
     req: UiRequestSummary,
     depth: Int,
     selectedNode: TreeSelection?,
+    treeScrollToRequestId: String?,
+    onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     onSelectNode: (TreeSelection) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
@@ -758,7 +780,14 @@ private fun RequestTreeRow(
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
     val rowLc = remember(req.id) { LayoutCoordsHolder() }
+    val bringIntoViewRequester = remember(req.id) { BringIntoViewRequester() }
     val payload = TreeDragPayload.Request(req.id)
+    LaunchedEffect(treeScrollToRequestId, req.id) {
+        if (treeScrollToRequestId == null || treeScrollToRequestId != req.id) return@LaunchedEffect
+        delay(32)
+        runCatching { bringIntoViewRequester.bringIntoView() }
+        onTreeScrollToRequestHandled()
+    }
     ContextMenuArea(
         items = {
             listOf(
@@ -803,7 +832,9 @@ private fun RequestTreeRow(
                 onSelectNode(TreeSelection.Request(req.id))
                 onBeginTreeRename(TreeSelection.Request(req.id), req.name)
             },
-            rowExtraModifier = Modifier.onGloballyPositioned { rowLc.coords = it },
+            rowExtraModifier = Modifier
+                .bringIntoViewRequester(bringIntoViewRequester)
+                .onGloballyPositioned { rowLc.coords = it },
             dragModifier = Modifier.pointerInput(payload) {
                 detectDragGestures(
                     onDragStart = { offset ->
