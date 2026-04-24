@@ -1,22 +1,23 @@
 # Api-X
 
-JDK21
+[中文说明](Readme-CN.md)
 
-gradle run 调试运行
-gradle createDistributable 打包
+JDK 21
 
+- `gradle run` — run in development / debug
+- `gradle createDistributable` — build a distributable package
 
-## 功能列表
-- 导入导出 Postman Collection 格式数据
-- 主题切换
-- 请求运行日志
-- Ctrl K 全局搜索
-- Ctrl Tab 切换最近Request
-- 多Env切换和变量解析
-- 文件夹Auth继承
+## Features
 
+- Import and export Postman Collection format
+- Theme switching
+- Request run / execution logs
+- `Ctrl+K` global search
+- `Ctrl+Tab` to switch between recent requests
+- Multi-environment switching and variable resolution
+- Folder auth inheritance
 
-## 页面截图
+## Screenshots
 
 ![](./img/Snipaste_2026-04-24_19-36-21.png)
 ![](./img/Snipaste_2026-04-24_19-36-37.png)
@@ -24,5 +25,3 @@ gradle createDistributable 打包
 ![](./img/Snipaste_2026-04-24_19-39-55.png)
 ![](./img/Snipaste_2026-04-24_19-40-07.png)
 ![](./img/Snipaste_2026-04-24_19-41-31.png)
-
-
