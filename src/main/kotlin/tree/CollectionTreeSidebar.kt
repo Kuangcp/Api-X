@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
@@ -77,6 +78,7 @@ import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -803,26 +805,49 @@ private fun RequestTreeRow(
             )
         }
     ) {
+        val folderNesting = (depth - 1).coerceAtLeast(0)
+        // 按 Folder 嵌套层数 深 / 浅 交替，便于扫一眼区分相邻层级
+        val methodBadgeColor = if (folderNesting % 2 == 0) {
+            MaterialTheme.colors.primary.copy(alpha = 0.22f)
+        } else {
+            MaterialTheme.colors.primary.copy(alpha = 0.11f)
+        }
+        val methodIconColumnW = 36.dp
         TreeRow(
             depth = depth,
+            iconColumnWidth = methodIconColumnW,
+            iconNameSpacing = 6.dp,
             icon = {
-                Text(
-                    req.method.uppercase(),
-                    style = TextStyle(
-                        fontSize = 12.sp,
-                        lineHeight = 14.sp,
-                        lineHeightStyle = LineHeightStyle(
-                            alignment = LineHeightStyle.Alignment.Center,
-                            trim = LineHeightStyle.Trim.Both,
-                        ),
-                    ),
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Clip,
-                    textAlign = TextAlign.Center,
-                    color = MaterialTheme.colors.primary.copy(alpha = 0.95f),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // 外框占满列宽、左对齐；方法底色随字宽，Request 名仍从固定列后开始
+                Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
+                    Box(
+                        modifier = Modifier
+                            .widthIn(max = methodIconColumnW)
+                            .background(
+                                methodBadgeColor,
+                                RoundedCornerShape(3.dp)
+                            )
+                            .padding(horizontal = 4.dp, vertical = 1.dp),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        Text(
+                            req.method.uppercase(),
+                            style = TextStyle(
+                                fontSize = 10.sp,
+                                lineHeight = 12.sp,
+                                lineHeightStyle = LineHeightStyle(
+                                    alignment = LineHeightStyle.Alignment.Center,
+                                    trim = LineHeightStyle.Trim.Both,
+                                ),
+                            ),
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.Start,
+                            color = MaterialTheme.colors.primary.copy(alpha = 0.88f),
+                        )
+                    }
+                }
             },
             expandIcon = { Spacer(Modifier.width(20.dp)) },
             label = req.name,
@@ -868,6 +893,10 @@ private fun TreeRow(
      */
     dragModifier: Modifier = Modifier,
     dropTargetHighlight: Boolean = false,
+    /** 方法列等图标的固定宽度，Request 可略小以视觉更轻。 */
+    iconColumnWidth: Dp = 42.dp,
+    /** 图标与标题名之间的留白。 */
+    iconNameSpacing: Dp = 0.dp,
 ) {
     val doubleTapMs = LocalViewConfiguration.current.doubleTapTimeoutMillis
     var lastClickMs by remember { mutableStateOf(0L) }
@@ -908,9 +937,10 @@ private fun TreeRow(
         Box(Modifier.width(23.dp), contentAlignment = Alignment.Center) {
             expandIcon()
         }
-        Box(Modifier.width(42.dp), contentAlignment = Alignment.Center) {
+        Box(Modifier.width(iconColumnWidth), contentAlignment = Alignment.Center) {
             icon()
         }
+        Spacer(Modifier.width(iconNameSpacing))
         Text(
             label,
             style = TextStyle(
