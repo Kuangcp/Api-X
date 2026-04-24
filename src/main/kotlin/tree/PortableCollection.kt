@@ -14,6 +14,8 @@ data class PortableCollection(
     val auth: PostmanAuth? = null,
     val folders: List<PortableFolder> = emptyList(),
     val rootRequests: List<PortableRequest> = emptyList(),
+    /** 本应用导出时写入；用于 data 目录按 id 合并。外部 Postman 文件通常无此字段。 */
+    val id: String? = null,
 )
 
 data class PortableFolder(
@@ -23,6 +25,8 @@ data class PortableFolder(
     val auth: PostmanAuth? = null,
     val folders: List<PortableFolder> = emptyList(),
     val requests: List<PortableRequest> = emptyList(),
+    /** 与 DB `folders.id` 对应；导出时写入 Postman item。 */
+    val id: String? = null,
 )
 
 data class PortableRequest(
@@ -35,4 +39,6 @@ data class PortableRequest(
     val sortOrder: Int = 0,
     val metaJson: String = "{}",
     val auth: PostmanAuth? = null,
+    /** 与 DB `requests.id` 对应。 */
+    val id: String? = null,
 )

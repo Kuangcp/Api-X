@@ -798,7 +798,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    /** 导出为与存储无关的结构，供 Postman / OpenAPI 等适配层序列化。 */
+    /** 导出为与 storage 无关的结构，供 Postman / data 目录等序列化。 */
     fun exportPortableCollection(collectionId: String): PortableCollection? {
         val row = getCollectionRow(collectionId) ?: return null
         return PortableCollection(
@@ -807,7 +807,98 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             auth = extractAuthFromMetaJson(row.metaJson),
             folders = buildPortableFolderTree(collectionId, null),
             rootRequests = loadPortableRequests(collectionId, null),
+            id = collectionId,
         )
+    }
+
+    /** 所有集合 id（与 [loadTree] 顺序一致）。 */
+    fun listCollectionIds(): List<String> {
+        val out = mutableListOf<String>()
+        conn.prepareStatement("SELECT id FROM collections ORDER BY sort_order ASC, name ASC").use { ps ->
+            ps.executeQuery().use { rs ->
+                while (rs.next()) out += rs.getString("id")
+            }
+        }
+        return out
+    }
+
+    fun collectionExists(collectionId: String): Boolean {
+        conn.prepareStatement("SELECT 1 FROM collections WHERE id = ?").use { ps ->
+            ps.setString(1, collectionId)
+            ps.executeQuery().use { return it.next() }
+        }
+    }
+
+    /**
+     * 将 [portable] 按 id 合并进已有集合 [targetCollectionId]：仅新增与更新，不删除 DB 中已有行。
+     */
+    fun mergePortableIntoCollection(targetCollectionId: String, portable: PortableCollection) {
+        if (!collectionExists(targetCollectionId)) return
+        val now = System.currentTimeMillis()
+        val oldAutoCommit = conn.autoCommit
+        conn.autoCommit = false
+        try {
+            val metaJson = mergeAuthIntoMetaJson(portable.collectionMetaJson, portable.auth)
+            conn.prepareStatement(
+                "UPDATE collections SET name = ?, meta_json = ?, updated_at = ? WHERE id = ?"
+            ).use { ps ->
+                ps.setString(1, portable.name)
+                ps.setString(2, metaJson)
+                ps.setLong(3, now)
+                ps.setString(4, targetCollectionId)
+                ps.executeUpdate()
+            }
+            mergePortableFolders(targetCollectionId, null, portable.folders, now)
+            mergePortableRequestsInFolder(targetCollectionId, null, portable.rootRequests, now)
+            conn.commit()
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = oldAutoCommit
+        }
+    }
+
+    /**
+     * 以固定 [collectionId] 新建集合并落库（与 [importAsNewCollection] 类似，用于从 data 目录拉取新文件）。
+     */
+    fun importAsNewCollectionWithFixedId(collectionId: String, portable: PortableCollection) {
+        require(collectionId.isNotBlank())
+        if (collectionExists(collectionId)) {
+            throw IllegalStateException("集合已存在: $collectionId")
+        }
+        val now = System.currentTimeMillis()
+        val name = portable.name
+        val metaJson = mergeAuthIntoMetaJson(portable.collectionMetaJson, portable.auth)
+        val oldAutoCommit = conn.autoCommit
+        conn.autoCommit = false
+        try {
+            val sort = nextCollectionSortOrder()
+            conn.prepareStatement(
+                """
+                INSERT INTO collections (id, name, sort_order, created_at, updated_at, meta_json)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """.trimIndent()
+            ).use { ps ->
+                ps.setString(1, collectionId)
+                ps.setString(2, name)
+                ps.setInt(3, sort)
+                ps.setLong(4, now)
+                ps.setLong(5, now)
+                ps.setString(6, metaJson)
+                ps.executeUpdate()
+            }
+            insertPortableFolders(collectionId, null, portable.folders, now)
+            for (req in portable.rootRequests) {
+                insertPortableRequest(collectionId, null, req, now)
+            }
+            conn.commit()
+        } catch (e: Exception) {
+            conn.rollback()
+            throw e
+        } finally {
+            conn.autoCommit = oldAutoCommit
+        }
     }
 
     /** 用于导入：新建一个集合并写入整棵树（事务内）；不覆盖已有集合。返回新集合 id。 */
@@ -843,6 +934,160 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
             throw e
         } finally {
             conn.autoCommit = true
+        }
+    }
+
+    private fun getRequestCollectionId(requestId: String): String? {
+        conn.prepareStatement("SELECT collection_id FROM requests WHERE id = ?").use { ps ->
+            ps.setString(1, requestId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) return rs.getString("collection_id")
+            }
+        }
+        return null
+    }
+
+    private fun mergePortableFolders(
+        collectionId: String,
+        parentFolderId: String?,
+        folders: List<PortableFolder>,
+        now: Long,
+    ) {
+        for (pf in folders) {
+            val actualId = resolveAndMergeFolder(collectionId, parentFolderId, pf, now)
+            mergePortableFolders(collectionId, actualId, pf.folders, now)
+            mergePortableRequestsInFolder(collectionId, actualId, pf.requests, now)
+        }
+    }
+
+    private fun resolveAndMergeFolder(
+        collectionId: String,
+        parentFolderId: String?,
+        pf: PortableFolder,
+        now: Long,
+    ): String {
+        val want = pf.id?.trim().orEmpty()
+        val owner = if (want.isNotEmpty()) getFolderCollectionId(want) else null
+        return when {
+            want.isNotEmpty() && owner == collectionId -> {
+                updateFolderFromPortable(want, collectionId, parentFolderId, pf, now)
+                want
+            }
+            want.isNotEmpty() && owner == null -> {
+                insertFolderWithId(want, collectionId, parentFolderId, pf, now)
+                want
+            }
+            else -> {
+                val nid = newId()
+                insertFolderWithId(nid, collectionId, parentFolderId, pf, now)
+                nid
+            }
+        }
+    }
+
+    private fun updateFolderFromPortable(
+        folderId: String,
+        collectionId: String,
+        parentFolderId: String?,
+        pf: PortableFolder,
+        now: Long,
+    ) {
+        val metaJson = mergeAuthIntoMetaJson(pf.metaJson, pf.auth)
+        conn.prepareStatement(
+            """
+            UPDATE folders SET name = ?, parent_folder_id = ?, sort_order = ?, updated_at = ?, meta_json = ?
+            WHERE id = ? AND collection_id = ?
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, pf.name)
+            if (parentFolderId == null) ps.setNull(2, Types.VARCHAR) else ps.setString(2, parentFolderId)
+            ps.setInt(3, pf.sortOrder)
+            ps.setLong(4, now)
+            ps.setString(5, metaJson)
+            ps.setString(6, folderId)
+            ps.setString(7, collectionId)
+            ps.executeUpdate()
+        }
+    }
+
+    private fun insertFolderWithId(
+        folderId: String,
+        collectionId: String,
+        parentFolderId: String?,
+        pf: PortableFolder,
+        now: Long,
+    ) {
+        val metaJson = mergeAuthIntoMetaJson(pf.metaJson, pf.auth)
+        conn.prepareStatement(
+            """
+            INSERT INTO folders (id, collection_id, parent_folder_id, name, sort_order, created_at, updated_at, meta_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, folderId)
+            ps.setString(2, collectionId)
+            if (parentFolderId == null) ps.setNull(3, Types.VARCHAR) else ps.setString(3, parentFolderId)
+            ps.setString(4, pf.name)
+            ps.setInt(5, pf.sortOrder)
+            ps.setLong(6, now)
+            ps.setLong(7, now)
+            ps.setString(8, metaJson)
+            ps.executeUpdate()
+        }
+    }
+
+    private fun mergePortableRequestsInFolder(
+        collectionId: String,
+        folderId: String?,
+        requests: List<PortableRequest>,
+        now: Long,
+    ) {
+        for (pr in requests) {
+            val want = pr.id?.trim().orEmpty()
+            val owner = if (want.isNotEmpty()) getRequestCollectionId(want) else null
+            when {
+                want.isNotEmpty() && owner == collectionId -> {
+                    updateRequestFromPortable(want, collectionId, folderId, pr, now)
+                }
+                want.isNotEmpty() && owner == null -> {
+                    insertPortableRequest(collectionId, folderId, pr, now)
+                }
+                else -> {
+                    val nid = newId()
+                    insertPortableRequest(collectionId, folderId, pr.copy(id = nid), now)
+                }
+            }
+        }
+    }
+
+    private fun updateRequestFromPortable(
+        requestId: String,
+        collectionId: String,
+        folderId: String?,
+        pr: PortableRequest,
+        now: Long,
+    ) {
+        val metaJson = mergeAuthIntoMetaJson(pr.metaJson, pr.auth)
+        conn.prepareStatement(
+            """
+            UPDATE requests SET collection_id = ?, folder_id = ?, name = ?, method = ?, url = ?,
+            headers_text = ?, params_text = ?, body_text = ?, sort_order = ?, updated_at = ?, meta_json = ?
+            WHERE id = ?
+            """.trimIndent()
+        ).use { ps ->
+            ps.setString(1, collectionId)
+            if (folderId == null) ps.setNull(2, Types.VARCHAR) else ps.setString(2, folderId)
+            ps.setString(3, pr.name)
+            ps.setString(4, pr.method)
+            ps.setString(5, pr.url)
+            ps.setString(6, pr.headersText)
+            ps.setString(7, pr.paramsText)
+            ps.setString(8, pr.bodyText)
+            ps.setInt(9, pr.sortOrder)
+            ps.setLong(10, now)
+            ps.setString(11, metaJson)
+            ps.setString(12, requestId)
+            ps.executeUpdate()
         }
     }
 
@@ -967,6 +1212,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 auth = extractAuthFromMetaJson(row.metaJson),
                 folders = buildPortableFolderTree(collectionId, row.id),
                 requests = loadPortableRequests(collectionId, row.id),
+                id = row.id,
             )
         }
     }
@@ -975,13 +1221,13 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val out = mutableListOf<PortableRequest>()
         val sql = if (folderId == null) {
             """
-            SELECT name, method, url, headers_text, params_text, body_text, sort_order, meta_json
+            SELECT id, name, method, url, headers_text, params_text, body_text, sort_order, meta_json
             FROM requests WHERE collection_id = ? AND folder_id IS NULL
             ORDER BY sort_order ASC, name ASC
             """.trimIndent()
         } else {
             """
-            SELECT name, method, url, headers_text, params_text, body_text, sort_order, meta_json
+            SELECT id, name, method, url, headers_text, params_text, body_text, sort_order, meta_json
             FROM requests WHERE collection_id = ? AND folder_id = ?
             ORDER BY sort_order ASC, name ASC
             """.trimIndent()
@@ -1002,6 +1248,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                         sortOrder = rs.getInt("sort_order"),
                         metaJson = metaJson,
                         auth = extractAuthFromMetaJson(metaJson),
+                        id = rs.getString("id"),
                     )
                 }
             }
@@ -1023,7 +1270,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         now: Long,
     ) {
         for (pf in folders) {
-            val fid = newId()
+            val fid = pf.id?.trim()?.takeIf { it.isNotEmpty() } ?: newId()
             val metaJson = mergeAuthIntoMetaJson(pf.metaJson, pf.auth)
             conn.prepareStatement(
                 """
@@ -1056,13 +1303,14 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         now: Long,
     ) {
         val metaJson = mergeAuthIntoMetaJson(pr.metaJson, pr.auth)
+        val requestId = pr.id?.trim()?.takeIf { it.isNotEmpty() } ?: newId()
         conn.prepareStatement(
             """
             INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """.trimIndent()
         ).use { ps ->
-            ps.setString(1, newId())
+            ps.setString(1, requestId)
             ps.setString(2, collectionId)
             if (folderId == null) ps.setNull(3, java.sql.Types.VARCHAR)
             else ps.setString(3, folderId)

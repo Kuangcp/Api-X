@@ -863,6 +863,65 @@ fun App(onExitRequest: () -> Unit) {
                         responseHeaderLines.clear()
                         responseHeaderLines.add("(暂无响应头)")
                     }
+                },
+                onPushDataClick = {
+                    thread {
+                        val r = DataDirSync.pushToDataDir(repository)
+                        EventQueue.invokeLater {
+                            if (r.error != null) {
+                                JOptionPane.showMessageDialog(
+                                    null,
+                                    r.error,
+                                    "同步到 data 失败",
+                                    JOptionPane.ERROR_MESSAGE,
+                                )
+                            } else {
+                                val p = AppPaths.gitDataRoot().toString()
+                                setSingleResponseMessage(
+                                    responseLines,
+                                    "已写入 $p：${r.collectionFilesWritten} 个 collection JSON；" +
+                                        if (r.envWritten) "环境已同步到 data/env" else "环境未写入",
+                                )
+                            }
+                            responsePartialLine = null
+                        }
+                    }
+                },
+                onPullDataClick = {
+                    thread {
+                        val r = DataDirSync.pullFromDataDir(repository)
+                        EventQueue.invokeLater {
+                            if (r.error != null) {
+                                JOptionPane.showMessageDialog(
+                                    null,
+                                    r.error,
+                                    "从 data 合并失败",
+                                    JOptionPane.ERROR_MESSAGE,
+                                )
+                            } else {
+                                refreshTree()
+                                environmentsState = EnvironmentStore.snapshot()
+                                val errLines = r.fileErrors.joinToString("\n")
+                                val baseMsg =
+                                    "已合并：更新 ${r.merged} 个集合、新建 ${r.created} 个；环境 ${
+                                        if (r.envMerged) "已合并" else "未变更"
+                                    }"
+                                if (r.fileErrors.isNotEmpty()) {
+                                    JOptionPane.showMessageDialog(
+                                        null,
+                                        "$baseMsg\n\n部分文件未导入：\n$errLines",
+                                        "从 data 合并",
+                                        JOptionPane.INFORMATION_MESSAGE,
+                                    )
+                                }
+                                setSingleResponseMessage(
+                                    responseLines,
+                                    if (r.fileErrors.isEmpty()) baseMsg else "$baseMsg；详见弹窗中失败项",
+                                )
+                            }
+                            responsePartialLine = null
+                        }
+                    }
                 }
             )
             Row(

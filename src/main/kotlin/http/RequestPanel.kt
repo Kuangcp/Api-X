@@ -51,6 +51,8 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentPaste
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.CropSquare
 import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.FilterNone
@@ -577,6 +579,8 @@ fun WindowScope.RequestTopBar(
     onWindowCloseRequest: () -> Unit,
     onImportCollectionClick: () -> Unit,
     onImportCurlClick: () -> Unit,
+    onPushDataClick: () -> Unit = {},
+    onPullDataClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val topBarIconTint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
@@ -651,6 +655,30 @@ fun WindowScope.RequestTopBar(
                         Icon(
                             imageVector = Icons.Filled.ContentPaste,
                             contentDescription = "从剪贴板导入 cURL",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
+                    IconButton(
+                        onClick = onPushDataClick,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CloudUpload,
+                            contentDescription = "同步到 data 目录（供 Git 管理）",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
+                    IconButton(
+                        onClick = onPullDataClick,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.CloudDownload,
+                            contentDescription = "从 data 目录合并到本地",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
                         )

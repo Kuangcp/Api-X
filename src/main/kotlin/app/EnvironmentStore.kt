@@ -18,6 +18,15 @@ object EnvironmentStore {
 
     fun snapshot(): EnvironmentsState = ref.get()
 
+    /** 将当前内存态写入路径（不更新 [ref]），供 data 目录 Push 等。 */
+    fun writeSnapshotToPath(path: java.nio.file.Path) {
+        val n = ref.get().normalized()
+        runCatching {
+            Files.createDirectories(path.parent)
+            Files.writeString(path, envJson.encodeToString(n))
+        }
+    }
+
     fun replace(state: EnvironmentsState) {
         val n = state.normalized()
         ref.set(n)

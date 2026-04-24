@@ -46,6 +46,7 @@ private fun buildPostmanCollectionRoot(portable: PortableCollection): JsonObject
         val id = meta.stringOrNull("_postman_id") ?: UUID.randomUUID().toString()
         put("_postman_id", id)
         meta.stringOrNull("description")?.takeIf { it.isNotBlank() }?.let { put("description", it) }
+        portable.id?.takeIf { it.isNotBlank() }?.let { put("_api_x_id", it) }
     }
     return buildJsonObject {
         put("info", info)
@@ -78,6 +79,7 @@ private fun mergePortableFolderChildren(f: PortableFolder): List<JsonObject> {
 }
 
 private fun folderToPostmanItem(f: PortableFolder): JsonObject = buildJsonObject {
+    f.id?.takeIf { it.isNotBlank() }?.let { put("id", it) }
     put("name", f.name)
     metaStringDescription(f.metaJson)?.let { put("description", it) }
     authToPostmanJson(f.auth)?.let { put("auth", it) }
@@ -87,6 +89,7 @@ private fun folderToPostmanItem(f: PortableFolder): JsonObject = buildJsonObject
 }
 
 private fun requestToPostmanItem(r: PortableRequest): JsonObject = buildJsonObject {
+    r.id?.takeIf { it.isNotBlank() }?.let { put("id", it) }
     put("name", r.name)
     metaStringDescription(r.metaJson)?.let { put("description", it) }
     authToPostmanJson(r.auth)?.let { put("auth", it) }

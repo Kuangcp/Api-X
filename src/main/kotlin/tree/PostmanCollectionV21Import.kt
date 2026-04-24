@@ -59,6 +59,7 @@ fun parsePostmanCollectionJsonToPortable(jsonText: String): PortableCollection {
     val auth = root["auth"]?.let { parseAuthOrNull(it) }
     val items = root["item"]?.jsonArray ?: JsonArray(emptyList())
     val (folders, rootRequests) = parseItemList(items)
+    val apiXId = info["_api_x_id"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
 
     return PortableCollection(
         name = name,
@@ -66,6 +67,7 @@ fun parsePostmanCollectionJsonToPortable(jsonText: String): PortableCollection {
         auth = auth,
         folders = folders,
         rootRequests = rootRequests,
+        id = apiXId,
     )
 }
 
@@ -89,6 +91,7 @@ private fun parseFolderItem(obj: JsonObject, sortOrder: Int): PortableFolder {
     val (subFolders, subReqs) = parseItemList(childItems)
     val metaJson = folderMetaJson(obj)
     val auth = obj["auth"]?.let { parseAuthOrNull(it) }
+    val id = obj["id"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
     return PortableFolder(
         name = name,
         sortOrder = sortOrder,
@@ -96,6 +99,7 @@ private fun parseFolderItem(obj: JsonObject, sortOrder: Int): PortableFolder {
         auth = auth,
         folders = subFolders,
         requests = subReqs,
+        id = id,
     )
 }
 
@@ -114,6 +118,7 @@ private fun parseRequestItem(obj: JsonObject, sortOrder: Int): PortableRequest {
     val bodyText = postmanBodyToText(req["body"]?.jsonObject)
     val metaJson = requestMetaJson(obj)
     val auth = obj["auth"]?.let { parseAuthOrNull(it) }
+    val id = obj["id"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
     return PortableRequest(
         name = name,
         method = method,
@@ -124,6 +129,7 @@ private fun parseRequestItem(obj: JsonObject, sortOrder: Int): PortableRequest {
         sortOrder = sortOrder,
         metaJson = metaJson,
         auth = auth,
+        id = id,
     )
 }
 

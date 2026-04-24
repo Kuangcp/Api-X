@@ -40,3 +40,27 @@ fun withDefaultActiveWhenSingle(state: EnvironmentsState): EnvironmentsState {
     if (state.environments.size != 1) return state
     return state.copy(activeEnvironmentId = state.environments.first().id)
 }
+
+/**
+ * 与 Pull 同步：按环境 [Environment.id] 做 upsert，不删除 [base] 中已有而 [overlay] 没有的环境。
+ */
+fun mergeEnvironmentsStateNoDelete(base: EnvironmentsState, overlay: EnvironmentsState): EnvironmentsState {
+    val byId = base.environments.associateBy { it.id }.toMutableMap()
+    for (e in overlay.environments) {
+        byId[e.id] = e
+    }
+    val baseOrder = base.environments.map { it.id }
+    val onlyInOverlay = overlay.environments.map { it.id }.filter { it !in baseOrder.toSet() }
+    val orderedIds = baseOrder + onlyInOverlay
+    val envs = orderedIds.mapNotNull { byId[it] }
+    val active = when {
+        overlay.activeEnvironmentId != null && overlay.activeEnvironmentId in byId -> overlay.activeEnvironmentId
+        base.activeEnvironmentId != null && base.activeEnvironmentId in byId -> base.activeEnvironmentId
+        else -> base.activeEnvironmentId
+    }
+    return EnvironmentsState(
+        version = maxOf(base.version, overlay.version),
+        activeEnvironmentId = active,
+        environments = envs,
+    ).normalized()
+}
