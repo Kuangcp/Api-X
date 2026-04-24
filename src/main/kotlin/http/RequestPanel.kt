@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.CropSquare
+import androidx.compose.material.icons.filled.DataObject
 import androidx.compose.material.icons.filled.FilterNone
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.KeyboardArrowLeft
@@ -1032,16 +1033,47 @@ fun RequestEditorPane(
             when (leftTabIndex) {
                 0 -> {
                     val bodyKind = inferBodyKindFromHeaders(headersText)
+                    val canFormatJson = remember(bodyText, bodyKind) {
+                        bodyKind == BodyContentKind.Json && formatJsonBodyTextOrNull(bodyText) != null
+                    }
                     Column(
                         modifier = Modifier.fillMaxSize()
                     ) {
-                        Box(modifier = Modifier.padding(end = 10.dp)) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(end = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
                             BodyContentKindSelector(
                                 exchangeMetrics = exchangeMetrics,
                                 headersText = headersText,
                                 onHeadersTextChange = onHeadersTextChange,
                                 enabled = !isLoading,
                             )
+                            if (bodyKind == BodyContentKind.Json) {
+                                Spacer(modifier = Modifier.weight(1f))
+                                IconButton(
+                                    onClick = {
+                                        formatJsonBodyTextOrNull(bodyText)
+                                            ?.let(onBodyTextChange)
+                                    },
+                                    enabled = !isLoading && canFormatJson,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.DataObject,
+                                        contentDescription = "格式化 JSON",
+                                        modifier = Modifier.size(20.dp),
+                                        tint = if (isLoading || !canFormatJson) {
+                                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled)
+                                        } else {
+                                            MaterialTheme.colors.onSurface.copy(
+                                                alpha = if (isDarkTheme) 1f else ContentAlpha.high
+                                            )
+                                        },
+                                    )
+                                }
+                            }
                         }
                         Text(
                             "Body（POST / PUT 等会携带）",

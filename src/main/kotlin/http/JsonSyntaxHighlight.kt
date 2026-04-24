@@ -15,6 +15,18 @@ private val jsonPretty = Json {
     ignoreUnknownKeys = true
 }
 
+/**
+ * 将正文解析为 JSON 并 pretty 打印；空白或解析失败时返回 null（与 [formatAndHighlightJsonOrNull] 使用相同规则）。
+ */
+fun formatJsonBodyTextOrNull(rawBody: String): String? {
+    val trimmed = rawBody.trim()
+    if (trimmed.isEmpty()) return null
+    return runCatching {
+        val el = jsonLenient.parseToJsonElement(trimmed)
+        jsonPretty.encodeToString(JsonElement.serializer(), el)
+    }.getOrNull()
+}
+
 fun contentTypeHeaderIndicatesJson(headerLines: List<String>): Boolean {
     for (line in headerLines) {
         val p = parseHeaderLine(line) ?: continue
@@ -30,12 +42,7 @@ fun contentTypeHeaderIndicatesJson(headerLines: List<String>): Boolean {
  * 将正文格式化为 pretty JSON 并生成带语法色的 [AnnotatedString]；解析失败返回 null。
  */
 fun formatAndHighlightJsonOrNull(rawBody: String, darkTheme: Boolean): AnnotatedString? {
-    val trimmed = rawBody.trim()
-    if (trimmed.isEmpty()) return null
-    val pretty = runCatching {
-        val el = jsonLenient.parseToJsonElement(trimmed)
-        jsonPretty.encodeToString(JsonElement.serializer(), el)
-    }.getOrNull() ?: return null
+    val pretty = formatJsonBodyTextOrNull(rawBody) ?: return null
     return highlightJsonText(pretty, darkTheme)
 }
 
