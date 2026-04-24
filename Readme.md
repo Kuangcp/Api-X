@@ -9,6 +9,8 @@ JDK 21
 
 ## Features
 
+- **Data directory sync (Git-friendly):** toolbar **Push** exports each collection to the app data `data/collection/{id}.json` (Postman v2.1) and env to `data/env/`; **Pull** merges from that tree (add/update by id, no deletes). See `db/AppPaths` and `app/DataDirSync`.
+- **Debug data root:** in the *default* (non-redirect) data dir, set `debugHome=/path` in `app-settings.properties` so all DB/files use that path for a safe sandbox.
 - Import and export Postman Collection format
 - Theme switching
 - Request run / execution logs

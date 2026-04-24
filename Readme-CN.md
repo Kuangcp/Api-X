@@ -9,6 +9,8 @@ JDK 21
 
 ## 功能列表
 
+- 顶栏 **Push / Pull**：将集合按 id 导出到应用数据目录下 `data/collection/*.json`（Postman v2.1），环境为 `data/env/environments.json`；Pull 从该目录合并进本地（仅新增与更新、不删）。可对该 `data` 目录做 Git 管理。详见 `DataDirSync`、`AppPaths`。
+- 在**未重定向的**主数据目录的 `app-settings.properties` 中设置 `debugHome=路径`，可将**全部**数据根目录指到空目录，便于隔离调试、不影响正式数据。
 - 导入导出 Postman Collection 格式数据
 - 主题切换
 - 请求运行日志
