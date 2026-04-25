@@ -30,6 +30,15 @@ import androidx.compose.ui.Modifier
 import app.appMaterialColors
 import app.apiXDarkColors
 import app.hexToColor
+import app.applyBufferUpdate
+import app.setSingleResponseMessage
+import app.readClipboardText
+import app.writeClipboardText
+import app.formatDuration
+import app.formatBytes
+import app.responseBodyTextForClipboard
+import app.UI_REFRESH_INTERVAL_MS
+import app.AppClasspathAnchor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -49,9 +58,6 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import java.awt.EventQueue
-import java.awt.Toolkit
-import java.awt.datatransfer.DataFlavor
-import java.awt.datatransfer.StringSelection
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import javax.swing.JFileChooser
@@ -1299,67 +1305,6 @@ fun App(onExitRequest: () -> Unit) {
     }
     }
 }
-
-private const val UI_REFRESH_INTERVAL_MS = 100L
-
-private fun applyBufferUpdate(
-    update: BufferUpdate,
-    responseLines: MutableList<String>,
-    setPartial: (String?) -> Unit
-) {
-    if (update.newLines.isNotEmpty()) {
-        responseLines.addAll(update.newLines)
-    }
-    if (update.partialLine != null || update.newLines.isNotEmpty()) {
-        setPartial(update.partialLine)
-    }
-}
-
-private fun setSingleResponseMessage(responseLines: MutableList<String>, message: String) {
-    responseLines.clear()
-    responseLines += message
-}
-
-private fun formatDuration(ms: Long): String {
-    return when {
-        ms < 10_000 -> "${ms}ms"
-        ms < 80_000 -> String.format("%.1fS", ms / 1000.0)
-        else -> String.format("%.1fmin", ms / 60_000.0)
-    }
-}
-
-private fun formatBytes(bytes: Long): String {
-    val b = bytes.toDouble()
-    return when {
-        bytes < 1024 -> "$bytes B"
-        bytes < 1024 * 1024 -> String.format("%.2f KB", b / 1024.0)
-        bytes < 1024L * 1024 * 1024 -> String.format("%.2f MB", b / (1024.0 * 1024.0))
-        else -> String.format("%.2f GB", b / (1024.0 * 1024.0 * 1024.0))
-    }
-}
-
-private fun responseBodyTextForClipboard(lines: List<String>, partial: String?): String =
-    buildString {
-        append(lines.joinToString("\n"))
-        partial?.let { p ->
-            if (lines.isNotEmpty()) append('\n')
-            append(p)
-        }
-    }
-
-private fun readClipboardText(): String {
-    val clipboard = Toolkit.getDefaultToolkit().systemClipboard
-    val data = clipboard.getData(DataFlavor.stringFlavor) as? String ?: ""
-    if (data.isBlank()) throw IllegalArgumentException("剪贴板为空")
-    return data.trim()
-}
-
-private fun writeClipboardText(text: String) {
-    Toolkit.getDefaultToolkit().systemClipboard.setContents(StringSelection(text), null)
-}
-
-/** 仅用于取得与业务代码相同的 ClassLoader，以探测打包进 jar 的 `app-icon.png`。 */
-private object AppClasspathAnchor
 
 fun main() = application {
     App(onExitRequest = { exitApplication() })
