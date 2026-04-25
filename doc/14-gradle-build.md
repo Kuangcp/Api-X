@@ -191,14 +191,12 @@ nativeDistributions {
 # 运行
 gradle run
 
-# 打包
+# 编译打包
 gradle createDistributable
 
-# 仅 Windows
-gradle createWindowsDistributable
+# 构建安装包 会依据操作系统平台生成 packageMsi packageDeb packageDmg
+gradle packageDistributionForCurrentOS
 
-# 仅 macOS
-gradle createMacAppDmg
 ```
 
 > 项目中的运行方式 (`Readme-CN.md`):
