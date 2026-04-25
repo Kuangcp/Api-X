@@ -14,8 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.darkColors
-import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -29,7 +27,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import app.appMaterialColors
+import app.apiXDarkColors
+import app.hexToColor
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -1301,67 +1301,6 @@ fun App(onExitRequest: () -> Unit) {
 }
 
 private const val UI_REFRESH_INTERVAL_MS = 100L
-
-private val lightThemeDefaultBackground = hexToColor("#EBECF0")
-
-/** 深色主题：前景统一为白色，避免桌面端部分组件仍使用默认深色字色。 */
-internal fun appMaterialColors(isDark: Boolean, backgroundHex: String) =
-    parseHexColorOrNull(backgroundHex).let { customBg ->
-        when {
-            isDark -> {
-                val base = apiXDarkColors()
-                if (customBg != null) base.copy(background = customBg) else base
-            }
-            else -> {
-                // 设置里存的深色预设只在深色主题下合理；浅色主题仍套用会得到深色底 + 浅色主题的深色字。
-                val bg = when {
-                    customBg == null -> lightThemeDefaultBackground
-                    customBg.isVisuallyDarkBackground() -> lightThemeDefaultBackground
-                    else -> customBg
-                }
-                lightColors(background = bg)
-            }
-        }
-    }
-
-internal fun apiXDarkColors() = darkColors(
-    primary = Color(0xFF90CAF9),
-    primaryVariant = Color(0xFF42A5F5),
-    secondary = Color(0xFF90CAF9),
-    background = Color(0xFF292B2E),
-    surface = Color(0xFF32353B),
-    error = Color(0xFFCF6679),
-    onPrimary = Color(0xFF0D47A1),
-    onSecondary = Color(0xFF0D47A1),
-    onBackground = Color.White,
-    onSurface = Color.White,
-    onError = Color.Black
-)
-
-internal fun hexToColor(hex: String): Color {
-    val value = hex.removePrefix("#")
-    val argb = when (value.length) {
-        6 -> "FF$value"
-        8 -> value
-        else -> throw IllegalArgumentException("颜色格式错误: $hex，需为 #RRGGBB 或 #AARRGGBB")
-    }
-
-    val alpha = argb.substring(0, 2).toInt(16)
-    val red = argb.substring(2, 4).toInt(16)
-    val green = argb.substring(4, 6).toInt(16)
-    val blue = argb.substring(6, 8).toInt(16)
-    return Color(red, green, blue, alpha)
-}
-
-private fun hexToColorCode(hex: String): ULong {
-    val value = hex.removePrefix("#")
-    val argb = when (value.length) {
-        6 -> "FF$value"
-        8 -> value
-        else -> throw IllegalArgumentException("颜色格式错误: $hex，需为 #RRGGBB 或 #AARRGGBB")
-    }
-    return ("0x$argb").removePrefix("0x").toULong(16)
-}
 
 private fun applyBufferUpdate(
     update: BufferUpdate,
