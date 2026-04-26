@@ -6,40 +6,18 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
-import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import app.appMaterialColors
-import app.apiXDarkColors
-import app.hexToColor
-import app.applyBufferUpdate
-import app.setSingleResponseMessage
-import app.readClipboardText
-import app.writeClipboardText
-import app.formatDuration
-import app.formatBytes
-import app.responseBodyTextForClipboard
-import app.UI_REFRESH_INTERVAL_MS
-import app.AppClasspathAnchor
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -57,52 +35,40 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import androidx.compose.ui.res.painterResource
 import java.awt.EventQueue
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
-import java.net.URI
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.concurrent.thread
 import db.AppPaths
 import db.CollectionRepository
-import db.HarLogCodec
-import db.HarSnapshot
-import db.HistoryEntry
 import db.RequestResponseStore
-import http.applyEnvironmentVariables
-import http.bodyWirePayloadForHttp
-import http.migrateFormBodyToEditorLinesIfNeeded
-import http.resolveAuthToHeaders
-import http.BufferUpdate
-import http.RequestControl
 import http.RequestSidePanel
 import http.RequestTopBar
 import http.ResponsePanel
-import http.substitutionMapForActive
-import tree.PostmanAuth
 import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
-import http.closeQuietly
-import http.ensureDefaultHttpScheme
 import http.formatActualRequestPlainText
-import http.mergeUrlWithParams
 import http.parseHeadersForSend
-import http.parseCurlCommand
 import http.requestToCurlCommand
-import http.responseHeaderLinesForHar
-import http.sendRequestStreaming
+import http.mergeUrlWithParams
+import http.applyEnvironmentVariables
+import http.migrateFormBodyToEditorLinesIfNeeded
 import http.splitUrlQueryForParamsEditor
+import http.substitutionMapForActive
+import http.parseCurlCommand
 import tree.CollectionTreeSidebar
+import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.TreeSelection
-import tree.collectAllFolderIds
+import tree.expandSetsForRequest
 import tree.parsePostmanCollectionJsonToPortable
 import tree.portableCollectionToPostmanV21Json
-import tree.expandSetsForRequest
 import tree.firstRequestSelection
+import tree.UiCollection
 
 @Composable
 fun App(onExitRequest: () -> Unit) {
@@ -120,523 +86,9 @@ fun App(onExitRequest: () -> Unit) {
         width = loaded.widthDp.dp,
         height = loaded.heightDp.dp,
     )
-
     val repository = remember { CollectionRepository(AppPaths.collectionDatabasePath()) }
-
-    var method by remember { mutableStateOf("GET") }
-    var methodMenuExpanded by remember { mutableStateOf(false) }
-    var url by remember { mutableStateOf("https://httpbin.org/get") }
-    var headersText by remember {
-        mutableStateOf(
-            "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
-        )
-    }
-    var bodyText by remember { mutableStateOf("key: value") }
-    var paramsText by remember { mutableStateOf("") }
-    var auth by remember { mutableStateOf<PostmanAuth?>(null) }
-
-    var tree by remember { mutableStateOf(repository.loadTree()) }
-    var treeSelection by remember { mutableStateOf<TreeSelection?>(null) }
-    var editorRequestId by remember { mutableStateOf<String?>(null) }
     val expandLoaded = remember { TreeExpandPrefs.load() }
-    var expandedCollectionIds by remember { mutableStateOf(expandLoaded.collectionIds) }
-    var expandedFolderIds by remember { mutableStateOf(expandLoaded.folderIds) }
-    var persistTreeExpand by remember { mutableStateOf(expandLoaded.fromSavedFile) }
-    var didApplyDefaultTreeExpand by remember { mutableStateOf(false) }
-    var treeSplitRatio by remember { mutableStateOf(0.2f) }
-    var treeSidebarVisible by remember { mutableStateOf(true) }
-    var didPickInitialRequest by remember { mutableStateOf(false) }
-
-    val editorIdSnap by rememberUpdatedState(editorRequestId)
-    val methodSnap by rememberUpdatedState(method)
-    val urlSnap by rememberUpdatedState(url)
-    val headersSnap by rememberUpdatedState(headersText)
-    val paramsSnap by rememberUpdatedState(paramsText)
-    val bodySnap by rememberUpdatedState(bodyText)
-
-    DisposableEffect(repository) {
-        onDispose {
-            editorIdSnap?.let {
-                repository.saveRequestEditorFields(
-                    it,
-                    methodSnap,
-                    urlSnap,
-                    headersSnap,
-                    paramsSnap,
-                    bodySnap,
-                    auth,
-                )
-            }
-            repository.close()
-        }
-    }
-
-    fun refreshTree() {
-        tree = repository.loadTree()
-    }
-
-    fun saveEditorIfBound() {
-        val id = editorRequestId ?: return
-        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
-    }
-
-    fun applyRequestToEditor(reqId: String) {
-        val r = repository.getRequest(reqId) ?: return
-        editorRequestId = reqId
-        method = r.method
-        url = r.url
-        headersText = r.headersText
-        paramsText = r.paramsText
-        bodyText = migrateFormBodyToEditorLinesIfNeeded(r.bodyText, r.headersText)
-        auth = r.auth
-        RecentRequestUsageStore.touch(reqId)
-    }
-
-    fun selectTreeNode(sel: TreeSelection) {
-        when (sel) {
-            is TreeSelection.Request -> {
-                saveEditorIfBound()
-                applyRequestToEditor(sel.id)
-                treeSelection = sel
-            }
-            else -> treeSelection = sel
-        }
-    }
-
-    fun addFolderAt(at: TreeSelection) {
-        val target = repository.newFolderTarget(at) ?: return
-        val (cid, pid) = target
-        repository.createFolder(cid, pid, "新文件夹").let { fid ->
-            refreshTree()
-            expandedCollectionIds = expandedCollectionIds + cid
-            if (pid != null) expandedFolderIds = expandedFolderIds + pid
-            treeSelection = TreeSelection.Folder(fid)
-        }
-    }
-
-    fun addRequestAt(at: TreeSelection) {
-        val target = repository.newRequestTarget(at) ?: return
-        val (cid, fid) = target
-        saveEditorIfBound()
-        val rid = repository.createRequest(cid, fid, "新请求")
-        refreshTree()
-        expandedCollectionIds = expandedCollectionIds + cid
-        if (fid != null) expandedFolderIds = expandedFolderIds + fid
-        applyRequestToEditor(rid)
-        treeSelection = TreeSelection.Request(rid)
-    }
-
-    fun mruRequestIdsForSwitcher(): List<String> {
-        val ordered = RecentRequestUsageStore.orderedIdsNewestFirst { repository.getRequest(it) != null }
-        val cur = editorRequestId ?: return ordered
-        val without = ordered.filter { it != cur }
-        return (listOf(cur) + without).distinct().take(30)
-    }
-
-    val responseScopeKey = editorRequestId ?: ""
-    val cachedResponse = remember(responseScopeKey) {
-        editorRequestId?.let { RequestResponseStore.loadLatest(it) }
-    }
-    val historyEntries by remember(responseScopeKey) {
-        mutableStateOf(editorRequestId?.let { RequestResponseStore.listHistory(it) } ?: emptyList())
-    }
-    var selectedHistoryEpochMs by remember { mutableStateOf<Long?>(null) }
-    val responseLines = remember(responseScopeKey) {
-        mutableStateListOf<String>().apply {
-            when {
-                editorRequestId == null -> add("请先选择或创建一个请求")
-                else -> {
-                    val snap = cachedResponse
-                    if (snap != null) addAll(snap.responseBodyLines)
-                    else add("响应结果会显示在这里")
-                }
-            }
-        }
-    }
-    var responsePartialLine by remember(responseScopeKey) { mutableStateOf<String?>(null) }
-    var isLoading by remember { mutableStateOf(false) }
-    var isSseResponse by remember(responseScopeKey) { mutableStateOf(false) }
-    var statusCodeText by remember(responseScopeKey) {
-        mutableStateOf(cachedResponse?.statusCodeText ?: "")
-    }
-    var responseTimeText by remember(responseScopeKey) {
-        mutableStateOf(cachedResponse?.responseTimeText ?: "")
-    }
-    var responseSizeText by remember(responseScopeKey) {
-        mutableStateOf(cachedResponse?.responseSizeText ?: "")
-    }
-    var activeRequestControl by remember { mutableStateOf<RequestControl?>(null) }
-    var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
-    var splitRatio by remember { mutableStateOf(0.5f) }
-    var contentRowWidthPx by remember { mutableStateOf(1f) }
-    var leftTabIndex by remember { mutableStateOf(1) }
-    var rightTabIndex by remember(responseScopeKey) {
-        mutableStateOf(cachedResponse?.rightTabIndex?.coerceIn(0, 2) ?: 0)
-    }
-    var exchangeRequestPlainText by remember(responseScopeKey) {
-        mutableStateOf(
-            when {
-                editorRequestId == null -> "请先选择或创建一个请求"
-                !cachedResponse?.requestPlainText.isNullOrBlank() -> cachedResponse!!.requestPlainText
-                else -> "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
-            },
-        )
-    }
-    val responseHeaderLines = remember(responseScopeKey) {
-        mutableStateListOf<String>().apply {
-            when {
-                editorRequestId == null -> add("(暂无响应头)")
-                else -> {
-                    val snap = cachedResponse
-                    if (snap != null) addAll(snap.responseHeaderLines)
-                    else add("(暂无响应头)")
-                }
-            }
-        }
-    }
-    val responseListState = remember(responseScopeKey) { LazyListState() }
-    val responseHeadersListState = remember(responseScopeKey) { LazyListState() }
-    var isDarkTheme by remember { mutableStateOf(true) }
-    var jsonSyntaxHighlightEnabled by remember { mutableStateOf(true) }
-    var showSettings by remember { mutableStateOf(false) }
-    var showEnvironmentManager by remember { mutableStateOf(false) }
-    var showGlobalSearch by remember { mutableStateOf(false) }
-    /** 非 null 时，左侧树在布局后将该请求滚入可视区（如全局搜索选中后同步滚动）。 */
-    var treeScrollToRequestId by remember { mutableStateOf<String?>(null) }
-    var recentSwitcherActive by remember { mutableStateOf(false) }
-    var recentSwitcherIds by remember { mutableStateOf<List<String>>(emptyList()) }
-    var recentSwitcherIndex by remember { mutableStateOf(0) }
-    var showCollectionSettings by remember { mutableStateOf(false) }
-    var collectionSettingsTarget by remember { mutableStateOf<TreeSelection?>(null) }
-    var environmentsState by remember {
-        mutableStateOf<EnvironmentsState>(
-            withDefaultActiveWhenSingle(EnvironmentStore.snapshot())
-        )
-    }
-    var appSettings by remember { mutableStateOf(AppSettingsStore.snapshot()) }
-
-    fun commitEnvironmentsState(newState: EnvironmentsState) {
-        EnvironmentStore.replace(newState)
-        environmentsState = EnvironmentStore.snapshot()
-    }
-    /** 当前进行中的 HTTP 请求对应的 request id（用于计时器不污染切换后的请求文案）。 */
-    var inflightBoundRequestId by remember { mutableStateOf<String?>(null) }
-    /** 每次发起请求递增；避免 flusher 已 drain 但 EDT 尚未应用时，完成回调先清空 active 导致正文丢失。 */
-    val outboundRequestGeneration = remember { AtomicInteger(0) }
-
-    LaunchedEffect(method, url, headersText, paramsText, bodyText, auth, editorRequestId) {
-        val id = editorRequestId ?: return@LaunchedEffect
-        delay(450)
-        repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
-    }
-
-    LaunchedEffect(editorRequestId) {
-        val id = editorRequestId ?: return@LaunchedEffect
-        LastRequestPrefs.save(id)
-    }
-
-    LaunchedEffect(tree) {
-        if (tree.isEmpty()) return@LaunchedEffect
-        if (!didApplyDefaultTreeExpand) {
-            didApplyDefaultTreeExpand = true
-            if (!expandLoaded.fromSavedFile &&
-                expandedCollectionIds.isEmpty() &&
-                expandedFolderIds.isEmpty()
-            ) {
-                expandedCollectionIds = tree.map { it.id }.toSet()
-                expandedFolderIds = collectAllFolderIds(tree)
-            }
-        }
-        persistTreeExpand = true
-        if (!didPickInitialRequest) {
-            didPickInitialRequest = true
-            val savedId = LastRequestPrefs.load()
-            if (savedId.isNotEmpty() && repository.getRequest(savedId) != null) {
-                expandSetsForRequest(tree, savedId)?.let { (cols, folders) ->
-                    expandedCollectionIds = expandedCollectionIds + cols
-                    expandedFolderIds = expandedFolderIds + folders
-                }
-                applyRequestToEditor(savedId)
-                treeSelection = TreeSelection.Request(savedId)
-            } else {
-                firstRequestSelection(tree)?.let { sel ->
-                    applyRequestToEditor(sel.id)
-                    treeSelection = sel
-                }
-            }
-        }
-    }
-
-    LaunchedEffect(expandedCollectionIds, expandedFolderIds, persistTreeExpand) {
-        if (!persistTreeExpand) return@LaunchedEffect
-        TreeExpandPrefs.save(expandedCollectionIds, expandedFolderIds)
-    }
-
-    val loadingRef = rememberUpdatedState(isLoading)
-    val liveTimerControlRef = rememberUpdatedState(activeRequestControl)
-    LaunchedEffect(isLoading, activeRequestControl, editorRequestId, inflightBoundRequestId) {
-        if (!isLoading) return@LaunchedEffect
-        val control = activeRequestControl ?: return@LaunchedEffect
-        while (isActive) {
-            if (liveTimerControlRef.value !== control) break
-            if (!loadingRef.value) break
-            val elapsed = System.currentTimeMillis() - control.startTimeMs
-            val sec = (elapsed / 1000L).toInt().coerceAtLeast(0)
-            if (editorRequestId == inflightBoundRequestId) {
-                responseTimeText = "${sec}S"
-            }
-            delay(1000)
-        }
-    }
-
-    fun startRequest() {
-        if (isLoading) return
-        val boundRequestId = editorRequestId ?: return
-        val requestGen = outboundRequestGeneration.incrementAndGet()
-        saveEditorIfBound()
-        RequestResponseStore.ensureLayout(boundRequestId)
-        val tabAtStart = rightTabIndex
-        val reqMethodSnap = method
-        val varMap = environmentsState.substitutionMapForActive()
-        val reqUrlSnap = applyEnvironmentVariables(url, varMap)
-        val reqParamsSnap = applyEnvironmentVariables(paramsText, varMap)
-        val effectiveRequestUrl = ensureDefaultHttpScheme(
-            mergeUrlWithParams(reqUrlSnap, parseHeadersForSend(reqParamsSnap)),
-        )
-        val reqHeadersFullSnap = applyEnvironmentVariables(headersText, varMap)
-        
-        // Resolve effective auth (handling inheritance)
-        val effectiveAuth = if (auth?.type == "inherit") {
-            repository.resolveEffectiveAuth(boundRequestId)
-        } else {
-            auth
-        }
-        
-        val authHeaders = resolveAuthToHeaders(effectiveAuth, varMap)
-        val finalHeaders = if (authHeaders.isEmpty()) reqHeadersFullSnap else {
-            if (reqHeadersFullSnap.isEmpty()) authHeaders.joinToString("\n") { "${it.first}: ${it.second}" }
-            else reqHeadersFullSnap + "\n" + authHeaders.joinToString("\n") { "${it.first}: ${it.second}" }
-        }
-
-        val reqBodySnap = bodyWirePayloadForHttp(
-            applyEnvironmentVariables(bodyText, varMap),
-            finalHeaders,
-        )
-        exchangeRequestPlainText = formatActualRequestPlainText(
-            reqMethodSnap,
-            effectiveRequestUrl,
-            finalHeaders,
-            reqBodySnap,
-        )
-        val control = RequestControl()
-        control.startTimeMs = System.currentTimeMillis()
-        activeRequestControl = control
-        inflightBoundRequestId = boundRequestId
-        isLoading = true
-        responseLines.clear()
-        responsePartialLine = null
-        responseHeaderLines.clear()
-        responseHeaderLines.add("等待响应…")
-        statusCodeText = ""
-        responseTimeText = ""
-        responseSizeText = ""
-        applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) {
-            responsePartialLine = it
-        }
-        val flusher = thread(isDaemon = true) {
-            while (!control.finished && !control.cancelled) {
-                try {
-                    Thread.sleep(UI_REFRESH_INTERVAL_MS)
-                } catch (_: InterruptedException) {
-                    break
-                }
-                if (activeRequestControl !== control) break
-                val update = control.lineBuffer.drainUpdate()
-                if (!update.hasChanges()) continue
-                EventQueue.invokeLater {
-                    if (requestGen != outboundRequestGeneration.get()) return@invokeLater
-                    if (editorRequestId != boundRequestId) return@invokeLater
-                    applyBufferUpdate(update, responseLines) { partial ->
-                        responsePartialLine = partial
-                    }
-                }
-            }
-        }
-        val worker = thread {
-            sendRequestStreaming(
-                method = method,
-                url = effectiveRequestUrl,
-                body = reqBodySnap,
-                headersText = finalHeaders,
-                control = control,
-                onSseDetected = { isSse ->
-                    EventQueue.invokeLater {
-                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
-                            isSseResponse = isSse
-                        }
-                    }
-                },
-                onStatusCode = { code ->
-                    EventQueue.invokeLater {
-                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
-                            statusCodeText = code.toString()
-                        }
-                    }
-                },
-                onResponseTime = { },
-                onProgress = { bytes ->
-                    EventQueue.invokeLater {
-                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
-                            responseSizeText = formatBytes(bytes)
-                        }
-                    }
-                },
-                onResponseHeaders = { lines ->
-                    EventQueue.invokeLater {
-                        if (activeRequestControl === control && editorRequestId == boundRequestId) {
-                            responseHeaderLines.clear()
-                            responseHeaderLines.addAll(lines)
-                        }
-                    }
-                },
-                onChunk = { chunk ->
-                    if (activeRequestControl === control && !control.cancelled) {
-                        control.lineBuffer.append(chunk)
-                        control.appendRawResponse(chunk)
-                    }
-                }
-            )
-            EventQueue.invokeLater {
-                control.finished = true
-                val elapsed = System.currentTimeMillis() - control.startTimeMs
-                val timeText = formatDuration(elapsed)
-                if (!control.cancelled && !control.requestFailed) {
-                    val code = control.responseStatusCode
-                    RequestResponseStore.save(
-                        boundRequestId,
-                        HarSnapshot(
-                            savedAtEpochMs = System.currentTimeMillis(),
-                            requestMethod = reqMethodSnap,
-                            requestUrl = effectiveRequestUrl,
-                            requestHeadersFullText = reqHeadersFullSnap,
-                            requestBody = reqBodySnap,
-                            requestHeadersSent = parseHeadersForSend(reqHeadersFullSnap),
-                            responseStatus = if (code >= 0) code else 0,
-                            responseStatusText = if (code >= 0) {
-                                HarLogCodec.responseStatusPhrase(code)
-                            } else {
-                                ""
-                            },
-                            responseHeaderLines = responseHeaderLinesForHar(
-                                control.responseHeaderSnapshot,
-                                control.responseBodyDecodedForHar,
-                            ),
-                            responseBodyLines = control.snapshotRawBodyLines(),
-                            responseTimeMs = elapsed,
-                            responseSizeBytes = control.totalBytes,
-                            responseTimeLabel = timeText,
-                            responseSizeLabel = formatBytes(control.totalBytes),
-                            rightTabIndex = tabAtStart.coerceIn(0, 2),
-                            isSseResponse = control.responseWasSse,
-                        ),
-                    )
-                }
-                if (activeRequestControl === control) {
-                    isLoading = false
-                    inflightBoundRequestId = null
-                    activeRequestControl = null
-                    activeRequestThread = null
-                }
-                if (editorRequestId == boundRequestId && requestGen == outboundRequestGeneration.get()) {
-                    if (!control.cancelled) {
-                        if (control.requestFailed) {
-                            statusCodeText = HttpExchangeErrorStatusMark
-                            if (control.responseStatusCode < 0) {
-                                responseHeaderLines.clear()
-                                responseHeaderLines.add("(无响应头 — 请求未成功)")
-                            }
-                        }
-                        applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
-                            responsePartialLine = partial
-                        }
-                    } else {
-                        control.lineBuffer.drainUpdate()
-                    }
-                    responseTimeText = timeText
-                    responseSizeText = formatBytes(control.totalBytes)
-                    isSseResponse = false
-                }
-                flusher.interrupt()
-            }
-        }
-        activeRequestThread = worker
-    }
-
-    fun cancelActiveRequest() {
-        if (!isLoading) return
-        val boundId = inflightBoundRequestId ?: return
-        val control = activeRequestControl ?: return
-        control.cancelled = true
-        closeQuietly(control.activeInput)
-        val cancelMsg = "\n[请求已取消]\n"
-        control.lineBuffer.append(cancelMsg)
-        control.appendRawResponse(cancelMsg)
-        if (editorRequestId == boundId) {
-            applyBufferUpdate(control.lineBuffer.drainUpdate(), responseLines) { partial ->
-                responsePartialLine = partial
-            }
-        } else {
-            control.lineBuffer.drainUpdate()
-        }
-        val timeText = formatDuration(System.currentTimeMillis() - control.startTimeMs)
-        if (editorRequestId == boundId) {
-            responseTimeText = timeText
-        }
-        val sc = control.responseStatusCode
-        val varMap = environmentsState.substitutionMapForActive()
-        val resolvedUrl = applyEnvironmentVariables(url, varMap)
-        val resolvedParams = applyEnvironmentVariables(paramsText, varMap)
-        val cancelUrl = mergeUrlWithParams(resolvedUrl, parseHeadersForSend(resolvedParams))
-        val resolvedHeaders = applyEnvironmentVariables(headersText, varMap)
-        val resolvedBody = bodyWirePayloadForHttp(
-            applyEnvironmentVariables(bodyText, varMap),
-            resolvedHeaders,
-        )
-        RequestResponseStore.save(
-            boundId,
-            HarSnapshot(
-                savedAtEpochMs = System.currentTimeMillis(),
-                requestMethod = method,
-                requestUrl = cancelUrl,
-                requestHeadersFullText = resolvedHeaders,
-                requestBody = resolvedBody,
-                requestHeadersSent = parseHeadersForSend(resolvedHeaders),
-                responseStatus = if (sc >= 0) sc else 0,
-                responseStatusText = if (sc >= 0) HarLogCodec.responseStatusPhrase(sc) else "",
-                responseHeaderLines = responseHeaderLinesForHar(
-                    control.responseHeaderSnapshot,
-                    control.responseBodyDecodedForHar,
-                ),
-                responseBodyLines = control.snapshotRawBodyLines(),
-                responseTimeMs = System.currentTimeMillis() - control.startTimeMs,
-                responseSizeBytes = control.totalBytes,
-                responseTimeLabel = timeText,
-                responseSizeLabel = formatBytes(control.totalBytes),
-                rightTabIndex = if (editorRequestId == boundId) {
-                    rightTabIndex.coerceIn(0, 2)
-                } else {
-                    0
-                },
-                isSseResponse = control.responseWasSse,
-            ),
-        )
-        activeRequestThread?.interrupt()
-        isLoading = false
-        inflightBoundRequestId = null
-        isSseResponse = false
-        activeRequestControl = null
-        activeRequestThread = null
-    }
+    val vm = rememberAppViewModel(repository, expandLoaded, windowState)
 
     Window(
         title = "Api-X",
@@ -648,52 +100,36 @@ fun App(onExitRequest: () -> Unit) {
             onExitRequest()
         },
         onPreviewKeyEvent = { event ->
-            if (recentSwitcherActive) {
+            if (vm.recentSwitcherActive) {
                 when (event.type) {
                     KeyEventType.KeyDown -> {
                         when {
-                            event.key == Key.Escape -> {
-                                recentSwitcherActive = false
-                                true
-                            }
+                            event.key == Key.Escape -> { vm.setRecentSwitcherActive(false); true }
                             event.isCtrlPressed && event.key == Key.Tab -> {
-                                val list = recentSwitcherIds
-                                if (list.isEmpty()) {
-                                    recentSwitcherActive = false
-                                    true
-                                } else {
-                                    val forward = !event.isShiftPressed
-                                    recentSwitcherIndex =
-                                        if (forward) {
-                                            (recentSwitcherIndex + 1) % list.size
-                                        } else {
-                                            (recentSwitcherIndex - 1 + list.size) % list.size
-                                        }
-                                    true
-                                }
+                                val list = vm.recentSwitcherIds
+                                if (list.isEmpty()) { vm.setRecentSwitcherActive(false); true }
+                                else { vm.setRecentSwitcherIndex(if (!event.isShiftPressed) (vm.recentSwitcherIndex + 1) % list.size else (vm.recentSwitcherIndex - 1 + list.size) % list.size); true }
                             }
                             else -> false
                         }
                     }
                     KeyEventType.KeyUp -> {
                         if (event.key == Key.CtrlLeft || event.key == Key.CtrlRight) {
-                            val list = recentSwitcherIds
-                            recentSwitcherActive = false
+                            vm.setRecentSwitcherActive(false)
+                            val list = vm.recentSwitcherIds
                             if (list.isNotEmpty()) {
-                                val id = list[recentSwitcherIndex.coerceIn(0, list.lastIndex)]
-                                if (repository.getRequest(id) != null) {
-                                    expandSetsForRequest(tree, id)?.let { (cols, folders) ->
-                                        expandedCollectionIds = expandedCollectionIds + cols
-                                        expandedFolderIds = expandedFolderIds + folders
+                                val id = list[vm.recentSwitcherIndex.coerceIn(0, list.lastIndex)]
+                                if (vm.repository.getRequest(id) != null) {
+                                    expandSetsForRequest(vm.tree, id)?.let { (cols, folders) ->
+                                        vm.setExpandedCollectionIds(vm.expandedCollectionIds + cols)
+                                        vm.setExpandedFolderIds(vm.expandedFolderIds + folders)
                                     }
-                                    selectTreeNode(TreeSelection.Request(id))
-                                    treeScrollToRequestId = id
+                                    vm.onSelectTreeNode(TreeSelection.Request(id))
+                                    vm.setTreeScrollToRequestId(id)
                                 }
                             }
                             true
-                        } else {
-                            false
-                        }
+                        } else false
                     }
                     else -> false
                 }
@@ -701,613 +137,298 @@ fun App(onExitRequest: () -> Unit) {
                 if (event.type == KeyEventType.KeyDown) {
                     when {
                         event.isCtrlPressed && event.key == Key.Tab -> {
-                            val list = mruRequestIdsForSwitcher()
-                            if (list.isEmpty()) {
-                                false
-                            } else {
-                                recentSwitcherIds = list
-                                recentSwitcherActive = true
-                                recentSwitcherIndex =
-                                    when {
-                                        list.size == 1 -> 0
-                                        !event.isShiftPressed -> 1
-                                        else -> list.lastIndex
-                                    }
-                                true
-                            }
+                            val list = vm.getMruRequestIds()
+                            if (list.isEmpty()) false
+                            else { vm.setRecentSwitcherIds(list); vm.setRecentSwitcherActive(true); vm.setRecentSwitcherIndex(when { list.size == 1 -> 0; !event.isShiftPressed -> 1; else -> list.lastIndex }); true }
                         }
-                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> {
-                            showGlobalSearch = true
-                            true
-                        }
-                        event.isCtrlPressed && event.key == Key.Enter -> {
-                            startRequest()
-                            true
-                        }
-                        event.key == Key.Escape -> {
-                            if (isLoading) {
-                                cancelActiveRequest()
-                                true
-                            } else {
-                                false
-                            }
-                        }
+                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { vm.setShowGlobalSearch(true); true }
+                        event.isCtrlPressed && event.key == Key.Enter -> { vm.onStartRequest(); true }
+                        event.key == Key.Escape -> { if (vm.isLoading) { vm.onCancelRequest(); true } else false }
                         else -> false
                     }
-                } else {
-                    false
-                }
+                } else false
             }
         },
     ) {
-    MaterialTheme(
-        colors = appMaterialColors(isDarkTheme, appSettings.backgroundHex),
-        typography = typographyFromSettings(appSettings),
-    ) {
-        val exchangeMetrics = remember(appSettings.requestResponseFontSizeSp) {
-            exchangeFontMetrics(appSettings.requestResponseFontSizeSp)
-        }
-        Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colors.background)
-                // 顶栏贴窗口上缘（无边框窗口下最小化/最大化/关闭更紧凑）；左右与底部仍留白
-                .padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            RequestTopBar(
-                isLoading = isLoading,
-                isDarkTheme = isDarkTheme,
-                treeSidebarVisible = treeSidebarVisible,
-                onTreeSidebarToggle = { treeSidebarVisible = !treeSidebarVisible },
-                environmentsState = environmentsState,
-                onActiveEnvironmentChange = { id ->
-                    commitEnvironmentsState(environmentsState.copy(activeEnvironmentId = id))
-                },
-                onManageEnvironmentsClick = { showEnvironmentManager = true },
-                onThemeToggle = { isDarkTheme = !isDarkTheme },
-                onSettingsClick = { showSettings = true },
-                mainWindowState = windowState,
-                onWindowCloseRequest = {
-                    persistWindowGeometry(windowState)
-                    onExitRequest()
-                },
-                onImportCollectionClick = {
-                    EventQueue.invokeLater {
-                        val chooser = JFileChooser()
-                        chooser.dialogTitle = "导入 Postman Collection"
-                        chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
-                        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
-                        val file = chooser.selectedFile ?: return@invokeLater
-                        try {
-                            val text = Files.readString(file.toPath(), StandardCharsets.UTF_8)
-                            val portable = parsePostmanCollectionJsonToPortable(text)
-                            val newId = repository.importAsNewCollection(portable)
-                            refreshTree()
-                            expandedCollectionIds = expandedCollectionIds + newId
-                            treeSelection = TreeSelection.Collection(newId)
-                            setSingleResponseMessage(
-                                responseLines,
-                                "已导入集合「${portable.name}」",
-                            )
-                        } catch (e: IllegalArgumentException) {
-                            JOptionPane.showMessageDialog(
-                                null,
-                                e.message ?: "文件格式不正确",
-                                "导入失败",
-                                JOptionPane.ERROR_MESSAGE,
-                            )
-                        } catch (e: Exception) {
-                            JOptionPane.showMessageDialog(
-                                null,
-                                e.message ?: e.toString(),
-                                "导入失败",
-                                JOptionPane.ERROR_MESSAGE,
-                            )
-                        }
-                        responsePartialLine = null
-                    }
-                },
-                onImportCurlClick = importCurl@{
-                    try {
-                        val activeId = editorRequestId
-                        if (activeId == null) {
-                            setSingleResponseMessage(responseLines, "请先在编辑器中打开一个请求后再导入 cURL")
-                            responsePartialLine = null
-                            return@importCurl
-                        }
-                        val clipboardText = readClipboardText()
-                        val parsed = parseCurlCommand(clipboardText)
-                        saveEditorIfBound()
-                        val newId = repository.createRequestBelow(activeId)
-                            ?: throw IllegalStateException("无法在当前请求下新建条目")
-                        refreshTree()
-                        val placed = repository.getRequest(newId)
-                            ?: throw IllegalStateException("新建请求后无法读取")
-                        expandedCollectionIds = expandedCollectionIds + placed.collectionId
-                        if (placed.folderId != null) {
-                            expandedFolderIds = expandedFolderIds + placed.folderId
-                        }
-                        applyRequestToEditor(newId)
-                        treeSelection = TreeSelection.Request(newId)
-                        method = parsed.method
-                        val rawUrl = parsed.url.ifBlank { url }
-                        val urlForName = parsed.url.ifBlank { rawUrl }
-                        if (urlForName.isNotBlank()) {
-                            try {
-                                val uri = URI(urlForName)
-                                val path = uri.path
-                                if (!path.isNullOrBlank()) {
-                                    val name = path.substringAfterLast('/')
-                                    if (name.isNotBlank()) {
-                                        repository.renameRequest(newId, name)
-                                        refreshTree()
-                                    }
-                                }
-                            } catch (_: Exception) {
-                            }
-                        }
-                        val (urlNoQuery, queryParamsText) = splitUrlQueryForParamsEditor(rawUrl)
-                        url = urlNoQuery.ifBlank { rawUrl }
-                        paramsText = queryParamsText
-                        headersText = parsed.headers.joinToString("\n")
-                        bodyText = migrateFormBodyToEditorLinesIfNeeded(parsed.body, headersText)
-                        repository.saveRequestEditorFields(
-                            newId, method, url, headersText, paramsText, bodyText, auth,
-                        )
-                        setSingleResponseMessage(responseLines, "已新建请求并导入剪贴板中的 cURL")
-                        responsePartialLine = null
-                        responseHeaderLines.clear()
-                        responseHeaderLines.add("(暂无响应头)")
-                        statusCodeText = "-"
-                        responseTimeText = "-"
-                        responseSizeText = "0 B"
-                    } catch (e: Exception) {
-                        setSingleResponseMessage(responseLines, "导入 cURL 失败: ${e.message}")
-                        responsePartialLine = null
-                        responseHeaderLines.clear()
-                        responseHeaderLines.add("(暂无响应头)")
-                    }
-                },
-                onPushDataClick = {
-                    thread {
-                        val r = DataDirSync.pushToDataDir(repository)
-                        EventQueue.invokeLater {
-                            if (r.error != null) {
-                                JOptionPane.showMessageDialog(
-                                    null,
-                                    r.error,
-                                    "同步到 data 失败",
-                                    JOptionPane.ERROR_MESSAGE,
-                                )
-                            } else {
-                                val p = AppPaths.gitDataRoot().toString()
-                                setSingleResponseMessage(
-                                    responseLines,
-                                    "已写入 $p：${r.collectionFilesWritten} 个 collection JSON；" +
-                                        if (r.envWritten) "环境已同步到 data/env" else "环境未写入",
-                                )
-                            }
-                            responsePartialLine = null
-                        }
-                    }
-                },
-                onPullDataClick = {
-                    thread {
-                        val r = DataDirSync.pullFromDataDir(repository)
-                        EventQueue.invokeLater {
-                            if (r.error != null) {
-                                JOptionPane.showMessageDialog(
-                                    null,
-                                    r.error,
-                                    "从 data 合并失败",
-                                    JOptionPane.ERROR_MESSAGE,
-                                )
-                            } else {
-                                refreshTree()
-                                environmentsState = EnvironmentStore.snapshot()
-                                val errLines = r.fileErrors.joinToString("\n")
-                                val baseMsg =
-                                    "已合并：更新 ${r.merged} 个集合、新建 ${r.created} 个；环境 ${
-                                        if (r.envMerged) "已合并" else "未变更"
-                                    }"
-                                if (r.fileErrors.isNotEmpty()) {
-                                    JOptionPane.showMessageDialog(
-                                        null,
-                                        "$baseMsg\n\n部分文件未导入：\n$errLines",
-                                        "从 data 合并",
-                                        JOptionPane.INFORMATION_MESSAGE,
-                                    )
-                                }
-                                setSingleResponseMessage(
-                                    responseLines,
-                                    if (r.fileErrors.isEmpty()) baseMsg else "$baseMsg；详见弹窗中失败项",
-                                )
-                            }
-                            responsePartialLine = null
-                        }
-                    }
-                }
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .onSizeChanged { contentRowWidthPx = it.width.toFloat().coerceAtLeast(1f) }
-            ) {
-                val middleFraction = if (treeSidebarVisible) 1f - treeSplitRatio else 1f
-                if (treeSidebarVisible) {
-                CollectionTreeSidebar(
-                    modifier = Modifier.weight(treeSplitRatio),
-                    tree = tree,
-                    selectedNode = treeSelection,
-                    treeScrollToRequestId = treeScrollToRequestId,
-                    onTreeScrollToRequestHandled = { treeScrollToRequestId = null },
-                    editorBoundRequestId = editorRequestId,
-                    expandedCollectionIds = expandedCollectionIds,
-                    expandedFolderIds = expandedFolderIds,
-                    onToggleCollection = { id ->
-                        expandedCollectionIds =
-                            if (id in expandedCollectionIds) expandedCollectionIds - id
-                            else expandedCollectionIds + id
-                    },
-                    onToggleFolder = { id ->
-                        expandedFolderIds =
-                            if (id in expandedFolderIds) expandedFolderIds - id
-                            else expandedFolderIds + id
-                    },
-                    onSelectNode = { selectTreeNode(it) },
-                    onAddCollection = {
-                        val id = repository.createCollection("新集合")
-                        refreshTree()
-                        expandedCollectionIds = expandedCollectionIds + id
-                        treeSelection = TreeSelection.Collection(id)
-                    },
-                    onAddFolder = { treeSelection?.let { addFolderAt(it) } },
-                    onAddRequest = { treeSelection?.let { addRequestAt(it) } },
-                    onContextAddFolder = { addFolderAt(it) },
-                    onContextAddRequest = { addRequestAt(it) },
-                    onRename = { sel, newName ->
-                        when (sel) {
-                            is TreeSelection.Collection -> repository.renameCollection(sel.id, newName)
-                            is TreeSelection.Folder -> repository.renameFolder(sel.id, newName)
-                            is TreeSelection.Request -> repository.renameRequest(sel.id, newName)
-                        }
-                        refreshTree()
-                    },
-                    onDelete = { sel ->
-                        saveEditorIfBound()
-                        when (sel) {
-                            is TreeSelection.Collection -> repository.deleteCollection(sel.id)
-                            is TreeSelection.Folder -> repository.deleteFolder(sel.id)
-                            is TreeSelection.Request -> {
-                                repository.deleteRequest(sel.id)
-                                RecentRequestUsageStore.remove(sel.id)
-                                RequestResponseStore.deleteRequestArtifacts(sel.id)
-                            }
-                        }
-                        val nextTree = repository.loadTree()
-                        tree = nextTree
-                        if (editorRequestId != null && repository.getRequest(editorRequestId!!) == null) {
-                            editorRequestId = null
-                            firstRequestSelection(nextTree)?.let { next ->
-                                applyRequestToEditor(next.id)
-                                treeSelection = next
-                            } ?: run {
-                                LastRequestPrefs.clear()
-                                method = "GET"
-                                url = ""
-                                headersText = ""
-                                paramsText = ""
-                                bodyText = ""
-                                treeSelection =
-                                    nextTree.firstOrNull()?.let { TreeSelection.Collection(it.id) }
-                            }
-                        }
-                    },
-                    onSettings = { sel ->
-                        collectionSettingsTarget = sel
-                        showCollectionSettings = true
-                    },
-                    folderAddEnabled = repository.newFolderTarget(treeSelection) != null,
-                    requestAddEnabled = repository.newRequestTarget(treeSelection) != null,
-                    onExportRequestAsCurl = { rid ->
-                        val r = repository.getRequest(rid) ?: return@CollectionTreeSidebar
-                        val vm = environmentsState.substitutionMapForActive()
-                        writeClipboardText(
-                            requestToCurlCommand(
-                                r.method,
-                                mergeUrlWithParams(
-                                    applyEnvironmentVariables(r.url, vm),
-                                    parseHeadersForSend(applyEnvironmentVariables(r.paramsText, vm)),
-                                ),
-                                applyEnvironmentVariables(r.headersText, vm),
-                                applyEnvironmentVariables(r.bodyText, vm),
-                            ),
-                        )
-                        setSingleResponseMessage(responseLines, "已复制 cURL 到剪贴板")
-                        responsePartialLine = null
-                    },
-                    onExportPostmanCollection = { collectionId ->
-                        val portable = repository.exportPortableCollection(collectionId)
-                            ?: return@CollectionTreeSidebar
-                        val json = portableCollectionToPostmanV21Json(portable)
-                        EventQueue.invokeLater {
-                            val chooser = JFileChooser()
-                            chooser.dialogTitle = "导出 Postman Collection v2.1"
-                            chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
-                            val safeBase = portable.name
-                                .replace(Regex("""[^\w\u4e00-\u9fff\-_. ]"""), "_")
-                                .trim()
-                                .ifEmpty { "collection" }
-                            chooser.selectedFile = java.io.File("$safeBase.postman_collection.json")
-                            if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
-                            var file = chooser.selectedFile
-                            if (!file.name.endsWith(".json", ignoreCase = true)) {
-                                file = java.io.File(file.parentFile, file.name + ".json")
-                            }
-                            try {
-                                Files.writeString(file.toPath(), json, StandardCharsets.UTF_8)
-                                setSingleResponseMessage(
-                                    responseLines,
-                                    "已导出 Postman v2.1：${file.absolutePath}",
-                                )
-                            } catch (e: Exception) {
-                                JOptionPane.showMessageDialog(
-                                    null,
-                                    e.message ?: e.toString(),
-                                    "导出失败",
-                                    JOptionPane.ERROR_MESSAGE,
-                                )
-                            }
-                            responsePartialLine = null
-                        }
-                    },
-                    onDuplicateRequestBelow = { rid ->
-                        saveEditorIfBound()
-                        val newId = repository.duplicateRequestBelow(rid) ?: return@CollectionTreeSidebar
-                        refreshTree()
-                        val placed = repository.getRequest(newId) ?: return@CollectionTreeSidebar
-                        expandedCollectionIds = expandedCollectionIds + placed.collectionId
-                        if (placed.folderId != null) {
-                            expandedFolderIds = expandedFolderIds + placed.folderId
-                        }
-                        applyRequestToEditor(newId)
-                        treeSelection = TreeSelection.Request(newId)
-                    },
-                    onApplyTreeDrop = { payload, target ->
-                        val ok = repository.applyTreeDrop(payload, target)
-                        if (ok) {
-                            refreshTree()
-                            when (target) {
-                                is TreeDropTarget.IntoFolder -> {
-                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
-                                    expandedFolderIds = expandedFolderIds + target.folderId
-                                }
-                                is TreeDropTarget.IntoCollection -> {
-                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
-                                }
-                                is TreeDropTarget.FolderSlot -> {
-                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
-                                    target.parentFolderId?.let { pid ->
-                                        expandedFolderIds = expandedFolderIds + pid
-                                    }
-                                }
-                                is TreeDropTarget.RequestSlot -> {
-                                    expandedCollectionIds = expandedCollectionIds + target.collectionId
-                                    target.folderId?.let { fid ->
-                                        expandedFolderIds = expandedFolderIds + fid
-                                    }
-                                }
-                            }
-                        }
-                        ok
-                    },
-                )
-                Box(
-                    modifier = Modifier
-                        .width(10.dp)
-                        .fillMaxHeight()
-                        .pointerInput(contentRowWidthPx) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                val next = treeSplitRatio + (dragAmount.x / contentRowWidthPx)
-                                treeSplitRatio = next.coerceIn(0.12f, 0.42f)
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f))
+        MaterialTheme(colors = appMaterialColors(vm.isDarkTheme, vm.appSettings.backgroundHex), typography = typographyFromSettings(vm.appSettings)) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    RequestTopBar(
+                        isLoading = vm.isLoading, isDarkTheme = vm.isDarkTheme, treeSidebarVisible = vm.treeSidebarVisible,
+                        onTreeSidebarToggle = { vm.setTreeSidebarVisible(!vm.treeSidebarVisible) },
+                        environmentsState = vm.environmentsState,
+                        onActiveEnvironmentChange = { vm.onCommitEnvironments(vm.environmentsState.copy(activeEnvironmentId = it)) },
+                        onManageEnvironmentsClick = { vm.setShowEnvironmentManager(true) },
+                        onThemeToggle = { vm.setIsDarkTheme(!vm.isDarkTheme) },
+                        onSettingsClick = { vm.setShowSettings(true) },
+                        mainWindowState = windowState,
+                        onWindowCloseRequest = { persistWindowGeometry(windowState); onExitRequest() },
+                        onImportCollectionClick = { importCollection(vm) },
+                        onImportCurlClick = { importCurl(vm) },
+                        onPushDataClick = { pushData(vm) },
+                        onPullDataClick = { pullData(vm) },
                     )
-                }
-                }
-                RequestSidePanel(
-                    modifier = Modifier.weight(middleFraction * splitRatio),
-                    exchangeMetrics = exchangeMetrics,
-                    editorRequestId = editorRequestId,
-                    isLoading = isLoading,
-                    method = method,
-                    methodMenuExpanded = methodMenuExpanded,
-                    onMethodMenuExpandedChange = { methodMenuExpanded = it },
-                    onMethodSelected = { method = it },
-                    url = url,
-                    onUrlChange = { url = it },
-                    onSendOrCancel = {
-                        if (!isLoading) startRequest() else cancelActiveRequest()
-                    },
-                    leftTabIndex = leftTabIndex,
-                    onLeftTabIndexChange = { leftTabIndex = it.coerceIn(0, 3) },
-                    bodyText = bodyText,
-                    onBodyTextChange = { bodyText = it },
-                    headersText = headersText,
-                    onHeadersTextChange = { headersText = it },
-                    paramsText = paramsText,
-                    onParamsTextChange = { paramsText = it },
-                    auth = auth,
-                    onAuthChange = { auth = it },
-                    isDarkTheme = isDarkTheme,
-                )
-                Box(
-                    modifier = Modifier
-                        .width(10.dp)
-                        .fillMaxHeight()
-                        .pointerInput(contentRowWidthPx, middleFraction) {
-                            detectDragGestures { change, dragAmount ->
-                                change.consume()
-                                if (middleFraction > 0.02f) {
-                                    val next = splitRatio + dragAmount.x / (contentRowWidthPx * middleFraction)
-                                    splitRatio = next.coerceIn(0.2f, 0.8f)
-                                }
-                            }
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .width(1.dp)
-                            .fillMaxHeight()
-                            .background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f))
-                    )
-                }
-                ResponsePanel(
-                    modifier = Modifier.weight(middleFraction * (1f - splitRatio)),
-                    exchangeMetrics = exchangeMetrics,
-                    statusCodeText = statusCodeText,
-                    responseTimeText = responseTimeText,
-                    responseSizeText = responseSizeText,
-                    responseLines = responseLines,
-                    responsePartialLine = responsePartialLine,
-                    responseHeaderLines = responseHeaderLines,
-                    requestPlainText = exchangeRequestPlainText,
-                    rightTabIndex = rightTabIndex,
-                    onRightTabIndexChange = { rightTabIndex = it.coerceIn(0, 2) },
-                    isSseResponse = isSseResponse,
-                    isResponseLoading = isLoading,
-                    responseListState = responseListState,
-                    responseHeadersListState = responseHeadersListState,
-                    copyResponseBodyEnabled = editorRequestId != null &&
-                        responseBodyTextForClipboard(responseLines, responsePartialLine).isNotBlank(),
-                    onCopyResponseBody = copy@{
-                        if (editorRequestId == null) return@copy
-                        val text = responseBodyTextForClipboard(responseLines, responsePartialLine)
-                        if (text.isBlank()) return@copy
-                        writeClipboardText(text)
-                    },
-                    clearResponseLogsEnabled = editorRequestId != null && !isLoading,
-                    onClearResponseLogs = clear@{
-                        val id = editorRequestId ?: return@clear
-                        RequestResponseStore.clearResponseAndBenchLogs(id)
-                        responseLines.clear()
-                        responseLines.add("响应结果会显示在这里")
-                        responseHeaderLines.clear()
-                        responseHeaderLines.add("(暂无响应头)")
-                        responsePartialLine = null
-                        statusCodeText = ""
-                        responseTimeText = ""
-                        responseSizeText = ""
-                        isSseResponse = false
-                        exchangeRequestPlainText =
-                            "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
-                    },
-                    jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
-                    onJsonSyntaxHighlightEnabledChange = { jsonSyntaxHighlightEnabled = it },
-                    historyEntries = historyEntries,
-                    selectedHistoryEpochMs = selectedHistoryEpochMs,
-                    onHistorySelected = { epochMs ->
-                        selectedHistoryEpochMs = epochMs
-                        val requestId = editorRequestId ?: return@ResponsePanel
-                        val response = if (epochMs == null) {
-                            RequestResponseStore.loadLatest(requestId)
-                        } else {
-                            RequestResponseStore.loadByTimestamp(requestId, epochMs)
+                    Row(modifier = Modifier.fillMaxWidth().weight(1f).onSizeChanged { vm.setContentRowWidthPx(it.width.toFloat().coerceAtLeast(1f)) }) {
+                        val middleFraction = if (vm.treeSidebarVisible) 1f - vm.treeSplitRatio else 1f
+                        if (vm.treeSidebarVisible) {
+                            CollectionTreeSidebar(
+                                modifier = Modifier.weight(vm.treeSplitRatio), tree = vm.tree, selectedNode = vm.treeSelection,
+                                treeScrollToRequestId = vm.treeScrollToRequestId, onTreeScrollToRequestHandled = { vm.setTreeScrollToRequestId(null) },
+                                editorBoundRequestId = vm.editorRequestId, expandedCollectionIds = vm.expandedCollectionIds, expandedFolderIds = vm.expandedFolderIds,
+                                onToggleCollection = { vm.setExpandedCollectionIds(if (it in vm.expandedCollectionIds) vm.expandedCollectionIds - it else vm.expandedCollectionIds + it) },
+                                onToggleFolder = { vm.setExpandedFolderIds(if (it in vm.expandedFolderIds) vm.expandedFolderIds - it else vm.expandedFolderIds + it) },
+                                onSelectNode = { vm.onSelectTreeNode(it) },
+                                onAddCollection = { val id = vm.repository.createCollection("新集合"); vm.onRefreshTree(); vm.setExpandedCollectionIds(vm.expandedCollectionIds + id); vm.setTreeSelection(TreeSelection.Collection(id)) },
+                                onAddFolder = { vm.treeSelection?.let { vm.onAddFolderAt(it) } },
+                                onAddRequest = { vm.treeSelection?.let { vm.onAddRequestAt(it) } },
+                                onContextAddFolder = { vm.onAddFolderAt(it) },
+                                onContextAddRequest = { vm.onAddRequestAt(it) },
+                                onRename = { sel, newName -> when (sel) { is TreeSelection.Collection -> vm.repository.renameCollection(sel.id, newName); is TreeSelection.Folder -> vm.repository.renameFolder(sel.id, newName); is TreeSelection.Request -> vm.repository.renameRequest(sel.id, newName) }; vm.onRefreshTree() },
+                                onDelete = { deleteSelection(vm, it) },
+                                onSettings = { vm.setCollectionSettingsTarget(it); vm.setShowCollectionSettings(true) },
+                                folderAddEnabled = vm.repository.newFolderTarget(vm.treeSelection) != null,
+                                requestAddEnabled = vm.repository.newRequestTarget(vm.treeSelection) != null,
+                                onExportRequestAsCurl = { exportAsCurl(vm, it) },
+                                onExportPostmanCollection = { exportPostmanCollection(vm, it) },
+                                onDuplicateRequestBelow = { duplicateRequest(vm, it) },
+                                onApplyTreeDrop = { payload, target -> applyTreeDrop(vm, payload, target) },
+                            )
+                            SplitHandle(vm.contentRowWidthPx) { vm.setTreeSplitRatio(vm.treeSplitRatio + it / vm.contentRowWidthPx) }
                         }
-                        if (response != null) {
-                            responseLines.clear()
-                            responseLines.addAll(response.responseBodyLines)
-                            responseHeaderLines.clear()
-                            responseHeaderLines.addAll(response.responseHeaderLines)
-                            responsePartialLine = null
-                            statusCodeText = response.statusCodeText
-                            responseTimeText = response.responseTimeText
-                            responseSizeText = response.responseSizeText
-                            isSseResponse = response.isSseResponse
-                            rightTabIndex = response.rightTabIndex.coerceIn(0, 2)
-                            exchangeRequestPlainText = response.requestPlainText.ifBlank {
-                                "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
-                            }
-                        }
-                    },
-                )
+                        RequestSidePanel(
+                            modifier = Modifier.weight(middleFraction * vm.splitRatio), exchangeMetrics = vm.exchangeMetrics,
+                            editorRequestId = vm.editorRequestId, isLoading = vm.isLoading,
+                            method = vm.method, methodMenuExpanded = vm.methodMenuExpanded,
+                            onMethodMenuExpandedChange = { vm.setMethodMenuExpanded(it) },
+                            onMethodSelected = { vm.setMethod(it) },
+                            url = vm.url, onUrlChange = { vm.setUrl(it) },
+                            onSendOrCancel = { if (!vm.isLoading) vm.onStartRequest() else vm.onCancelRequest() },
+                            leftTabIndex = vm.leftTabIndex, onLeftTabIndexChange = { vm.setLeftTabIndex(it.coerceIn(0, 3)) },
+                            bodyText = vm.bodyText, onBodyTextChange = { vm.setBodyText(it) },
+                            headersText = vm.headersText, onHeadersTextChange = { vm.setHeadersText(it) },
+                            paramsText = vm.paramsText, onParamsTextChange = { vm.setParamsText(it) },
+                            auth = vm.auth, onAuthChange = { vm.setAuth(it) },
+                            isDarkTheme = vm.isDarkTheme,
+                        )
+                        SplitHandle(vm.contentRowWidthPx * middleFraction) { vm.setSplitRatio(vm.splitRatio + it / (vm.contentRowWidthPx * middleFraction)) }
+                        ResponsePanel(
+                            modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), exchangeMetrics = vm.exchangeMetrics,
+                            statusCodeText = vm.statusCodeText, responseTimeText = vm.responseTimeText, responseSizeText = vm.responseSizeText,
+                            responseLines = vm.responseLines, responsePartialLine = vm.responsePartialLine, responseHeaderLines = vm.responseHeaderLines,
+                            requestPlainText = vm.exchangeRequestPlainText, rightTabIndex = vm.rightTabIndex, onRightTabIndexChange = { vm.setRightTabIndex(it.coerceIn(0, 2)) },
+                            isSseResponse = vm.isSseResponse, isResponseLoading = vm.isLoading,
+                            responseListState = vm.responseListState, responseHeadersListState = vm.responseHeadersListState,
+                            copyResponseBodyEnabled = vm.editorRequestId != null && responseBodyTextForClipboard(vm.responseLines, vm.responsePartialLine).isNotBlank(),
+                            onCopyResponseBody = { val text = responseBodyTextForClipboard(vm.responseLines, vm.responsePartialLine); if (text.isNotBlank()) writeClipboardText(text) },
+                            clearResponseLogsEnabled = vm.editorRequestId != null && !vm.isLoading,
+                            onClearResponseLogs = { val id = vm.editorRequestId ?: return@ResponsePanel; RequestResponseStore.clearResponseAndBenchLogs(id); vm.responseLines.clear(); vm.responseLines.add("响应结果会显示在这里"); vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)"); vm.setResponsePartialLine(null); vm.setStatusCodeText(""); vm.setResponseTimeText(""); vm.setResponseSizeText(""); vm.setIsSseResponse(false); vm.setExchangeRequestPlainText("尚无已发送请求记录；发送后将显示实际发出的请求头与正文。") },
+                            jsonSyntaxHighlightEnabled = vm.jsonSyntaxHighlightEnabled, onJsonSyntaxHighlightEnabledChange = { vm.setJsonSyntaxHighlightEnabled(it) },
+                            historyEntries = vm.historyEntries, selectedHistoryEpochMs = vm.selectedHistoryEpochMs,
+                            onHistorySelected = { loadHistory(vm, it) },
+                        )
+                    }
+                }
+                if (vm.recentSwitcherActive && vm.recentSwitcherIds.isNotEmpty()) {
+                    RecentRequestSwitcherOverlay(requestIds = vm.recentSwitcherIds, highlightIndex = vm.recentSwitcherIndex, tree = vm.tree, repository = vm.repository)
+                }
+                SettingsDialogWindow(visible = vm.showSettings, isDarkTheme = vm.isDarkTheme, typographyBase = typographyFromSettings(vm.appSettings), onCloseRequest = { vm.setShowSettings(false) }, onSaved = { saved -> AppSettingsStore.replace(saved); vm.setAppSettings(saved) })
+                EnvironmentManagerDialogWindow(visible = vm.showEnvironmentManager, isDarkTheme = vm.isDarkTheme, appBackgroundHex = vm.appSettings.backgroundHex, typographyBase = typographyFromSettings(vm.appSettings), initial = vm.environmentsState, onCloseRequest = { vm.setShowEnvironmentManager(false) }, onSaved = { vm.onCommitEnvironments(it) })
+                GlobalSearchDialogWindow(visible = vm.showGlobalSearch, isDarkTheme = vm.isDarkTheme, appBackgroundHex = vm.appSettings.backgroundHex, typographyBase = typographyFromSettings(vm.appSettings), tree = vm.tree, repository = vm.repository, onCloseRequest = { vm.setShowGlobalSearch(false) }, onPickRequest = { id -> expandSetsForRequest(vm.tree, id)?.let { (cols, folders) -> vm.setExpandedCollectionIds(vm.expandedCollectionIds + cols); vm.setExpandedFolderIds(vm.expandedFolderIds + folders) }; vm.onSelectTreeNode(TreeSelection.Request(id)); vm.setTreeScrollToRequestId(id) })
+                CollectionSettingsDialog(visible = vm.showCollectionSettings, target = vm.collectionSettingsTarget, repository = vm.repository, isDarkTheme = vm.isDarkTheme, typographyBase = typographyFromSettings(vm.appSettings), exchangeMetrics = vm.exchangeMetrics, onCloseRequest = { vm.setShowCollectionSettings(false); vm.onRefreshTree() })
             }
         }
-            if (recentSwitcherActive && recentSwitcherIds.isNotEmpty()) {
-                RecentRequestSwitcherOverlay(
-                    requestIds = recentSwitcherIds,
-                    highlightIndex = recentSwitcherIndex,
-                    tree = tree,
-                    repository = repository,
-                )
-            }
-            SettingsDialogWindow(
-                visible = showSettings,
-                isDarkTheme = isDarkTheme,
-                typographyBase = typographyFromSettings(appSettings),
-                onCloseRequest = { showSettings = false },
-                onSaved = { saved ->
-                    AppSettingsStore.replace(saved)
-                    appSettings = saved
-                },
-            )
-            EnvironmentManagerDialogWindow(
-                visible = showEnvironmentManager,
-                isDarkTheme = isDarkTheme,
-                appBackgroundHex = appSettings.backgroundHex,
-                typographyBase = typographyFromSettings(appSettings),
-                initial = environmentsState,
-                onCloseRequest = { showEnvironmentManager = false },
-                onSaved = { saved -> commitEnvironmentsState(saved) },
-            )
-            GlobalSearchDialogWindow(
-                visible = showGlobalSearch,
-                isDarkTheme = isDarkTheme,
-                appBackgroundHex = appSettings.backgroundHex,
-                typographyBase = typographyFromSettings(appSettings),
-                tree = tree,
-                repository = repository,
-                onCloseRequest = { showGlobalSearch = false },
-                onPickRequest = { id ->
-                    expandSetsForRequest(tree, id)?.let { (cols, folders) ->
-                        expandedCollectionIds = expandedCollectionIds + cols
-                        expandedFolderIds = expandedFolderIds + folders
-                    }
-                    selectTreeNode(TreeSelection.Request(id))
-                    treeScrollToRequestId = id
-                },
-            )
-            CollectionSettingsDialog(
-                visible = showCollectionSettings,
-                target = collectionSettingsTarget,
-                repository = repository,
-                isDarkTheme = isDarkTheme,
-                typographyBase = typographyFromSettings(appSettings),
-                exchangeMetrics = exchangeFontMetrics(appSettings.requestResponseFontSizeSp),
-                onCloseRequest = {
-                    showCollectionSettings = false
-                    refreshTree() // Refresh to reflect any changes if needed
-                },
-            )
-        }
-    }
     }
 }
 
-fun main() = application {
-    App(onExitRequest = { exitApplication() })
+@Composable
+private fun SplitHandle(widthPx: Float, onDrag: (Float) -> Unit) {
+    Box(modifier = Modifier.width(10.dp).fillMaxSize().pointerInput(widthPx) {
+        detectDragGestures { change, dragAmount -> change.consume(); onDrag(dragAmount.x) }
+    }, contentAlignment = Alignment.Center) {
+        Box(modifier = Modifier.width(1.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f)))
+    }
+}
+
+private fun importCollection(vm: AppViewModel) {
+    EventQueue.invokeLater {
+        val chooser = JFileChooser()
+        chooser.dialogTitle = "导入 Postman Collection"
+        chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
+        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
+        val file = chooser.selectedFile ?: return@invokeLater
+        try {
+            val text = Files.readString(file.toPath(), StandardCharsets.UTF_8)
+            val portable = parsePostmanCollectionJsonToPortable(text)
+            val newId = vm.repository.importAsNewCollection(portable)
+            vm.onRefreshTree()
+            vm.setExpandedCollectionIds(vm.expandedCollectionIds + newId)
+            vm.setTreeSelection(TreeSelection.Collection(newId))
+            setSingleResponseMessage(vm.responseLines, "已导入集合「${portable.name}」")
+        } catch (e: IllegalArgumentException) {
+            JOptionPane.showMessageDialog(null, e.message ?: "文件格式不正确", "导入失败", JOptionPane.ERROR_MESSAGE)
+        } catch (e: Exception) {
+            JOptionPane.showMessageDialog(null, e.message ?: e.toString(), "导入失败", JOptionPane.ERROR_MESSAGE)
+        }
+        vm.setResponsePartialLine(null)
+    }
+}
+
+private fun importCurl(vm: AppViewModel) {
+    try {
+        val activeId = vm.editorRequestId
+        if (activeId == null) { setSingleResponseMessage(vm.responseLines, "请先在编辑器中打开一个请求后再导入 cURL"); vm.setResponsePartialLine(null); return }
+        val clipboardText = readClipboardText()
+        val parsed = parseCurlCommand(clipboardText)
+        vm.onSaveEditor()
+        val newId = vm.repository.createRequestBelow(activeId) ?: throw IllegalStateException("无法在当前请求下新建条目")
+        vm.onRefreshTree()
+        val placed = vm.repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
+        vm.setExpandedCollectionIds(vm.expandedCollectionIds + placed.collectionId)
+        if (placed.folderId != null) vm.setExpandedFolderIds(vm.expandedFolderIds + placed.folderId)
+        vm.onApplyRequestToEditor(newId)
+        vm.setTreeSelection(TreeSelection.Request(newId))
+        vm.setMethod(parsed.method)
+        val rawUrl = parsed.url.ifBlank { vm.url }
+        if (rawUrl.isNotBlank()) {
+            try {
+                val uri = java.net.URI(rawUrl)
+                val path = uri.path
+                if (!path.isNullOrBlank()) {
+                    val name = path.substringAfterLast('/')
+                    if (name.isNotBlank()) { vm.repository.renameRequest(newId, name); vm.onRefreshTree() }
+                }
+            } catch (_: Exception) { }
+        }
+        val (urlNoQuery, queryParamsText) = splitUrlQueryForParamsEditor(rawUrl)
+        vm.setUrl(urlNoQuery.ifBlank { rawUrl })
+        vm.setParamsText(queryParamsText)
+        vm.setHeadersText(parsed.headers.joinToString("\n"))
+        vm.setBodyText(http.migrateFormBodyToEditorLinesIfNeeded(parsed.body, vm.headersText))
+        vm.repository.saveRequestEditorFields(newId, vm.method, vm.url, vm.headersText, vm.paramsText, vm.bodyText, vm.auth)
+        setSingleResponseMessage(vm.responseLines, "已新建请求并导入剪贴板中的 cURL")
+        vm.setResponsePartialLine(null)
+        vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)")
+        vm.setStatusCodeText("-"); vm.setResponseTimeText("-"); vm.setResponseSizeText("0 B")
+    } catch (e: Exception) {
+        setSingleResponseMessage(vm.responseLines, "导入 cURL 失败: ${e.message}")
+        vm.setResponsePartialLine(null)
+        vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)")
+    }
+}
+
+private fun pushData(vm: AppViewModel) {
+    thread {
+        val r = DataDirSync.pushToDataDir(vm.repository)
+        EventQueue.invokeLater {
+            if (r.error != null) JOptionPane.showMessageDialog(null, r.error, "同步到 data 失败", JOptionPane.ERROR_MESSAGE)
+            else setSingleResponseMessage(vm.responseLines, "已写入 ${AppPaths.gitDataRoot()}：${r.collectionFilesWritten} 个 collection JSON；${if (r.envWritten) "环境已同步到 data/env" else "环境未写入"}")
+            vm.setResponsePartialLine(null)
+        }
+    }
+}
+
+private fun pullData(vm: AppViewModel) {
+    thread {
+        val r = DataDirSync.pullFromDataDir(vm.repository)
+        EventQueue.invokeLater {
+            if (r.error != null) JOptionPane.showMessageDialog(null, r.error, "从 data 合并失败", JOptionPane.ERROR_MESSAGE)
+            else {
+                vm.onRefreshTree()
+                vm.setEnvironmentsState(EnvironmentStore.snapshot())
+                val errLines = r.fileErrors.joinToString("\n")
+                val baseMsg = "已合并：更新 ${r.merged} 个集合、新建 ${r.created} 个；环境 ${if (r.envMerged) "已合并" else "未变更"}"
+                if (r.fileErrors.isNotEmpty()) JOptionPane.showMessageDialog(null, "$baseMsg\n\n部分文件未导入：\n$errLines", "从 data 合并", JOptionPane.INFORMATION_MESSAGE)
+                setSingleResponseMessage(vm.responseLines, if (r.fileErrors.isEmpty()) baseMsg else "$baseMsg；详见弹窗中失败项")
+            }
+            vm.setResponsePartialLine(null)
+        }
+    }
+}
+
+private fun deleteSelection(vm: AppViewModel, sel: TreeSelection) {
+    vm.onSaveEditor()
+    when (sel) {
+        is TreeSelection.Collection -> vm.repository.deleteCollection(sel.id)
+        is TreeSelection.Folder -> vm.repository.deleteFolder(sel.id)
+        is TreeSelection.Request -> { vm.repository.deleteRequest(sel.id); RecentRequestUsageStore.remove(sel.id); RequestResponseStore.deleteRequestArtifacts(sel.id) }
+    }
+    val nextTree = vm.repository.loadTree()
+    vm.setTree(nextTree)
+    if (vm.editorRequestId != null && vm.repository.getRequest(vm.editorRequestId!!) == null) {
+        vm.setEditorRequestId(null)
+        firstRequestSelection(nextTree)?.let { next -> vm.onApplyRequestToEditor(next.id); vm.setTreeSelection(next) }
+            ?: run { LastRequestPrefs.clear(); vm.setMethod("GET"); vm.setUrl(""); vm.setHeadersText(""); vm.setParamsText(""); vm.setBodyText(""); vm.setTreeSelection(nextTree.firstOrNull()?.let { TreeSelection.Collection(it.id) }) }
+    }
+}
+
+private fun exportAsCurl(vm: AppViewModel, rid: String) {
+    val r = vm.repository.getRequest(rid) ?: return
+    val vmEnv = vm.environmentsState.substitutionMapForActive()
+    writeClipboardText(requestToCurlCommand(r.method, mergeUrlWithParams(applyEnvironmentVariables(r.url, vmEnv), parseHeadersForSend(applyEnvironmentVariables(r.paramsText, vmEnv))), applyEnvironmentVariables(r.headersText, vmEnv), applyEnvironmentVariables(r.bodyText, vmEnv)))
+    setSingleResponseMessage(vm.responseLines, "已复制 cURL 到剪贴板")
+    vm.setResponsePartialLine(null)
+}
+
+private fun exportPostmanCollection(vm: AppViewModel, collectionId: String) {
+    val portable = vm.repository.exportPortableCollection(collectionId) ?: return
+    val json = portableCollectionToPostmanV21Json(portable)
+    EventQueue.invokeLater {
+        val chooser = JFileChooser()
+        chooser.dialogTitle = "导出 Postman Collection v2.1"
+        chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
+        val safeBase = portable.name.replace(Regex("""[^\w\u4e00-\u9fff\-_. ]"""), "_").trim().ifEmpty { "collection" }
+        chooser.selectedFile = java.io.File("$safeBase.postman_collection.json")
+        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
+        var file = chooser.selectedFile
+        if (!file.name.endsWith(".json", ignoreCase = true)) file = java.io.File(file.parentFile, file.name + ".json")
+        try {
+            Files.writeString(file.toPath(), json, StandardCharsets.UTF_8)
+            setSingleResponseMessage(vm.responseLines, "已导出 Postman v2.1：${file.absolutePath}")
+        } catch (e: Exception) {
+            JOptionPane.showMessageDialog(null, e.message ?: e.toString(), "导出失败", JOptionPane.ERROR_MESSAGE)
+        }
+        vm.setResponsePartialLine(null)
+    }
+}
+
+private fun duplicateRequest(vm: AppViewModel, rid: String) {
+    vm.onSaveEditor()
+    val newId = vm.repository.duplicateRequestBelow(rid) ?: return
+    vm.onRefreshTree()
+    val placed = vm.repository.getRequest(newId) ?: return
+    vm.setExpandedCollectionIds(vm.expandedCollectionIds + placed.collectionId)
+    if (placed.folderId != null) vm.setExpandedFolderIds(vm.expandedFolderIds + placed.folderId)
+    vm.onApplyRequestToEditor(newId)
+    vm.setTreeSelection(TreeSelection.Request(newId))
+}
+
+private fun applyTreeDrop(vm: AppViewModel, payload: tree.TreeDragPayload, target: TreeDropTarget): Boolean {
+    val ok = vm.repository.applyTreeDrop(payload, target)
+    if (ok) {
+        vm.onRefreshTree()
+        when (target) {
+            is TreeDropTarget.IntoFolder -> { vm.setExpandedCollectionIds(vm.expandedCollectionIds + target.collectionId); vm.setExpandedFolderIds(vm.expandedFolderIds + target.folderId) }
+            is TreeDropTarget.IntoCollection -> { vm.setExpandedCollectionIds(vm.expandedCollectionIds + target.collectionId) }
+            is TreeDropTarget.FolderSlot -> { vm.setExpandedCollectionIds(vm.expandedCollectionIds + target.collectionId); target.parentFolderId?.let { vm.setExpandedFolderIds(vm.expandedFolderIds + it) } }
+            is TreeDropTarget.RequestSlot -> { vm.setExpandedCollectionIds(vm.expandedCollectionIds + target.collectionId); target.folderId?.let { vm.setExpandedFolderIds(vm.expandedFolderIds + it) } }
+        }
+    }
+    return ok
+}
+
+private fun loadHistory(vm: AppViewModel, epochMs: Long?) {
+    vm.setSelectedHistoryEpochMs(epochMs)
+    val requestId = vm.editorRequestId ?: return
+    val response = if (epochMs == null) RequestResponseStore.loadLatest(requestId) else RequestResponseStore.loadByTimestamp(requestId, epochMs)
+    if (response != null) {
+        vm.responseLines.clear(); vm.responseLines.addAll(response.responseBodyLines)
+        vm.responseHeaderLines.clear(); vm.responseHeaderLines.addAll(response.responseHeaderLines)
+        vm.setResponsePartialLine(null)
+        vm.setStatusCodeText(response.statusCodeText); vm.setResponseTimeText(response.responseTimeText)
+        vm.setResponseSizeText(response.responseSizeText); vm.setIsSseResponse(response.isSseResponse)
+        vm.setRightTabIndex(response.rightTabIndex.coerceIn(0, 2))
+        vm.setExchangeRequestPlainText(response.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" })
+    }
 }
 
 private fun persistWindowGeometry(state: WindowState) {
@@ -1315,10 +436,7 @@ private fun persistWindowGeometry(state: WindowState) {
     val pos = state.position
     if (pos !is WindowPosition.Absolute) return
     if (!state.size.isSpecified) return
-    WindowPrefs.save(
-        xDp = pos.x.value,
-        yDp = pos.y.value,
-        widthDp = state.size.width.value,
-        heightDp = state.size.height.value,
-    )
+    WindowPrefs.save(xDp = pos.x.value, yDp = pos.y.value, widthDp = state.size.width.value, heightDp = state.size.height.value)
 }
+
+fun main() = application { App(onExitRequest = { exitApplication() }) }
