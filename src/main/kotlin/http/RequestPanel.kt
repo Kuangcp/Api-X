@@ -84,8 +84,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
+import http.filterHeaders
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.min
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
@@ -380,6 +385,36 @@ private fun HeaderLikeKeyValueEditor(
                                     Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                     val keyFocused =
                                         focusedCell == HeaderFormFocusedCell(index, isValueColumn = false)
+                                    var keyInput by remember { mutableStateOf(row.first) }
+                                    var headerSuggestions by remember { mutableStateOf(emptyList<String>()) }
+                                    var showSuggestions by remember { mutableStateOf(false) }
+                                    var debounceJob by remember { mutableStateOf<Job?>(null) }
+                                    var keyInputSynced by remember { mutableStateOf(false) }
+
+                                    fun updateSuggestions() {
+                                        if (keyInput.length >= 2) {
+                                            headerSuggestions = filterHeaders(keyInput)
+                                            showSuggestions = headerSuggestions.isNotEmpty()
+                                        } else {
+                                            headerSuggestions = emptyList()
+                                            showSuggestions = false
+                                        }
+                                    }
+
+                                    LaunchedEffect(keyInput, keyInputSynced) {
+                                        debounceJob?.cancel()
+                                        if (keyInput.length >= 2 && !keyInputSynced) {
+                                            debounceJob = launch {
+                                                delay(100L)
+                                                updateSuggestions()
+                                            }
+                                        } else {
+                                            showSuggestions = false
+                                            headerSuggestions = emptyList()
+                                        }
+                                        keyInputSynced = false
+                                    }
+
                                     Box(
                                         modifier = Modifier
                                             .weight(0.36f)
@@ -401,8 +436,9 @@ private fun HeaderLikeKeyValueEditor(
                                         contentAlignment = Alignment.CenterStart,
                                     ) {
                                         BasicTextField(
-                                            value = row.first,
+                                            value = keyInput,
                                             onValueChange = { nv ->
+                                                keyInput = nv
                                                 formRows[index] = Triple(nv, row.second, row.third)
                                                 commitForm()
                                             },
@@ -416,8 +452,10 @@ private fun HeaderLikeKeyValueEditor(
                                                 .onFocusChanged { fc ->
                                                     if (fc.isFocused) {
                                                         focusedCell = HeaderFormFocusedCell(index, false)
+                                                        keyInput = row.first
                                                     } else if (focusedCell == HeaderFormFocusedCell(index, false)) {
                                                         focusedCell = null
+                                                        showSuggestions = false
                                                     }
                                                 },
                                             decorationBox = { innerTextField ->
@@ -429,6 +467,54 @@ private fun HeaderLikeKeyValueEditor(
                                                 }
                                             },
                                         )
+
+                                        if (keyFocused && showSuggestions && headerSuggestions.isNotEmpty()) {
+                                            Popup(
+                                                onDismissRequest = { showSuggestions = false },
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .background(
+                                                            if (isDarkTheme) Color(0xFF1E1E1E) else Color.White,
+                                                            RoundedCornerShape(4.dp),
+                                                        )
+                                                        .border(
+                                                            1.dp,
+                                                            if (isDarkTheme) Color.Gray else Color.LightGray,
+                                                            RoundedCornerShape(4.dp),
+                                                        )
+                                                        .widthIn(max = 300.dp)
+                                                        .verticalScroll(rememberScrollState()),
+                                                ) {
+                                                    headerSuggestions.forEach { suggestion ->
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .clickable(
+                                                                    interactionSource = remember { MutableInteractionSource() },
+                                                                    indication = ripple(
+                                                                        bounded = true,
+                                                                        color = MaterialTheme.colors.primary,
+                                                                    ),
+                                                                ) {
+                                                                    keyInput = suggestion
+                                                                    keyInputSynced = true
+                                                                    formRows[index] = Triple(suggestion, row.second, row.third)
+                                                                    commitForm()
+                                                                    showSuggestions = false
+                                                                }
+                                                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                        ) {
+                                                            Text(
+                                                                text = suggestion,
+                                                                style = MaterialTheme.typography.body2,
+                                                                color = if (isDarkTheme) Color.White else Color.Black,
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                     val valueFocused =
                                         focusedCell == HeaderFormFocusedCell(index, isValueColumn = true)
