@@ -39,9 +39,10 @@ fun wireBodyFromFormEditorContent(editorText: String): String {
     return parts.joinToString("&")
 }
 
-/** 发起请求或导出 cURL 时：表单类型编码为 wire，其余原样。 */
+/** 发起请求或导出 cURL 时：表单类型编码为 wire，[BodyContentKind.NoBody] 时返回空字符串，其余原样。 */
 fun bodyWirePayloadForHttp(bodyText: String, headersText: String): String {
     return when (inferBodyKindFromHeaders(headersText)) {
+        BodyContentKind.NoBody -> ""
         BodyContentKind.FormUrlEncoded -> wireBodyFromFormEditorContent(bodyText)
         else -> bodyText
     }

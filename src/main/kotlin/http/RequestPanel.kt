@@ -951,6 +951,7 @@ private fun BodyContentKindSelector(
     var showMenu by remember { mutableStateOf(false) }
     val kind = inferBodyKindFromHeaders(headersText)
     val typeLabel = when (kind) {
+        BodyContentKind.NoBody -> "无"
         BodyContentKind.FormUrlEncoded -> "表单"
         BodyContentKind.Json -> "JSON"
         BodyContentKind.Xml -> "XML"
@@ -972,6 +973,7 @@ private fun BodyContentKindSelector(
             }
             DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
                 listOf(
+                    BodyContentKind.NoBody to "无 Body",
                     BodyContentKind.FormUrlEncoded to "表单",
                     BodyContentKind.Json to "JSON",
                     BodyContentKind.Xml to "XML",
@@ -979,9 +981,12 @@ private fun BodyContentKindSelector(
                     DropdownMenuItem(
                         onClick = {
                             showMenu = false
-                            onHeadersTextChange(
-                                upsertContentTypeHeader(headersText, contentTypeValueForBodyKind(k)),
-                            )
+                            val ct = contentTypeValueForBodyKind(k)
+                            if (ct != null) {
+                                onHeadersTextChange(upsertContentTypeHeader(headersText, ct))
+                            } else {
+                                onHeadersTextChange(removeContentTypeHeader(headersText))
+                            }
                         },
                     ) {
                         Text(label, fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
