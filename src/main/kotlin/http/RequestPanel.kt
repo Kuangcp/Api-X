@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -474,6 +475,7 @@ private fun HeaderLikeKeyValueEditor(
                                             ) {
                                                 Column(
                                                     modifier = Modifier
+                                                        .offset(y = 28.dp * 2)
                                                         .background(
                                                             if (isDarkTheme) Color(0xFF1E1E1E) else Color.White,
                                                             RoundedCornerShape(4.dp),
@@ -484,6 +486,7 @@ private fun HeaderLikeKeyValueEditor(
                                                             RoundedCornerShape(4.dp),
                                                         )
                                                         .widthIn(max = 300.dp)
+                                                        // .heightIn(max = 300.dp)
                                                         .verticalScroll(rememberScrollState()),
                                                 ) {
                                                     headerSuggestions.forEach { suggestion ->
