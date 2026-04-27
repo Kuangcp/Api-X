@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
@@ -36,9 +37,14 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.res.painterResource
+import java.awt.AWTEvent
 import java.awt.EventQueue
+import java.awt.KeyboardFocusManager
+import java.awt.Toolkit
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.awt.event.AWTEventListener
+import java.awt.event.KeyEvent
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
@@ -91,6 +97,94 @@ fun App(onExitRequest: () -> Unit) {
     val expandLoaded = remember { TreeExpandPrefs.load() }
     val vm = rememberAppViewModel(repository, expandLoaded, windowState)
 
+    fun cycleRecentSwitcher(forward: Boolean) {
+        val list = vm.recentSwitcherIds
+        if (list.isEmpty()) {
+            vm.setRecentSwitcherActive(false)
+            return
+        }
+        val next = if (forward) {
+            (vm.recentSwitcherIndex + 1) % list.size
+        } else {
+            (vm.recentSwitcherIndex - 1 + list.size) % list.size
+        }
+        vm.setRecentSwitcherIndex(next)
+    }
+
+    fun commitRecentSwitcherSelectionAndClose() {
+        vm.setRecentSwitcherActive(false)
+        val list = vm.recentSwitcherIds
+        if (list.isEmpty()) return
+        val id = list[vm.recentSwitcherIndex.coerceIn(0, list.lastIndex)]
+        if (vm.repository.getRequest(id) != null) {
+            expandSetsForRequest(vm.tree, id)?.let { (cols, folders) ->
+                vm.setExpandedCollectionIds(vm.expandedCollectionIds + cols)
+                vm.setExpandedFolderIds(vm.expandedFolderIds + folders)
+            }
+            vm.onSelectTreeNode(TreeSelection.Request(id))
+            vm.setTreeScrollToRequestId(id)
+        }
+    }
+
+    fun activateRecentSwitcher(forward: Boolean) {
+        val list = vm.getMruRequestIds()
+        if (list.isEmpty()) return
+        vm.setRecentSwitcherIds(list)
+        vm.setRecentSwitcherActive(true)
+        vm.setRecentSwitcherIndex(
+            when {
+                list.size == 1 -> 0
+                forward -> 1
+                else -> list.lastIndex
+            },
+        )
+    }
+
+    DisposableEffect(vm.recentSwitcherActive, vm.recentSwitcherIds, vm.recentSwitcherIndex) {
+        val listener = AWTEventListener { raw ->
+            val keyEvent = raw as? KeyEvent ?: return@AWTEventListener
+            val activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow ?: return@AWTEventListener
+            if (!activeWindow.isFocused) return@AWTEventListener
+
+            if (!vm.recentSwitcherActive) {
+                if (
+                    keyEvent.id == KeyEvent.KEY_PRESSED &&
+                    keyEvent.keyCode == KeyEvent.VK_TAB &&
+                    keyEvent.isControlDown
+                ) {
+                    activateRecentSwitcher(forward = !keyEvent.isShiftDown)
+                    keyEvent.consume()
+                }
+                return@AWTEventListener
+            }
+
+            when (keyEvent.id) {
+                KeyEvent.KEY_PRESSED -> {
+                    when {
+                        keyEvent.keyCode == KeyEvent.VK_ESCAPE -> {
+                            vm.setRecentSwitcherActive(false)
+                            keyEvent.consume()
+                        }
+                        keyEvent.keyCode == KeyEvent.VK_TAB -> {
+                            cycleRecentSwitcher(forward = !keyEvent.isShiftDown)
+                            keyEvent.consume()
+                        }
+                    }
+                }
+                KeyEvent.KEY_RELEASED -> {
+                    if (keyEvent.keyCode == KeyEvent.VK_CONTROL || !keyEvent.isControlDown) {
+                        commitRecentSwitcherSelectionAndClose()
+                        keyEvent.consume()
+                    }
+                }
+            }
+        }
+        Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.KEY_EVENT_MASK)
+        onDispose {
+            Toolkit.getDefaultToolkit().removeAWTEventListener(listener)
+        }
+    }
+
     Window(
         title = "Api-X",
         icon = windowIcon,
@@ -102,46 +196,10 @@ fun App(onExitRequest: () -> Unit) {
         },
         onPreviewKeyEvent = { event ->
             if (vm.recentSwitcherActive) {
-                when (event.type) {
-                    KeyEventType.KeyDown -> {
-                        when {
-                            event.key == Key.Escape -> { vm.setRecentSwitcherActive(false); true }
-                            event.isCtrlPressed && event.key == Key.Tab -> {
-                                val list = vm.recentSwitcherIds
-                                if (list.isEmpty()) { vm.setRecentSwitcherActive(false); true }
-                                else { vm.setRecentSwitcherIndex(if (!event.isShiftPressed) (vm.recentSwitcherIndex + 1) % list.size else (vm.recentSwitcherIndex - 1 + list.size) % list.size); true }
-                            }
-                            else -> false
-                        }
-                    }
-                    KeyEventType.KeyUp -> {
-                        if (event.key == Key.CtrlLeft || event.key == Key.CtrlRight) {
-                            vm.setRecentSwitcherActive(false)
-                            val list = vm.recentSwitcherIds
-                            if (list.isNotEmpty()) {
-                                val id = list[vm.recentSwitcherIndex.coerceIn(0, list.lastIndex)]
-                                if (vm.repository.getRequest(id) != null) {
-                                    expandSetsForRequest(vm.tree, id)?.let { (cols, folders) ->
-                                        vm.setExpandedCollectionIds(vm.expandedCollectionIds + cols)
-                                        vm.setExpandedFolderIds(vm.expandedFolderIds + folders)
-                                    }
-                                    vm.onSelectTreeNode(TreeSelection.Request(id))
-                                    vm.setTreeScrollToRequestId(id)
-                                }
-                            }
-                            true
-                        } else false
-                    }
-                    else -> false
-                }
+                true
             } else {
                 if (event.type == KeyEventType.KeyDown) {
                     when {
-                        event.isCtrlPressed && event.key == Key.Tab -> {
-                            val list = vm.getMruRequestIds()
-                            if (list.isEmpty()) false
-                            else { vm.setRecentSwitcherIds(list); vm.setRecentSwitcherActive(true); vm.setRecentSwitcherIndex(when { list.size == 1 -> 0; !event.isShiftPressed -> 1; else -> list.lastIndex }); true }
-                        }
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { vm.setShowGlobalSearch(true); true }
                         event.isCtrlPressed && event.key == Key.Enter -> { vm.onStartRequest(); true }
                         event.key == Key.Escape -> { if (vm.isLoading) { vm.onCancelRequest(); true } else false }
