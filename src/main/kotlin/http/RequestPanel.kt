@@ -141,9 +141,12 @@ private fun HeaderFormRowDashedDivider(
 
 private enum class KeyValueEditorMode { Text, Form }
 
-/** 与 Headers 相同的「文本 / 表单」键值编辑（Params 复用）。 */
+/**
+ * 「文本 / 表单」键值编辑的共用实现。
+ * [enableHeaderKeySuggestions] 仅应对 **Request Headers** 为 true，以启用标准头名称的键入搜索；Body 与 Params 应为 false。
+ */
 @Composable
-private fun HeaderLikeKeyValueEditor(
+private fun KeyValueTextFormEditor(
     exchangeMetrics: ExchangeFontMetrics,
     editorRequestId: String?,
     isLoading: Boolean,
@@ -154,6 +157,7 @@ private fun HeaderLikeKeyValueEditor(
     hintLine: String,
     modifier: Modifier = Modifier,
     defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
+    enableHeaderKeySuggestions: Boolean = false,
 ) {
     var editMode by remember(editorRequestId, defaultEditMode) { mutableStateOf(defaultEditMode) }
     val formRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
@@ -387,137 +391,190 @@ private fun HeaderLikeKeyValueEditor(
                                     Spacer(modifier = Modifier.width(HeaderFormCheckboxToKeyGap))
                                     val keyFocused =
                                         focusedCell == HeaderFormFocusedCell(index, isValueColumn = false)
-                                    var keyInput by remember { mutableStateOf(row.first) }
-                                    var headerSuggestions by remember { mutableStateOf(emptyList<String>()) }
-                                    var showSuggestions by remember { mutableStateOf(false) }
-                                    var debounceJob by remember { mutableStateOf<Job?>(null) }
-                                    var keyInputSynced by remember { mutableStateOf(false) }
+                                    if (enableHeaderKeySuggestions) {
+                                        var keyInput by remember { mutableStateOf(row.first) }
+                                        var headerSuggestions by remember { mutableStateOf(emptyList<String>()) }
+                                        var showSuggestions by remember { mutableStateOf(false) }
+                                        var debounceJob by remember { mutableStateOf<Job?>(null) }
+                                        var keyInputSynced by remember { mutableStateOf(false) }
 
-                                    fun updateSuggestions() {
-                                        if (keyInput.length >= 2) {
-                                            headerSuggestions = filterHeaders(keyInput)
-                                            showSuggestions = headerSuggestions.isNotEmpty()
-                                        } else {
-                                            headerSuggestions = emptyList()
-                                            showSuggestions = false
-                                        }
-                                    }
-
-                                    LaunchedEffect(keyInput, keyInputSynced) {
-                                        debounceJob?.cancel()
-                                        if (keyInput.length >= 2 && !keyInputSynced) {
-                                            debounceJob = launch {
-                                                delay(100L)
-                                                updateSuggestions()
+                                        fun updateSuggestions() {
+                                            if (keyInput.length >= 2) {
+                                                headerSuggestions = filterHeaders(keyInput)
+                                                showSuggestions = headerSuggestions.isNotEmpty()
+                                            } else {
+                                                headerSuggestions = emptyList()
+                                                showSuggestions = false
                                             }
-                                        } else {
-                                            showSuggestions = false
-                                            headerSuggestions = emptyList()
                                         }
-                                        keyInputSynced = false
-                                    }
 
-                                    Box(
-                                        modifier = Modifier
-                                            .weight(0.36f)
-                                            .fillMaxHeight()
-                                            .padding(start = 2.dp, end = 4.dp)
-                                            .then(
-                                                if (keyFocused) {
-                                                    Modifier
-                                                        .border(
-                                                            2.dp,
-                                                            MaterialTheme.colors.primary,
-                                                            RoundedCornerShape(3.dp),
-                                                        )
-                                                        .padding(horizontal = 3.dp)
-                                                } else {
-                                                    Modifier
-                                                },
-                                            ),
-                                        contentAlignment = Alignment.CenterStart,
-                                    ) {
-                                        BasicTextField(
-                                            value = keyInput,
-                                            onValueChange = { nv ->
-                                                keyInput = nv
-                                                formRows[index] = Triple(nv, row.second, row.third)
-                                                commitForm()
-                                            },
-                                            enabled = !isLoading,
-                                            singleLine = true,
-                                            textStyle = rowFieldStyle,
-                                            cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
+                                        LaunchedEffect(keyInput, keyInputSynced) {
+                                            debounceJob?.cancel()
+                                            if (keyInput.length >= 2 && !keyInputSynced) {
+                                                debounceJob = launch {
+                                                    delay(100L)
+                                                    updateSuggestions()
+                                                }
+                                            } else {
+                                                showSuggestions = false
+                                                headerSuggestions = emptyList()
+                                            }
+                                            keyInputSynced = false
+                                        }
+
+                                        Box(
                                             modifier = Modifier
-                                                .fillMaxWidth()
+                                                .weight(0.36f)
                                                 .fillMaxHeight()
-                                                .onFocusChanged { fc ->
-                                                    if (fc.isFocused) {
-                                                        focusedCell = HeaderFormFocusedCell(index, false)
-                                                        keyInput = row.first
-                                                    } else if (focusedCell == HeaderFormFocusedCell(index, false)) {
-                                                        focusedCell = null
-                                                        showSuggestions = false
+                                                .padding(start = 2.dp, end = 4.dp)
+                                                .then(
+                                                    if (keyFocused) {
+                                                        Modifier
+                                                            .border(
+                                                                2.dp,
+                                                                MaterialTheme.colors.primary,
+                                                                RoundedCornerShape(3.dp),
+                                                            )
+                                                            .padding(horizontal = 3.dp)
+                                                    } else {
+                                                        Modifier
+                                                    },
+                                                ),
+                                            contentAlignment = Alignment.CenterStart,
+                                        ) {
+                                            BasicTextField(
+                                                value = keyInput,
+                                                onValueChange = { nv ->
+                                                    keyInput = nv
+                                                    formRows[index] = Triple(nv, row.second, row.third)
+                                                    commitForm()
+                                                },
+                                                enabled = !isLoading,
+                                                singleLine = true,
+                                                textStyle = rowFieldStyle,
+                                                cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .fillMaxHeight()
+                                                    .onFocusChanged { fc ->
+                                                        if (fc.isFocused) {
+                                                            focusedCell = HeaderFormFocusedCell(index, false)
+                                                            keyInput = row.first
+                                                        } else if (focusedCell == HeaderFormFocusedCell(index, false)) {
+                                                            focusedCell = null
+                                                            showSuggestions = false
+                                                        }
+                                                    },
+                                                decorationBox = { innerTextField ->
+                                                    Box(
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentAlignment = Alignment.CenterStart,
+                                                    ) {
+                                                        innerTextField()
                                                     }
                                                 },
-                                            decorationBox = { innerTextField ->
-                                                Box(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentAlignment = Alignment.CenterStart,
-                                                ) {
-                                                    innerTextField()
-                                                }
-                                            },
-                                        )
+                                            )
 
-                                        if (keyFocused && showSuggestions && headerSuggestions.isNotEmpty()) {
-                                            Popup(
-                                                onDismissRequest = { showSuggestions = false },
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .offset(y = 28.dp * 2)
-                                                        .background(
-                                                            if (isDarkTheme) Color(0xFF1E1E1E) else Color.White,
-                                                            RoundedCornerShape(4.dp),
-                                                        )
-                                                        .border(
-                                                            1.dp,
-                                                            if (isDarkTheme) Color.Gray else Color.LightGray,
-                                                            RoundedCornerShape(4.dp),
-                                                        )
-                                                        .widthIn(max = 300.dp)
-                                                        .heightIn(min=100.dp, max = 300.dp)
-                                                        .verticalScroll(rememberScrollState()),
+                                            if (keyFocused && showSuggestions && headerSuggestions.isNotEmpty()) {
+                                                Popup(
+                                                    onDismissRequest = { showSuggestions = false },
                                                 ) {
-                                                    headerSuggestions.forEach { suggestion ->
-                                                        Box(
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .clickable(
-                                                                    interactionSource = remember { MutableInteractionSource() },
-                                                                    indication = ripple(
-                                                                        bounded = true,
-                                                                        color = MaterialTheme.colors.primary,
-                                                                    ),
-                                                                ) {
-                                                                    keyInput = suggestion
-                                                                    keyInputSynced = true
-                                                                    formRows[index] = Triple(suggestion, row.second, row.third)
-                                                                    commitForm()
-                                                                    showSuggestions = false
-                                                                }
-                                                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                                                        ) {
-                                                            Text(
-                                                                text = suggestion,
-                                                                style = MaterialTheme.typography.body2,
-                                                                color = if (isDarkTheme) Color.White else Color.Black,
+                                                    Column(
+                                                        modifier = Modifier
+                                                            .offset(y = 28.dp * 2)
+                                                            .background(
+                                                                if (isDarkTheme) Color(0xFF1E1E1E) else Color.White,
+                                                                RoundedCornerShape(4.dp),
                                                             )
+                                                            .border(
+                                                                1.dp,
+                                                                if (isDarkTheme) Color.Gray else Color.LightGray,
+                                                                RoundedCornerShape(4.dp),
+                                                            )
+                                                            .widthIn(max = 300.dp)
+                                                            .heightIn(min = 100.dp, max = 300.dp)
+                                                            .verticalScroll(rememberScrollState()),
+                                                    ) {
+                                                        headerSuggestions.forEach { suggestion ->
+                                                            Box(
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .clickable(
+                                                                        interactionSource = remember { MutableInteractionSource() },
+                                                                        indication = ripple(
+                                                                            bounded = true,
+                                                                            color = MaterialTheme.colors.primary,
+                                                                        ),
+                                                                    ) {
+                                                                        keyInput = suggestion
+                                                                        keyInputSynced = true
+                                                                        formRows[index] = Triple(suggestion, row.second, row.third)
+                                                                        commitForm()
+                                                                        showSuggestions = false
+                                                                    }
+                                                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                                            ) {
+                                                                Text(
+                                                                    text = suggestion,
+                                                                    style = MaterialTheme.typography.body2,
+                                                                    color = if (isDarkTheme) Color.White else Color.Black,
+                                                                )
+                                                            }
                                                         }
                                                     }
                                                 }
                                             }
+                                        }
+                                    } else {
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(0.36f)
+                                                .fillMaxHeight()
+                                                .padding(start = 2.dp, end = 4.dp)
+                                                .then(
+                                                    if (keyFocused) {
+                                                        Modifier
+                                                            .border(
+                                                                2.dp,
+                                                                MaterialTheme.colors.primary,
+                                                                RoundedCornerShape(3.dp),
+                                                            )
+                                                            .padding(horizontal = 3.dp)
+                                                    } else {
+                                                        Modifier
+                                                    },
+                                                ),
+                                            contentAlignment = Alignment.CenterStart,
+                                        ) {
+                                            BasicTextField(
+                                                value = row.first,
+                                                onValueChange = { nv ->
+                                                    formRows[index] = Triple(nv, row.second, row.third)
+                                                    commitForm()
+                                                },
+                                                enabled = !isLoading,
+                                                singleLine = true,
+                                                textStyle = rowFieldStyle,
+                                                cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .fillMaxHeight()
+                                                    .onFocusChanged { fc ->
+                                                        if (fc.isFocused) {
+                                                            focusedCell = HeaderFormFocusedCell(index, false)
+                                                        } else if (focusedCell == HeaderFormFocusedCell(index, false)) {
+                                                            focusedCell = null
+                                                        }
+                                                    },
+                                                decorationBox = { innerTextField ->
+                                                    Box(
+                                                        modifier = Modifier.fillMaxSize(),
+                                                        contentAlignment = Alignment.CenterStart,
+                                                    ) {
+                                                        innerTextField()
+                                                    }
+                                                },
+                                            )
                                         }
                                     }
                                     val valueFocused =
@@ -628,6 +685,64 @@ private fun HeaderLikeKeyValueEditor(
             }
         }
     }
+}
+
+/** Body 与 Params 的键值编辑：无 Header 名搜索下拉。 */
+@Composable
+private fun PlainKeyValueEditor(
+    exchangeMetrics: ExchangeFontMetrics,
+    editorRequestId: String?,
+    isLoading: Boolean,
+    isDarkTheme: Boolean,
+    text: String,
+    onTextChange: (String) -> Unit,
+    scrollState: ScrollState,
+    hintLine: String,
+    modifier: Modifier = Modifier,
+    defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
+) {
+    KeyValueTextFormEditor(
+        exchangeMetrics = exchangeMetrics,
+        editorRequestId = editorRequestId,
+        isLoading = isLoading,
+        isDarkTheme = isDarkTheme,
+        text = text,
+        onTextChange = onTextChange,
+        scrollState = scrollState,
+        hintLine = hintLine,
+        modifier = modifier,
+        defaultEditMode = defaultEditMode,
+        enableHeaderKeySuggestions = false,
+    )
+}
+
+/** Request Headers 键值编辑：Key 列带标准头名称搜索。 */
+@Composable
+private fun HeadersKeyValueEditor(
+    exchangeMetrics: ExchangeFontMetrics,
+    editorRequestId: String?,
+    isLoading: Boolean,
+    isDarkTheme: Boolean,
+    text: String,
+    onTextChange: (String) -> Unit,
+    scrollState: ScrollState,
+    hintLine: String,
+    modifier: Modifier = Modifier,
+    defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
+) {
+    KeyValueTextFormEditor(
+        exchangeMetrics = exchangeMetrics,
+        editorRequestId = editorRequestId,
+        isLoading = isLoading,
+        isDarkTheme = isDarkTheme,
+        text = text,
+        onTextChange = onTextChange,
+        scrollState = scrollState,
+        hintLine = hintLine,
+        modifier = modifier,
+        defaultEditMode = defaultEditMode,
+        enableHeaderKeySuggestions = true,
+    )
 }
 
 /** 环境下拉项：无 Material [DropdownMenuItem] 的 48.dp 最小高度，行高随文字 + padding。 */
@@ -1205,7 +1320,7 @@ fun RequestEditorPane(
                             modifier = Modifier.padding(bottom = 4.dp, start = 2.dp, top = 4.dp, end = 10.dp)
                         )
                         if (bodyKind == BodyContentKind.FormUrlEncoded) {
-                            HeaderLikeKeyValueEditor(
+                            PlainKeyValueEditor(
                                 exchangeMetrics = exchangeMetrics,
                                 editorRequestId = editorRequestId,
                                 isLoading = isLoading,
@@ -1257,7 +1372,7 @@ fun RequestEditorPane(
                     )
                 }
                 1 -> {
-                    HeaderLikeKeyValueEditor(
+                    HeadersKeyValueEditor(
                         exchangeMetrics = exchangeMetrics,
                         editorRequestId = editorRequestId,
                         isLoading = isLoading,
@@ -1275,7 +1390,7 @@ fun RequestEditorPane(
                     )
                 }
                 2 -> {
-                    HeaderLikeKeyValueEditor(
+                    PlainKeyValueEditor(
                         exchangeMetrics = exchangeMetrics,
                         editorRequestId = editorRequestId,
                         isLoading = isLoading,
