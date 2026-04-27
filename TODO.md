@@ -9,6 +9,12 @@
 request body 功能丰富
 request body json高亮 格式化
 
+请求中时, 需要可以点选切换 Request的 几个tab查看数据,然后禁止编辑, 现在是切换都切换不了 
+
+当一个Request A 在请求中时, 如果点左侧树切换到其他 Request 例如B , 需要A和B 状态独立互不不影响, 也就是说 需要支持多个Request同时执行, 状态和数据需要隔离. 在A和B切换时能看到实时的A和B对应的状态和流输出等, 同样的切换到C 又可以启动C, 当Request在运行中时, 左侧的树Request节点左侧需要加一个loading的动画来标记这个Request是在运行的, 然后执行结束后去掉这个loaing的动态icon. 
+
+日志集成, kotlin-logging + Logback, 在核心的导入导出 初始化数据等环节加日志
+
 [X] 支持更多参数格式, 表单, 多表单
 
 [X] 增加快捷键处理 Ctrl Tab 切换Request， 切换时需要弹出一个下拉列表，简洁的展示最近使用的Request，这样就能知道要按几下tab键了，也就是说需要记录最近的Request的打开查看时间，基于这个做倒排， 下拉列表展示Top30 

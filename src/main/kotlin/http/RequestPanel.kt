@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -486,7 +487,7 @@ private fun HeaderLikeKeyValueEditor(
                                                             RoundedCornerShape(4.dp),
                                                         )
                                                         .widthIn(max = 300.dp)
-                                                        // .heightIn(max = 300.dp)
+                                                        .heightIn(min=100.dp, max = 300.dp)
                                                         .verticalScroll(rememberScrollState()),
                                                 ) {
                                                     headerSuggestions.forEach { suggestion ->
