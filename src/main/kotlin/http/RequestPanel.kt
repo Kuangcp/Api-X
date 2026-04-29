@@ -80,19 +80,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import http.filterHeaders
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.math.min
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
@@ -395,31 +397,18 @@ private fun KeyValueTextFormEditor(
                                         var keyInput by remember { mutableStateOf(row.first) }
                                         var headerSuggestions by remember { mutableStateOf(emptyList<String>()) }
                                         var showSuggestions by remember { mutableStateOf(false) }
-                                        var debounceJob by remember { mutableStateOf<Job?>(null) }
-                                        var keyInputSynced by remember { mutableStateOf(false) }
+                                        var suppressSuggestionUntilNextInput by remember { mutableStateOf(false) }
+                                        val keyFocusRequester = remember { FocusRequester() }
 
-                                        fun updateSuggestions() {
-                                            if (keyInput.length >= 2) {
-                                                headerSuggestions = filterHeaders(keyInput)
-                                                showSuggestions = headerSuggestions.isNotEmpty()
-                                            } else {
-                                                headerSuggestions = emptyList()
-                                                showSuggestions = false
-                                            }
-                                        }
-
-                                        LaunchedEffect(keyInput, keyInputSynced) {
-                                            debounceJob?.cancel()
-                                            if (keyInput.length >= 2 && !keyInputSynced) {
-                                                debounceJob = launch {
-                                                    delay(100L)
-                                                    updateSuggestions()
-                                                }
-                                            } else {
+                                        LaunchedEffect(keyInput, keyFocused, suppressSuggestionUntilNextInput) {
+                                            if (!keyFocused || keyInput.length < 1 || suppressSuggestionUntilNextInput) {
                                                 showSuggestions = false
                                                 headerSuggestions = emptyList()
+                                                return@LaunchedEffect
                                             }
-                                            keyInputSynced = false
+                                            delay(100L)
+                                            headerSuggestions = filterHeaders(keyInput)
+                                            showSuggestions = headerSuggestions.isNotEmpty()
                                         }
 
                                         Box(
@@ -446,6 +435,7 @@ private fun KeyValueTextFormEditor(
                                                 value = keyInput,
                                                 onValueChange = { nv ->
                                                     keyInput = nv
+                                                    suppressSuggestionUntilNextInput = false
                                                     formRows[index] = Triple(nv, row.second, row.third)
                                                     commitForm()
                                                 },
@@ -456,10 +446,12 @@ private fun KeyValueTextFormEditor(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
                                                     .fillMaxHeight()
+                                                    .focusRequester(keyFocusRequester)
                                                     .onFocusChanged { fc ->
                                                         if (fc.isFocused) {
                                                             focusedCell = HeaderFormFocusedCell(index, false)
                                                             keyInput = row.first
+                                                            suppressSuggestionUntilNextInput = false
                                                         } else if (focusedCell == HeaderFormFocusedCell(index, false)) {
                                                             focusedCell = null
                                                             showSuggestions = false
@@ -476,12 +468,13 @@ private fun KeyValueTextFormEditor(
                                             )
 
                                             if (keyFocused && showSuggestions && headerSuggestions.isNotEmpty()) {
+                                                val popupYOffsetPx = with(LocalDensity.current) { (28.dp * 2).roundToPx() }
                                                 Popup(
+                                                    offset = IntOffset(x = 0, y = popupYOffsetPx),
                                                     onDismissRequest = { showSuggestions = false },
                                                 ) {
                                                     Column(
                                                         modifier = Modifier
-                                                            .offset(y = 28.dp * 2)
                                                             .background(
                                                                 if (isDarkTheme) Color(0xFF1E1E1E) else Color.White,
                                                                 RoundedCornerShape(4.dp),
@@ -507,10 +500,11 @@ private fun KeyValueTextFormEditor(
                                                                         ),
                                                                     ) {
                                                                         keyInput = suggestion
-                                                                        keyInputSynced = true
+                                                                        suppressSuggestionUntilNextInput = true
                                                                         formRows[index] = Triple(suggestion, row.second, row.third)
                                                                         commitForm()
                                                                         showSuggestions = false
+                                                                        keyFocusRequester.requestFocus()
                                                                     }
                                                                     .padding(horizontal = 12.dp, vertical = 8.dp),
                                                             ) {
