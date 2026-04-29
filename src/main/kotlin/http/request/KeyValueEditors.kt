@@ -361,7 +361,10 @@ private fun KeyValueTextFormEditor(
                                     val keyFocused =
                                         focusedCell == HeaderFormFocusedCell(index, isValueColumn = false)
                                     if (enableHeaderKeySuggestions) {
-                                        var keyInput by remember { mutableStateOf(row.first) }
+                                        // 必须按 (requestId, index) 与 row 源数据 绑定：无 key 的 remember 在切换请求时
+                                        // 会复用同一行槽位的 state，导致 Key 列显示 A 的 name 而 formRows/发送已是 B。
+                                        var keyInput by remember(editorRequestId, index) { mutableStateOf(row.first) }
+                                        LaunchedEffect(row.first) { keyInput = row.first }
                                         var headerSuggestions by remember { mutableStateOf(emptyList<String>()) }
                                         var showSuggestions by remember { mutableStateOf(false) }
                                         var suppressSuggestionUntilNextInput by remember { mutableStateOf(false) }
