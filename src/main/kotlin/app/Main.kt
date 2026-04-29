@@ -52,8 +52,9 @@ import kotlin.concurrent.thread
 import db.AppPaths
 import db.CollectionRepository
 import db.RequestResponseStore
-import http.RequestSidePanel
-import http.RequestTopBar
+import http.request.RequestEditorProps
+import http.request.RequestSidePanel
+import http.request.RequestTopBar
 import http.ResponsePanel
 import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
@@ -255,19 +256,30 @@ fun App(onExitRequest: () -> Unit) {
                             SplitHandle(vm.contentRowWidthPx) { vm.setTreeSplitRatio(vm.treeSplitRatio + it / vm.contentRowWidthPx) }
                         }
                         RequestSidePanel(
-                            modifier = Modifier.weight(middleFraction * vm.splitRatio), exchangeMetrics = vm.exchangeMetrics,
-                            editorRequestId = vm.editorRequestId, isLoading = vm.isLoading,
-                            method = vm.method, methodMenuExpanded = vm.methodMenuExpanded,
-                            onMethodMenuExpandedChange = { vm.setMethodMenuExpanded(it) },
-                            onMethodSelected = { vm.setMethod(it) },
-                            url = vm.url, onUrlChange = { vm.setUrl(it) },
-                            onSendOrCancel = { if (!vm.isLoading) vm.onStartRequest() else vm.onCancelRequest() },
-                            leftTabIndex = vm.leftTabIndex, onLeftTabIndexChange = { vm.setLeftTabIndex(it.coerceIn(0, 3)) },
-                            bodyText = vm.bodyText, onBodyTextChange = { vm.setBodyText(it) },
-                            headersText = vm.headersText, onHeadersTextChange = { vm.setHeadersText(it) },
-                            paramsText = vm.paramsText, onParamsTextChange = { vm.setParamsText(it) },
-                            auth = vm.auth, onAuthChange = { vm.setAuth(it) },
+                            modifier = Modifier.weight(middleFraction * vm.splitRatio),
+                            exchangeMetrics = vm.exchangeMetrics,
                             isDarkTheme = vm.isDarkTheme,
+                            props = RequestEditorProps(
+                                editorRequestId = vm.editorRequestId,
+                                isLoading = vm.isLoading,
+                                method = vm.method,
+                                methodMenuExpanded = vm.methodMenuExpanded,
+                                onMethodMenuExpandedChange = { vm.setMethodMenuExpanded(it) },
+                                onMethodSelected = { vm.setMethod(it) },
+                                url = vm.url,
+                                onUrlChange = { vm.setUrl(it) },
+                                onSendOrCancel = { if (!vm.isLoading) vm.onStartRequest() else vm.onCancelRequest() },
+                                leftTabIndex = vm.leftTabIndex,
+                                onLeftTabIndexChange = { vm.setLeftTabIndex(it.coerceIn(0, 3)) },
+                                bodyText = vm.bodyText,
+                                onBodyTextChange = { vm.setBodyText(it) },
+                                headersText = vm.headersText,
+                                onHeadersTextChange = { vm.setHeadersText(it) },
+                                paramsText = vm.paramsText,
+                                onParamsTextChange = { vm.setParamsText(it) },
+                                auth = vm.auth,
+                                onAuthChange = { vm.setAuth(it) },
+                            ),
                         )
                         SplitHandle(vm.contentRowWidthPx * middleFraction) { vm.setSplitRatio(vm.splitRatio + it / (vm.contentRowWidthPx * middleFraction)) }
                         ResponsePanel(

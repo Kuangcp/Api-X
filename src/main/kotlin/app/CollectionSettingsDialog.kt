@@ -12,7 +12,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import db.CollectionRepository
-import http.AuthEditor
+import http.request.AuthEditor
 import http.ExchangeFontMetrics
 import tree.PostmanAuth
 import tree.TreeSelection
