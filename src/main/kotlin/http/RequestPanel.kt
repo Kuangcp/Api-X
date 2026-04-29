@@ -71,6 +71,7 @@ import tree.AuthProperty
 import tree.findValue
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.window.WindowScope
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -182,8 +183,12 @@ private fun KeyValueTextFormEditor(
         )
     }
 
-    LaunchedEffect(editorRequestId) {
+    // 用 DisposableEffect 在组合阶段**同步**执行：LaunchedEffect 是协程，可能晚一帧才 sync，
+    // 首帧会以空的 formRows 测量/绘制，从而出现「类型是表单但表格无行、切换请求后才正常」。
+    // 同时依赖 (editorRequestId, text)，以便在 id 不变、仅 setBodyText/setHeadersText/…（如导入 cURL）后立刻对齐。
+    DisposableEffect(editorRequestId, text) {
         syncFormFromText()
+        onDispose { }
     }
 
     Column(modifier = modifier.fillMaxSize().padding(end = 10.dp)) {

@@ -55,15 +55,14 @@ fun importCurl(vm: AppViewModel) {
         val clipboardText = readClipboardText()
         val parsed = parseCurlCommand(clipboardText)
         vm.onSaveEditor()
+        // 仍在当前请求上，用于 cURL 未带 URL 时的回退
+        val urlIfCurlUrlBlank = vm.url
         val newId = vm.repository.createRequestBelow(activeId) ?: throw IllegalStateException("无法在当前请求下新建条目")
         vm.onRefreshTree()
         val placed = vm.repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
         vm.setExpandedCollectionIds(vm.expandedCollectionIds + placed.collectionId)
         if (placed.folderId != null) vm.setExpandedFolderIds(vm.expandedFolderIds + placed.folderId)
-        vm.onApplyRequestToEditor(newId)
-        vm.setTreeSelection(TreeSelection.Request(newId))
-        vm.setMethod(parsed.method)
-        val rawUrl = parsed.url.ifBlank { vm.url }
+        val rawUrl = parsed.url.ifBlank { urlIfCurlUrlBlank }
         if (rawUrl.isNotBlank()) {
             try {
                 val uri = java.net.URI(rawUrl)
@@ -75,10 +74,18 @@ fun importCurl(vm: AppViewModel) {
             } catch (_: Exception) { }
         }
         val (urlNoQuery, queryParamsText) = splitUrlQueryForParamsEditor(rawUrl)
-        vm.setUrl(urlNoQuery.ifBlank { rawUrl })
-        vm.setParamsText(queryParamsText)
-        vm.setHeadersText(parsed.headers.joinToString("\n"))
-        vm.setBodyText(http.migrateFormBodyToEditorLinesIfNeeded(parsed.body, vm.headersText))
+        val headersJoined = parsed.headers.joinToString("\n")
+        val bodyForEditor = http.migrateFormBodyToEditorLinesIfNeeded(parsed.body, headersJoined)
+        // 一次写入编辑器，避免出现「已 Form、正文仍是上一条 JSON 的一帧」使表单行被解析成空
+        vm.applyCurlToEditor(
+            newId,
+            parsed.method,
+            urlNoQuery.ifBlank { rawUrl },
+            queryParamsText,
+            headersJoined,
+            bodyForEditor
+        )
+        vm.setTreeSelection(TreeSelection.Request(newId))
         vm.repository.saveRequestEditorFields(newId, vm.method, vm.url, vm.headersText, vm.paramsText, vm.bodyText, vm.auth)
         setSingleResponseMessage(vm.responseLines, "已新建请求并导入剪贴板中的 cURL")
         vm.setResponsePartialLine(null)

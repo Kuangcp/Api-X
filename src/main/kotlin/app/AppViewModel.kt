@@ -140,6 +140,8 @@ data class AppViewModel(
     val onCancelRequest: () -> Unit,
     val onRefreshTree: () -> Unit,
     val onApplyRequestToEditor: (String) -> Unit,
+    /** 一次性将编辑器切到新请求并写入 cURL 解析结果，避免多轮 set* 出现中间态导致 Body/表单行不同步。 */
+    val applyCurlToEditor: (String, String, String, String, String, String) -> Unit,
     val onSelectTreeNode: (TreeSelection) -> Unit,
     val onAddFolderAt: (TreeSelection) -> Unit,
     val onAddRequestAt: (TreeSelection) -> Unit,
@@ -236,6 +238,25 @@ fun rememberAppViewModel(
         bodyText = migrateFormBodyToEditorLinesIfNeeded(r.bodyText, r.headersText)
         auth = r.auth
         RecentRequestUsageStore.touch(reqId)
+    }
+
+    fun doApplyCurlToEditor(
+        newId: String,
+        m: String,
+        u: String,
+        p: String,
+        h: String,
+        b: String,
+    ) {
+        val r = repository.getRequest(newId) ?: return
+        editorRequestId = newId
+        method = m
+        url = u
+        paramsText = p
+        headersText = h
+        bodyText = b
+        auth = r.auth
+        RecentRequestUsageStore.touch(newId)
     }
 
     fun selectTreeNode(sel: TreeSelection) {
@@ -512,6 +533,7 @@ fun rememberAppViewModel(
         onCancelRequest = { cancelActiveRequest() },
         onRefreshTree = { refreshTree() },
         onApplyRequestToEditor = { applyRequestToEditor(it) },
+        applyCurlToEditor = { a, b, c, d, e, f -> doApplyCurlToEditor(a, b, c, d, e, f) },
         onSelectTreeNode = { selectTreeNode(it) },
         onAddFolderAt = { addFolderAt(it) },
         onAddRequestAt = { addRequestAt(it) },
