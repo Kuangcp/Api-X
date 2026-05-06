@@ -11,7 +11,9 @@ alwaysApply: true
 - **不要使用**：`./gradlew`、`gradlew.bat` 或项目根目录下的 `gradle/wrapper` 调用方式。
 
 
-当检查代码是否有编译报错时 必须是执行 `gradle compileKotlin` 命令
+做 编译检查 时 只能执行 `gradle compileKotlin` 命令， 而且 必须手动指定JDK21的目录， 最终命令如下：
+
+JAVA_HOME=~/.sdkman/candidates/java/21.0.10-oracle PATH="$JAVA_HOME/bin:$PATH" gradle compileKotlin 2>&1
 
 ## 原因
 

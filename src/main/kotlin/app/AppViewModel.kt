@@ -129,6 +129,10 @@ data class AppViewModel(
     val appSettings: AppSettings,
     val setAppSettings: (AppSettings) -> Unit,
 
+    val toastMessage: String?,
+    val showToast: (String) -> Unit,
+    val clearToast: () -> Unit,
+
     val recentSwitcherActive: Boolean,
     val setRecentSwitcherActive: (Boolean) -> Unit,
     val recentSwitcherIds: List<String>,
@@ -200,6 +204,7 @@ fun rememberAppViewModel(
     var collectionSettingsTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var environmentsState by remember { mutableStateOf(withDefaultActiveWhenSingle(EnvironmentStore.snapshot())) }
     var appSettings by remember { mutableStateOf(AppSettingsStore.snapshot()) }
+    var toastMessage by remember { mutableStateOf<String?>(null) }
     var inflightBoundRequestId by remember { mutableStateOf<String?>(null) }
     val outboundRequestGeneration = remember { AtomicInteger(0) }
 
@@ -526,6 +531,9 @@ fun rememberAppViewModel(
         collectionSettingsTarget = collectionSettingsTarget, setCollectionSettingsTarget = { collectionSettingsTarget = it },
         environmentsState = environmentsState, setEnvironmentsState = { environmentsState = it },
         appSettings = appSettings, setAppSettings = { appSettings = it },
+        toastMessage = toastMessage,
+        showToast = { toastMessage = it },
+        clearToast = { toastMessage = null },
         recentSwitcherActive = recentSwitcherActive, setRecentSwitcherActive = { recentSwitcherActive = it },
         recentSwitcherIds = recentSwitcherIds, setRecentSwitcherIds = { recentSwitcherIds = it },
         recentSwitcherIndex = recentSwitcherIndex, setRecentSwitcherIndex = { recentSwitcherIndex = it },

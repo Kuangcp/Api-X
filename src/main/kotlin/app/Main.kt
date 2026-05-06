@@ -10,15 +10,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -49,6 +56,7 @@ import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.concurrent.thread
+import kotlinx.coroutines.delay
 import db.AppPaths
 import db.CollectionRepository
 import db.RequestResponseStore
@@ -299,6 +307,9 @@ fun App(onExitRequest: () -> Unit) {
                         )
                     }
                 }
+                if (vm.toastMessage != null) {
+                    ToastMessage(message = vm.toastMessage, onDismiss = { vm.clearToast() })
+                }
                 if (vm.recentSwitcherActive && vm.recentSwitcherIds.isNotEmpty()) {
                     RecentRequestSwitcherOverlay(requestIds = vm.recentSwitcherIds, highlightIndex = vm.recentSwitcherIndex, tree = vm.tree, repository = vm.repository)
                 }
@@ -343,6 +354,38 @@ private fun persistWindowGeometry(state: WindowState) {
     if (pos !is WindowPosition.Absolute) return
     if (!state.size.isSpecified) return
     WindowPrefs.save(xDp = pos.x.value, yDp = pos.y.value, widthDp = state.size.width.value, heightDp = state.size.height.value)
+}
+
+@Composable
+private fun ToastMessage(message: String, onDismiss: () -> Unit) {
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(3000L)
+        onDismiss()
+    }
+
+    val surfaceColor = MaterialTheme.colors.surface
+    val onSurfaceColor = MaterialTheme.colors.onSurface
+
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.BottomEnd
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(x = (-10).dp, y = (-10).dp)
+                .background(
+                    color = surfaceColor,
+                    shape = RoundedCornerShape(8.dp)
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Text(
+                text = message,
+                style = MaterialTheme.typography.body2,
+                color = onSurfaceColor
+            )
+        }
+    }
 }
 
 fun main() = application { App(onExitRequest = { exitApplication() }) }

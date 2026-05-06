@@ -25,6 +25,10 @@ fun setSingleResponseMessage(responseLines: MutableList<String>, message: String
     responseLines += message
 }
 
+fun showToast(vm: AppViewModel, message: String) {
+    vm.showToast(message)
+}
+
 fun formatDuration(ms: Long): String {
     return when {
         ms < 10_000 -> "${ms}ms"

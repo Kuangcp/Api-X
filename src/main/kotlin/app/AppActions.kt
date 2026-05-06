@@ -38,20 +38,19 @@ fun importCollection(vm: AppViewModel) {
             vm.onRefreshTree()
             vm.setExpandedCollectionIds(vm.expandedCollectionIds + newId)
             vm.setTreeSelection(TreeSelection.Collection(newId))
-            setSingleResponseMessage(vm.responseLines, "已导入集合「${portable.name}」")
+            showToast(vm, "已导入集合「${portable.name}」")
         } catch (e: IllegalArgumentException) {
             JOptionPane.showMessageDialog(null, e.message ?: "文件格式不正确", "导入失败", JOptionPane.ERROR_MESSAGE)
-        } catch (e: Exception) {
-            JOptionPane.showMessageDialog(null, e.message ?: e.toString(), "导入失败", JOptionPane.ERROR_MESSAGE)
+} catch (e: Exception) {
+            JOptionPane.showMessageDialog(null, e.message ?: "文件格式不正确", "导入失败", JOptionPane.ERROR_MESSAGE)
         }
-        vm.setResponsePartialLine(null)
     }
 }
 
 fun importCurl(vm: AppViewModel) {
     try {
         val activeId = vm.editorRequestId
-        if (activeId == null) { setSingleResponseMessage(vm.responseLines, "请先在编辑器中打开一个请求后再导入 cURL"); vm.setResponsePartialLine(null); return }
+        if (activeId == null) { showToast(vm, "请先在编辑器中打开一个请求后再导入 cURL"); return }
         val clipboardText = readClipboardText()
         val parsed = parseCurlCommand(clipboardText)
         vm.onSaveEditor()
@@ -87,13 +86,11 @@ fun importCurl(vm: AppViewModel) {
         )
         vm.setTreeSelection(TreeSelection.Request(newId))
         vm.repository.saveRequestEditorFields(newId, vm.method, vm.url, vm.headersText, vm.paramsText, vm.bodyText, vm.auth)
-        setSingleResponseMessage(vm.responseLines, "已新建请求并导入剪贴板中的 cURL")
-        vm.setResponsePartialLine(null)
+        showToast(vm, "已新建请求并导入剪贴板中的 cURL")
         vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)")
         vm.setStatusCodeText("-"); vm.setResponseTimeText("-"); vm.setResponseSizeText("0 B")
     } catch (e: Exception) {
-        setSingleResponseMessage(vm.responseLines, "导入 cURL 失败: ${e.message}")
-        vm.setResponsePartialLine(null)
+        showToast(vm, "导入 cURL 失败: ${e.message}")
         vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)")
     }
 }
@@ -103,8 +100,7 @@ fun pushData(vm: AppViewModel) {
         val r = DataDirSync.pushToDataDir(vm.repository)
         EventQueue.invokeLater {
             if (r.error != null) JOptionPane.showMessageDialog(null, r.error, "同步到 data 失败", JOptionPane.ERROR_MESSAGE)
-            else setSingleResponseMessage(vm.responseLines, "已写入 ${AppPaths.gitDataRoot()}：${r.collectionFilesWritten} 个 collection JSON；${if (r.envWritten) "环境已同步到 data/env" else "环境未写入"}")
-            vm.setResponsePartialLine(null)
+            else showToast(vm, "已写入 ${AppPaths.gitDataRoot()}：${r.collectionFilesWritten} 个 collection JSON；${if (r.envWritten) "环境已同步到 data/env" else "环境未写入"}")
         }
     }
 }
@@ -120,9 +116,8 @@ fun pullData(vm: AppViewModel) {
                 val errLines = r.fileErrors.joinToString("\n")
                 val baseMsg = "已合并：更新 ${r.merged} 个集合、新建 ${r.created} 个；环境 ${if (r.envMerged) "已合并" else "未变更"}"
                 if (r.fileErrors.isNotEmpty()) JOptionPane.showMessageDialog(null, "$baseMsg\n\n部分文件未导入：\n$errLines", "从 data 合并", JOptionPane.INFORMATION_MESSAGE)
-                setSingleResponseMessage(vm.responseLines, if (r.fileErrors.isEmpty()) baseMsg else "$baseMsg；详见弹窗中失败项")
+                showToast(vm, if (r.fileErrors.isEmpty()) baseMsg else "$baseMsg；详见弹窗中失败项")
             }
-            vm.setResponsePartialLine(null)
         }
     }
 }
@@ -147,8 +142,7 @@ fun exportAsCurl(vm: AppViewModel, rid: String) {
     val r = vm.repository.getRequest(rid) ?: return
     val vmEnv = vm.environmentsState.substitutionMapForActive()
     writeClipboardText(requestToCurlCommand(r.method, mergeUrlWithParams(applyEnvironmentVariables(r.url, vmEnv), parseHeadersForSend(applyEnvironmentVariables(r.paramsText, vmEnv))), applyEnvironmentVariables(r.headersText, vmEnv), applyEnvironmentVariables(r.bodyText, vmEnv)))
-    setSingleResponseMessage(vm.responseLines, "已复制 cURL 到剪贴板")
-    vm.setResponsePartialLine(null)
+    showToast(vm, "已复制 cURL 到剪贴板")
 }
 
 fun exportPostmanCollection(vm: AppViewModel, collectionId: String) {
@@ -165,7 +159,7 @@ fun exportPostmanCollection(vm: AppViewModel, collectionId: String) {
         if (!file.name.endsWith(".json", ignoreCase = true)) file = java.io.File(file.parentFile, file.name + ".json")
         try {
             Files.writeString(file.toPath(), json, StandardCharsets.UTF_8)
-            setSingleResponseMessage(vm.responseLines, "已导出 Postman v2.1：${file.absolutePath}")
+            showToast(vm, "已导出 Postman v2.1：${file.absolutePath}")
         } catch (e: Exception) {
             JOptionPane.showMessageDialog(null, e.message ?: e.toString(), "导出失败", JOptionPane.ERROR_MESSAGE)
         }
