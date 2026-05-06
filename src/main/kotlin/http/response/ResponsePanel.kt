@@ -1,4 +1,4 @@
-package http
+package http.response
 
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
@@ -22,6 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ContentAlpha
+import androidx.compose.material.Divider
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
@@ -32,9 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.DropdownMenu
-import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.Divider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -50,6 +50,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import db.HistoryEntry
+import http.ExchangeFontMetrics
+import http.HttpExchangeErrorStatusMark
+import http.contentTypeHeaderIndicatesJson
+import http.formatAndHighlightJsonOrNull
 
 /** 响应头展示用：按第一个 `:` 拆成 name / value（value 内可含冒号）。 */
 private fun splitResponseHeaderLine(line: String): Pair<String, String> {
@@ -87,7 +91,7 @@ fun ResponsePanel(
     jsonSyntaxHighlightEnabled: Boolean = true,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit = {},
     /** 可选的响应历史记录列表。 */
-    historyEntries: List<db.HistoryEntry> = emptyList(),
+    historyEntries: List<HistoryEntry> = emptyList(),
     /** 当前选中的历史时间戳，null 表示最新。 */
     selectedHistoryEpochMs: Long? = null,
     /** 选中某个历史时的回调，参数为 epochMs，null 表示选择"最新"。 */

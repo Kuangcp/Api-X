@@ -55,7 +55,7 @@ import db.RequestResponseStore
 import http.request.RequestEditorProps
 import http.request.RequestSidePanel
 import http.request.RequestTopBar
-import http.ResponsePanel
+import http.response.ResponsePanel
 import http.HttpExchangeErrorStatusMark
 import http.exchangeFontMetrics
 import http.formatActualRequestPlainText
