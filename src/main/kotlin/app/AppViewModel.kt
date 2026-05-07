@@ -310,6 +310,7 @@ fun rememberAppViewModel(
         val id = editorRequestId ?: return@LaunchedEffect
         delay(450)
         repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
+        refreshTree()
     }
 
     LaunchedEffect(editorRequestId) {

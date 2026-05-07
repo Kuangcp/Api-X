@@ -806,12 +806,14 @@ private fun RequestTreeRow(
         }
     ) {
         val folderNesting = (depth - 1).coerceAtLeast(0)
-        // 按 Folder 嵌套层数 深 / 浅 交替，便于扫一眼区分相邻层级
-        val methodBadgeColor = if (folderNesting % 2 == 0) {
-            MaterialTheme.colors.primary.copy(alpha = 0.22f)
-        } else {
-            MaterialTheme.colors.primary.copy(alpha = 0.11f)
+        // 按 HTTP Method 区分颜色，兼容 Dark/Light 主题
+        val methodColor = when (req.method.uppercase()) {
+            "GET" -> Color(0xFF4CAF50)
+            "POST" -> MaterialTheme.colors.primary
+            else -> Color(0xFFE65100)
         }
+        val methodBadgeBg = methodColor.copy(alpha = if (folderNesting % 2 == 0) 0.18f else 0.10f)
+        val methodBadgeText = methodColor.copy(alpha = 0.88f)
         val methodIconColumnW = 36.dp
         TreeRow(
             depth = depth,
@@ -824,7 +826,7 @@ private fun RequestTreeRow(
                         modifier = Modifier
                             .widthIn(max = methodIconColumnW)
                             .background(
-                                methodBadgeColor,
+                                methodBadgeBg,
                                 RoundedCornerShape(3.dp)
                             )
                             .padding(horizontal = 4.dp, vertical = 1.dp),
@@ -844,7 +846,7 @@ private fun RequestTreeRow(
                             softWrap = false,
                             overflow = TextOverflow.Ellipsis,
                             textAlign = TextAlign.Start,
-                            color = MaterialTheme.colors.primary.copy(alpha = 0.88f),
+                            color = methodBadgeText,
                         )
                     }
                 }
