@@ -178,7 +178,6 @@ fun rememberAppViewModel(
     var treeSidebarVisible by remember { mutableStateOf(true) }
     var didPickInitialRequest by remember { mutableStateOf(false) }
     var selectedHistoryEpochMs by remember { mutableStateOf<Long?>(null) }
-    var responsePartialLine by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     var isSseResponse by remember { mutableStateOf(false) }
     var statusCodeText by remember { mutableStateOf("") }
@@ -215,6 +214,7 @@ fun rememberAppViewModel(
     val responseHeaderLines = remember(responseScopeKey) { mutableStateListOf<String>().apply { if (editorRequestId == null) add("(暂无响应头)") else cachedResponse?.responseHeaderLines?.let { addAll(it) } ?: add("(暂无响应头)") } }
     val responseListState = remember(responseScopeKey) { LazyListState() }
     val responseHeadersListState = remember(responseScopeKey) { LazyListState() }
+    var responsePartialLine by remember(responseScopeKey) { mutableStateOf<String?>(null) }
 
     DisposableEffect(Unit) {
         onDispose {
