@@ -41,14 +41,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import http.BodyContentKind
 import http.ExchangeFontMetrics
 import http.contentTypeValueForBodyKind
 import http.formatJsonBodyTextOrNull
-import http.highlightJsonTextOrNull
 import http.inferBodyKindFromHeaders
 import http.removeContentTypeHeader
 import http.upsertContentTypeHeader
@@ -184,13 +180,6 @@ fun BoxScope.RequestBodyEditorTab(
                 defaultEditMode = KeyValueEditorMode.Form,
             )
         } else {
-            val jsonAnnotatedBody = remember(bodyText, isDarkTheme, bodyKind) {
-                if (bodyKind == BodyContentKind.Json) {
-                    highlightJsonTextOrNull(bodyText, isDarkTheme)
-                } else {
-                    null
-                }
-            }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -204,21 +193,6 @@ fun BoxScope.RequestBodyEditorTab(
                     )
                     .background(MaterialTheme.colors.surface)
             ) {
-                if (jsonAnnotatedBody != null) {
-                    SelectionContainer {
-                        Text(
-                            text = jsonAnnotatedBody,
-                            style = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = exchangeMetrics.body,
-                            ),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(bodyScrollState)
-                                .padding(10.dp),
-                        )
-                    }
-                }
                 val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
                 BasicTextField(
                     value = bodyText,
@@ -227,10 +201,9 @@ fun BoxScope.RequestBodyEditorTab(
                     cursorBrush = cursorBrush,
                     textStyle = MaterialTheme.typography.body2.copy(
                         fontSize = exchangeMetrics.body,
-                        color = if (jsonAnnotatedBody != null) Color.Transparent else MaterialTheme.colors.onSurface.copy(
+                        color = MaterialTheme.colors.onSurface.copy(
                             alpha = if (!isLoading) 1f else ContentAlpha.disabled
-                        ),
-                        fontFamily = FontFamily.Monospace,
+                        )
                     ),
                     modifier = Modifier
                         .fillMaxSize()
