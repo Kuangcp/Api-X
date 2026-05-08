@@ -187,7 +187,7 @@ fun rememberAppViewModel(
     var activeRequestThread by remember { mutableStateOf<Thread?>(null) }
     var splitRatio by remember { mutableStateOf(0.5f) }
     var contentRowWidthPx by remember { mutableStateOf(1f) }
-    var leftTabIndex by remember { mutableStateOf(1) }
+    var leftTabIndex by remember { mutableStateOf(0) }
     var rightTabIndex by remember { mutableStateOf(0) }
     var exchangeRequestPlainText by remember { mutableStateOf("请先选择或创建一个请求") }
     var isDarkTheme by remember { mutableStateOf(true) }

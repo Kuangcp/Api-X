@@ -46,6 +46,18 @@ fun formatAndHighlightJsonOrNull(rawBody: String, darkTheme: Boolean): Annotated
     return highlightJsonText(pretty, darkTheme)
 }
 
+/**
+ * 仅对已有文本做 JSON 语法高亮；解析失败返回 null。
+ */
+fun highlightJsonTextOrNull(rawBody: String, darkTheme: Boolean): AnnotatedString? {
+    val trimmed = rawBody.trim()
+    if (trimmed.isEmpty()) return null
+    return runCatching {
+        jsonLenient.parseToJsonElement(trimmed)
+        highlightJsonText(rawBody, darkTheme)
+    }.getOrNull()
+}
+
 private data class JsonSyntaxPalette(
     val string: Color,
     val key: Color,
