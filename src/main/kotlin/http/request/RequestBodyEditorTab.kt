@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalSerializationApi::class)
+
 package http.request
 
 import androidx.compose.foundation.background
@@ -28,6 +30,7 @@ import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.AutoAwesome
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -67,7 +70,11 @@ private fun Color.toUiColor(): UiColor {
     return UiColor.Integer(argb)
 }
 
-private val prettyPrintJson = Json { prettyPrint = true }
+private val prettyPrintJson = Json { 
+    prettyPrint = true 
+    prettyPrintIndent = "  " 
+    ignoreUnknownKeys = true
+}
 
 @Composable
 private fun BodyContentKindSelector(
