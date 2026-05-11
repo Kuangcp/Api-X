@@ -641,7 +641,7 @@ private fun FolderTreeBlock(
                 Icon(
                     if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
                     contentDescription = null,
-                    modifier = Modifier.size(19.dp),
+                    modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                 )
             },
@@ -665,12 +665,15 @@ private fun FolderTreeBlock(
                 onSelectNode(folderSel)
                 onBeginTreeRename(folderSel, folder.name)
             },
-            rowExtraModifier = Modifier.onGloballyPositioned { lc ->
-                rowLc.coords = lc
-                if (dragActive) {
-                    dropRegistry.sync(intoKey, true, lc.boundsInRoot(), intoTarget)
-                }
-            },
+            rowExtraModifier = Modifier
+                .heightIn(max = 26.dp)
+                .padding(vertical = 0.dp)
+                .onGloballyPositioned { lc ->
+                    rowLc.coords = lc
+                    if (dragActive) {
+                        dropRegistry.sync(intoKey, true, lc.boundsInRoot(), intoTarget)
+                    }
+                },
             dragModifier = Modifier.pointerInput(payload) {
                 detectDragGestures(
                     onDragStart = { offset ->
@@ -931,8 +934,8 @@ private fun TreeRow(
         modifier = rowExtraModifier
             .then(clickableModifier)
             .then(dragModifier)
-            .heightIn(min = 32.dp)
-            .padding(vertical = 5.dp, horizontal = 0.dp)
+            .height(24.dp)
+            .padding(horizontal = 0.dp)
             .padding(start = (depth * 6).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
