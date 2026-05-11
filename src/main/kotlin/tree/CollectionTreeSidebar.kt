@@ -126,7 +126,7 @@ private fun TreeDropGap(
     Box(
         modifier
             .fillMaxWidth()
-            .height(if (active) 4.dp else 0.dp)
+            .height(if (active) 3.dp else 0.dp)
             .then(
                 if (active) {
                     Modifier.onGloballyPositioned { lc ->
@@ -138,9 +138,9 @@ private fun TreeDropGap(
             )
             .background(
                 when {
-                    !active -> Color.Transparent
                     highlight -> MaterialTheme.colors.primary.copy(alpha = 0.38f)
-                    else -> MaterialTheme.colors.onSurface.copy(alpha = 0.07f)
+                    active -> MaterialTheme.colors.onSurface.copy(alpha = 0.04f)
+                    else -> Color.Transparent
                 }
             )
     )
