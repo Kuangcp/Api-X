@@ -29,6 +29,7 @@ import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.DataObject
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -41,9 +42,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import http.BodyContentKind
 import http.ExchangeFontMetrics
 import http.contentTypeValueForBodyKind
+import http.formatAndHighlightJsonOrNull
 import http.formatJsonBodyTextOrNull
 import http.inferBodyKindFromHeaders
 import http.removeContentTypeHeader
@@ -121,6 +126,14 @@ fun BoxScope.RequestBodyEditorTab(
     val canFormatJson = remember(bodyText, bodyKind) {
         bodyKind == BodyContentKind.Json && formatJsonBodyTextOrNull(bodyText) != null
     }
+    var isJsonHighlighted by remember { mutableStateOf(false) }
+    val jsonAnnotatedBody = remember(bodyText, isDarkTheme, isJsonHighlighted) {
+        if (isJsonHighlighted) {
+            formatAndHighlightJsonOrNull(bodyText, isDarkTheme)
+        } else {
+            null
+        }
+    }
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -138,25 +151,42 @@ fun BoxScope.RequestBodyEditorTab(
             )
             if (bodyKind == BodyContentKind.Json) {
                 Spacer(modifier = Modifier.weight(1f))
-                IconButton(
-                    onClick = {
-                        formatJsonBodyTextOrNull(bodyText)
-                            ?.let(onBodyTextChange)
-                    },
-                    enabled = !isLoading && canFormatJson,
-                ) {
-                    Icon(
-                        Icons.Filled.DataObject,
-                        contentDescription = "格式化 JSON",
-                        modifier = Modifier.size(20.dp),
-                        tint = if (isLoading || !canFormatJson) {
-                            MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled)
-                        } else {
-                            MaterialTheme.colors.onSurface.copy(
+                if (isJsonHighlighted) {
+                    IconButton(
+                        onClick = { isJsonHighlighted = false },
+                        enabled = !isLoading,
+                    ) {
+                        Icon(
+                            Icons.Filled.Edit,
+                            contentDescription = "编辑 JSON",
+                            modifier = Modifier.size(20.dp),
+                            tint = MaterialTheme.colors.onSurface.copy(
                                 alpha = if (isDarkTheme) 1f else ContentAlpha.high
-                            )
+                            ),
+                        )
+                    }
+                } else {
+                    IconButton(
+                        onClick = {
+                            formatJsonBodyTextOrNull(bodyText)
+                                ?.let(onBodyTextChange)
+                            isJsonHighlighted = true
                         },
-                    )
+                        enabled = !isLoading && canFormatJson,
+                    ) {
+                        Icon(
+                            Icons.Filled.DataObject,
+                            contentDescription = "格式化 JSON",
+                            modifier = Modifier.size(20.dp),
+                            tint = if (isLoading || !canFormatJson) {
+                                MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled)
+                            } else {
+                                MaterialTheme.colors.onSurface.copy(
+                                    alpha = if (isDarkTheme) 1f else ContentAlpha.high
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -193,23 +223,42 @@ fun BoxScope.RequestBodyEditorTab(
                     )
                     .background(MaterialTheme.colors.surface)
             ) {
-                val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
-                BasicTextField(
-                    value = bodyText,
-                    onValueChange = onBodyTextChange,
-                    enabled = !isLoading,
-                    cursorBrush = cursorBrush,
-                    textStyle = MaterialTheme.typography.body2.copy(
-                        fontSize = exchangeMetrics.body,
-                        color = MaterialTheme.colors.onSurface.copy(
-                            alpha = if (!isLoading) 1f else ContentAlpha.disabled
+                if (jsonAnnotatedBody != null) {
+                    SelectionContainer {
+                        Text(
+                            text = jsonAnnotatedBody,
+                            style = TextStyle(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = exchangeMetrics.body,
+                            ),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(bodyScrollState)
+                                .padding(10.dp),
                         )
-                    ),
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .verticalScroll(bodyScrollState)
-                        .padding(10.dp)
-                )
+                    }
+                } else {
+                    val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
+                    BasicTextField(
+                        value = bodyText,
+                        onValueChange = {
+                            onBodyTextChange(it)
+                            isJsonHighlighted = false
+                        },
+                        enabled = !isLoading,
+                        cursorBrush = cursorBrush,
+                        textStyle = MaterialTheme.typography.body2.copy(
+                            fontSize = exchangeMetrics.body,
+                            color = MaterialTheme.colors.onSurface.copy(
+                                alpha = if (!isLoading) 1f else ContentAlpha.disabled
+                            )
+                        ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(bodyScrollState)
+                            .padding(10.dp)
+                    )
+                }
             }
         }
     }
