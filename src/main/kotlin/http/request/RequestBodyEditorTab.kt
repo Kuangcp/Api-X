@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -26,8 +27,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.Code
-import kotlinx.serialization.encodeToString
+import androidx.compose.material.icons.filled.AutoAwesome
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -124,6 +124,7 @@ private fun BodyContentKindSelector(
                 }
             }
         }
+        Spacer(Modifier.weight(1f))
         if (kind == BodyContentKind.Json) {
             IconButton(
                 onClick = {
@@ -135,11 +136,10 @@ private fun BodyContentKindSelector(
                     }
                 },
                 enabled = enabled && bodyText.isNotBlank(),
-                modifier = Modifier.padding(start = 8.dp),
             ) {
                 Icon(
-                    Icons.Filled.Code,
-                    contentDescription = "美化 JSON",
+                    Icons.Filled.AutoAwesome,
+                    contentDescription = "格式化 JSON",
                     tint = MaterialTheme.colors.onSurface.copy(alpha = if (enabled) 0.7f else ContentAlpha.disabled),
                 )
             }
@@ -272,8 +272,8 @@ private fun JsonEditor(
     val punctuationColor = if (isDarkTheme) Color(0xFFD4D4D4) else Color(0xFF242424)
 
     val highlightedValue = rememberHighlight {
-        textColor { "\"([^\"\\\\]|\\\\.)*\"(?=\\s*:)".toRegex().fully(keyColor.toUiColor()) }
-        textColor { "\"([^\"\\\\]|\\\\.)*\"(?![:\\s])".toRegex().fully(stringColor.toUiColor()) }
+        textColor { "\"[^\"\\\\]*\"(?=\\s*:)".toRegex().fully(keyColor.toUiColor()) }
+        textColor { "\"[^\"\\\\]*\"(?![:\\s])".toRegex().fully(stringColor.toUiColor()) }
         textColor { "-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?".toRegex().fully(numberColor.toUiColor()) }
         textColor { "\\b(true|false|null)\\b".toRegex().fully(keywordColor.toUiColor()) }
         textColor { "[{}\\[\\]:,]".toRegex().fully(punctuationColor.toUiColor()) }
