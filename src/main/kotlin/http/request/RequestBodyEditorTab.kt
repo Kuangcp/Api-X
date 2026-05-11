@@ -20,11 +20,17 @@ import androidx.compose.material.ContentAlpha
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.filled.Code
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -61,12 +67,16 @@ private fun Color.toUiColor(): UiColor {
     return UiColor.Integer(argb)
 }
 
+private val prettyPrintJson = Json { prettyPrint = true }
+
 @Composable
 private fun BodyContentKindSelector(
     exchangeMetrics: ExchangeFontMetrics,
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     enabled: Boolean,
+    bodyText: String,
+    onBodyTextChange: (String) -> Unit,
 ) {
     var showMenu by remember { mutableStateOf(false) }
     val kind = inferBodyKindFromHeaders(headersText)
@@ -114,6 +124,26 @@ private fun BodyContentKindSelector(
                 }
             }
         }
+        if (kind == BodyContentKind.Json) {
+            IconButton(
+                onClick = {
+                    try {
+                        val element = Json.parseToJsonElement(bodyText)
+                        val pretty = prettyPrintJson.encodeToString(JsonElement.serializer(), element)
+                        onBodyTextChange(pretty)
+                    } catch (_: Exception) {
+                    }
+                },
+                enabled = enabled && bodyText.isNotBlank(),
+                modifier = Modifier.padding(start = 8.dp),
+            ) {
+                Icon(
+                    Icons.Filled.Code,
+                    contentDescription = "美化 JSON",
+                    tint = MaterialTheme.colors.onSurface.copy(alpha = if (enabled) 0.7f else ContentAlpha.disabled),
+                )
+            }
+        }
     }
 }
 
@@ -144,6 +174,8 @@ fun BoxScope.RequestBodyEditorTab(
                 headersText = headersText,
                 onHeadersTextChange = onHeadersTextChange,
                 enabled = !isLoading,
+                bodyText = bodyText,
+                onBodyTextChange = onBodyTextChange,
             )
         }
         Text(
