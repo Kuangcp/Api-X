@@ -7,12 +7,10 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -22,15 +20,13 @@ import androidx.compose.material.ContentAlpha
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
-import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.DataObject
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,19 +36,30 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.ScrollState
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.ScrollState
+import com.neoutils.highlight.compose.remember.rememberHighlight
+import com.neoutils.highlight.compose.remember.rememberTextFieldValue
+import com.neoutils.highlight.core.extension.textColor
+import com.neoutils.highlight.core.util.UiColor
 import http.BodyContentKind
 import http.ExchangeFontMetrics
 import http.contentTypeValueForBodyKind
-import http.formatAndHighlightJsonOrNull
-import http.formatJsonBodyTextOrNull
 import http.inferBodyKindFromHeaders
 import http.removeContentTypeHeader
 import http.upsertContentTypeHeader
+
+private fun Color.toUiColor(): UiColor {
+    val r = (this.red * 255).toInt()
+    val g = (this.green * 255).toInt()
+    val b = (this.blue * 255).toInt()
+    val a = (this.alpha * 255).toInt()
+    val argb = (a shl 24) or (r shl 16) or (g shl 8) or b
+    return UiColor.Integer(argb)
+}
 
 @Composable
 private fun BodyContentKindSelector(
@@ -123,17 +130,6 @@ fun BoxScope.RequestBodyEditorTab(
     bodyScrollState: ScrollState,
 ) {
     val bodyKind = inferBodyKindFromHeaders(headersText)
-    val canFormatJson = remember(bodyText, bodyKind) {
-        bodyKind == BodyContentKind.Json && formatJsonBodyTextOrNull(bodyText) != null
-    }
-    var isJsonHighlighted by remember { mutableStateOf(false) }
-    val jsonAnnotatedBody = remember(bodyText, isDarkTheme, isJsonHighlighted) {
-        if (isJsonHighlighted) {
-            formatAndHighlightJsonOrNull(bodyText, isDarkTheme)
-        } else {
-            null
-        }
-    }
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
@@ -149,46 +145,6 @@ fun BoxScope.RequestBodyEditorTab(
                 onHeadersTextChange = onHeadersTextChange,
                 enabled = !isLoading,
             )
-            if (bodyKind == BodyContentKind.Json) {
-                Spacer(modifier = Modifier.weight(1f))
-                if (isJsonHighlighted) {
-                    IconButton(
-                        onClick = { isJsonHighlighted = false },
-                        enabled = !isLoading,
-                    ) {
-                        Icon(
-                            Icons.Filled.Edit,
-                            contentDescription = "编辑 JSON",
-                            modifier = Modifier.size(20.dp),
-                            tint = MaterialTheme.colors.onSurface.copy(
-                                alpha = if (isDarkTheme) 1f else ContentAlpha.high
-                            ),
-                        )
-                    }
-                } else {
-                    IconButton(
-                        onClick = {
-                            formatJsonBodyTextOrNull(bodyText)
-                                ?.let(onBodyTextChange)
-                            isJsonHighlighted = true
-                        },
-                        enabled = !isLoading && canFormatJson,
-                    ) {
-                        Icon(
-                            Icons.Filled.DataObject,
-                            contentDescription = "格式化 JSON",
-                            modifier = Modifier.size(20.dp),
-                            tint = if (isLoading || !canFormatJson) {
-                                MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled)
-                            } else {
-                                MaterialTheme.colors.onSurface.copy(
-                                    alpha = if (isDarkTheme) 1f else ContentAlpha.high
-                                )
-                            },
-                        )
-                    }
-                }
-            }
         }
         Text(
             "Body（POST / PUT 等会携带）",
@@ -223,28 +179,20 @@ fun BoxScope.RequestBodyEditorTab(
                     )
                     .background(MaterialTheme.colors.surface)
             ) {
-                if (jsonAnnotatedBody != null) {
-                    SelectionContainer {
-                        Text(
-                            text = jsonAnnotatedBody,
-                            style = TextStyle(
-                                fontFamily = FontFamily.Monospace,
-                                fontSize = exchangeMetrics.body,
-                            ),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(bodyScrollState)
-                                .padding(10.dp),
-                        )
-                    }
+                if (bodyKind == BodyContentKind.Json) {
+                    JsonEditor(
+                        text = bodyText,
+                        onTextChange = onBodyTextChange,
+                        isDarkTheme = isDarkTheme,
+                        isLoading = isLoading,
+                        exchangeMetrics = exchangeMetrics,
+                        bodyScrollState = bodyScrollState,
+                    )
                 } else {
                     val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
                     BasicTextField(
                         value = bodyText,
-                        onValueChange = {
-                            onBodyTextChange(it)
-                            isJsonHighlighted = false
-                        },
+                        onValueChange = onBodyTextChange,
                         enabled = !isLoading,
                         cursorBrush = cursorBrush,
                         textStyle = MaterialTheme.typography.body2.copy(
@@ -265,5 +213,58 @@ fun BoxScope.RequestBodyEditorTab(
     VerticalScrollbar(
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
         adapter = rememberScrollbarAdapter(bodyScrollState)
+    )
+}
+
+@Composable
+private fun JsonEditor(
+    text: String,
+    onTextChange: (String) -> Unit,
+    isDarkTheme: Boolean,
+    isLoading: Boolean,
+    exchangeMetrics: ExchangeFontMetrics,
+    bodyScrollState: ScrollState,
+) {
+    var textFieldValue by remember { mutableStateOf(TextFieldValue(text)) }
+
+    LaunchedEffect(text) {
+        if (textFieldValue.text != text) {
+            textFieldValue = TextFieldValue(text)
+        }
+    }
+
+    val stringColor = if (isDarkTheme) Color(0xFFCE9178) else Color(0xFFA31515)
+    val keyColor = if (isDarkTheme) Color(0xFF9CDCFE) else Color(0xFF0451A5)
+    val numberColor = if (isDarkTheme) Color(0xFFB5CEA8) else Color(0xFF098658)
+    val keywordColor = if (isDarkTheme) Color(0xFF569CD6) else Color(0xFF0000FF)
+    val punctuationColor = if (isDarkTheme) Color(0xFFD4D4D4) else Color(0xFF242424)
+
+    val highlightedValue = rememberHighlight {
+        textColor { "\"([^\"\\\\]|\\\\.)*\"(?=\\s*:)".toRegex().fully(keyColor.toUiColor()) }
+        textColor { "\"([^\"\\\\]|\\\\.)*\"(?![:\\s])".toRegex().fully(stringColor.toUiColor()) }
+        textColor { "-?\\d+(\\.\\d+)?([eE][+-]?\\d+)?".toRegex().fully(numberColor.toUiColor()) }
+        textColor { "\\b(true|false|null)\\b".toRegex().fully(keywordColor.toUiColor()) }
+        textColor { "[{}\\[\\]:,]".toRegex().fully(punctuationColor.toUiColor()) }
+    }.rememberTextFieldValue(textFieldValue)
+
+    BasicTextField(
+        value = highlightedValue.copy(composition = textFieldValue.composition),
+        onValueChange = { newValue ->
+            textFieldValue = newValue
+            onTextChange(newValue.text)
+        },
+        enabled = !isLoading,
+        cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
+        textStyle = TextStyle(
+            fontFamily = FontFamily.Monospace,
+            fontSize = exchangeMetrics.body,
+            color = MaterialTheme.colors.onSurface.copy(
+                alpha = if (!isLoading) 1f else ContentAlpha.disabled
+            )
+        ),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(bodyScrollState)
+            .padding(10.dp)
     )
 }
