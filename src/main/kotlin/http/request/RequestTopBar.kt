@@ -36,8 +36,8 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.CloudUpload
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.FilterNone
-import androidx.compose.material.icons.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Remove
@@ -145,9 +145,9 @@ fun WindowScope.RequestTopBar(
                     ) {
                         Icon(
                             imageVector = if (treeSidebarVisible) {
-                                Icons.Filled.KeyboardArrowLeft
+                                Icons.AutoMirrored.Filled.KeyboardArrowLeft
                             } else {
-                                Icons.Filled.KeyboardArrowRight
+                                Icons.AutoMirrored.Filled.KeyboardArrowRight
                             },
                             contentDescription = if (treeSidebarVisible) "隐藏请求树" else "显示请求树",
                             modifier = topBarIconModifier,

@@ -46,8 +46,8 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.PostAdd
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.LibraryBooks
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.filled.LibraryBooks
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -488,7 +488,7 @@ private fun CollectionTreeBlock(
                 depth = depth,
                 icon = {
                     Icon(
-                        Icons.Filled.LibraryBooks,
+                        Icons.AutoMirrored.Filled.LibraryBooks,
                         contentDescription = null,
                         modifier = Modifier.size(19.dp),
                         tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
@@ -496,7 +496,7 @@ private fun CollectionTreeBlock(
                 },
                 expandIcon = {
                     Icon(
-                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = if (expanded) "折叠" else "展开",
                         modifier = Modifier.size(20.dp).clickable { onToggleCollection(collection.id) },
                         tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
@@ -649,7 +649,7 @@ private fun FolderTreeBlock(
                 val hasChildren = folder.children.isNotEmpty() || folder.requests.isNotEmpty()
                 if (hasChildren) {
                     Icon(
-                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                        if (expanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                         contentDescription = if (expanded) "折叠" else "展开",
                         modifier = Modifier.size(20.dp).clickable { onToggleFolder(folder.id) },
                         tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
