@@ -243,6 +243,7 @@ fun App(onExitRequest: () -> Unit) {
                                 modifier = Modifier.weight(vm.treeSplitRatio), tree = vm.tree, selectedNode = vm.treeSelection,
                                 treeScrollToRequestId = vm.treeScrollToRequestId, onTreeScrollToRequestHandled = { vm.setTreeScrollToRequestId(null) },
                                 editorBoundRequestId = vm.editorRequestId, expandedCollectionIds = vm.expandedCollectionIds, expandedFolderIds = vm.expandedFolderIds,
+                                runningRequestIds = vm.runningRequestIds,
                                 onToggleCollection = { vm.setExpandedCollectionIds(if (it in vm.expandedCollectionIds) vm.expandedCollectionIds - it else vm.expandedCollectionIds + it) },
                                 onToggleFolder = { vm.setExpandedFolderIds(if (it in vm.expandedFolderIds) vm.expandedFolderIds - it else vm.expandedFolderIds + it) },
                                 onSelectNode = { vm.onSelectTreeNode(it) },

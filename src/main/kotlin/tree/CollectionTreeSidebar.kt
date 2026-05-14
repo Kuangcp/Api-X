@@ -31,6 +31,7 @@ import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.MaterialTheme
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -156,6 +157,7 @@ fun CollectionTreeSidebar(
     editorBoundRequestId: String?,
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
+    runningRequestIds: Set<String>,
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
@@ -316,6 +318,7 @@ fun CollectionTreeSidebar(
                             editorBoundRequestId = editorBoundRequestId,
                             expandedCollectionIds = expandedCollectionIds,
                             expandedFolderIds = expandedFolderIds,
+                            runningRequestIds = runningRequestIds,
                             onToggleCollection = onToggleCollection,
                             onToggleFolder = onToggleFolder,
                             onSelectNode = onSelectNode,
@@ -434,6 +437,7 @@ private fun CollectionTreeBlock(
     editorBoundRequestId: String?,
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
+    runningRequestIds: Set<String>,
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
@@ -532,6 +536,7 @@ private fun CollectionTreeBlock(
                 onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 expandedFolderIds = expandedFolderIds,
+                runningRequestIds = runningRequestIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
@@ -570,6 +575,7 @@ private fun CollectionTreeBlock(
                 treeScrollToRequestId = treeScrollToRequestId,
                 onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
+                runningRequestIds = runningRequestIds,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
@@ -599,6 +605,7 @@ private fun FolderTreeBlock(
     onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     expandedFolderIds: Set<String>,
+    runningRequestIds: Set<String>,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
@@ -709,6 +716,7 @@ private fun FolderTreeBlock(
                 onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 expandedFolderIds = expandedFolderIds,
+                runningRequestIds = runningRequestIds,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
@@ -747,6 +755,7 @@ private fun FolderTreeBlock(
                 treeScrollToRequestId = treeScrollToRequestId,
                 onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
+                runningRequestIds = runningRequestIds,
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
@@ -774,6 +783,7 @@ private fun RequestTreeRow(
     treeScrollToRequestId: String?,
     onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
+    runningRequestIds: Set<String>,
     onSelectNode: (TreeSelection) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
@@ -784,6 +794,7 @@ private fun RequestTreeRow(
 ) {
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
+    val isRunning = req.id in runningRequestIds
     val rowLc = remember(req.id) { LayoutCoordsHolder() }
     val bringIntoViewRequester = remember(req.id) { BringIntoViewRequester() }
     val payload = TreeDragPayload.Request(req.id)
@@ -823,34 +834,41 @@ private fun RequestTreeRow(
             iconColumnWidth = methodIconColumnW,
             iconNameSpacing = 6.dp,
             icon = {
-                // 外框占满列宽、左对齐；方法底色随字宽，Request 名仍从固定列后开始
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
-                    Box(
-                        modifier = Modifier
-                            .widthIn(max = methodIconColumnW)
-                            .background(
-                                methodBadgeBg,
-                                RoundedCornerShape(3.dp)
-                            )
-                            .padding(horizontal = 4.dp, vertical = 1.dp),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Text(
-                            req.method.uppercase(),
-                            style = TextStyle(
-                                fontSize = 10.sp,
-                                lineHeight = 12.sp,
-                                lineHeightStyle = LineHeightStyle(
-                                    alignment = LineHeightStyle.Alignment.Center,
-                                    trim = LineHeightStyle.Trim.Both,
-                                ),
-                            ),
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Start,
-                            color = methodBadgeText,
+                    if (isRunning) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                         )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .widthIn(max = methodIconColumnW)
+                                .background(
+                                    methodBadgeBg,
+                                    RoundedCornerShape(3.dp)
+                                )
+                                .padding(horizontal = 4.dp, vertical = 1.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            Text(
+                                req.method.uppercase(),
+                                style = TextStyle(
+                                    fontSize = 10.sp,
+                                    lineHeight = 12.sp,
+                                    lineHeightStyle = LineHeightStyle(
+                                        alignment = LineHeightStyle.Alignment.Center,
+                                        trim = LineHeightStyle.Trim.Both,
+                                    ),
+                                ),
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Start,
+                                color = methodBadgeText,
+                            )
+                        }
                     }
                 }
             },
