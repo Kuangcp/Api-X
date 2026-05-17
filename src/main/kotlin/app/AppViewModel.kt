@@ -39,6 +39,16 @@ import tree.firstRequestSelection
 import java.awt.EventQueue
 import kotlin.concurrent.thread
 
+data class TabSession(
+    val method: String = "GET",
+    val url: String = "",
+    val headersText: String = "",
+    val bodyText: String = "",
+    val paramsText: String = "",
+    val auth: PostmanAuth? = null,
+    val leftTabIndex: Int = 0,
+)
+
 data class AppViewModel(
     val repository: db.CollectionRepository,
     val expandLoaded: TreeExpandPrefs.Loaded,
@@ -74,6 +84,10 @@ data class AppViewModel(
     val setAuth: (PostmanAuth?) -> Unit,
     val editorRequestId: String?,
     val setEditorRequestId: (String?) -> Unit,
+    val openTabIds: List<String>,
+    val activeTabId: String?,
+    val onTabSelected: (String) -> Unit,
+    val onTabCloseRequest: (String) -> Unit,
     val leftTabIndex: Int,
     val setLeftTabIndex: (Int) -> Unit,
     val methodMenuExpanded: Boolean,
@@ -169,6 +183,9 @@ fun rememberAppViewModel(
     var tree by remember { mutableStateOf(repository.loadTree()) }
     var treeSelection by remember { mutableStateOf<TreeSelection?>(null) }
     var editorRequestId by remember { mutableStateOf<String?>(null) }
+    val openTabIds = remember { mutableStateListOf<String>() }
+    var activeTabId by remember { mutableStateOf<String?>(null) }
+    val tabSessions = remember { mutableMapOf<String, TabSession>() }
     var expandedCollectionIds by remember { mutableStateOf(expandLoaded.collectionIds) }
     var expandedFolderIds by remember { mutableStateOf(expandLoaded.folderIds) }
     var persistTreeExpand by remember { mutableStateOf(expandLoaded.fromSavedFile) }
@@ -256,8 +273,79 @@ fun rememberAppViewModel(
         repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
     }
 
+    fun saveCurrentTabSession(id: String?) {
+        if (id == null) return
+        tabSessions[id] = TabSession(
+            method = method, url = url, headersText = headersText,
+            bodyText = bodyText, paramsText = paramsText, auth = auth,
+            leftTabIndex = leftTabIndex,
+        )
+    }
+
+    fun selectTab(requestId: String) {
+        if (requestId == activeTabId) return
+        saveEditorIfBound()
+        saveCurrentTabSession(editorRequestId)
+        activeTabId = requestId
+        editorRequestId = requestId
+        val session = tabSessions[requestId]
+        if (session != null) {
+            method = session.method
+            url = session.url
+            headersText = session.headersText
+            bodyText = session.bodyText
+            paramsText = session.paramsText
+            auth = session.auth
+            leftTabIndex = session.leftTabIndex
+        } else {
+            val r = repository.getRequest(requestId) ?: return
+            method = r.method
+            url = r.url
+            headersText = r.headersText
+            paramsText = r.paramsText
+            bodyText = migrateFormBodyToEditorLinesIfNeeded(r.bodyText, r.headersText)
+            auth = r.auth
+            leftTabIndex = 0
+            tabSessions[requestId] = TabSession(
+                method = method, url = url, headersText = headersText,
+                bodyText = bodyText, paramsText = paramsText, auth = auth,
+            )
+        }
+        RecentRequestUsageStore.touch(requestId)
+    }
+
+    fun closeTab(requestId: String) {
+        val idx = openTabIds.indexOf(requestId)
+        if (idx < 0) return
+        if (requestId == activeTabId) saveCurrentTabSession(requestId)
+        tabSessions.remove(requestId)
+        openTabIds.removeAt(idx)
+        if (requestId == activeTabId) {
+            val newIdx = idx.coerceAtMost(openTabIds.lastIndex)
+            if (newIdx >= 0 && openTabIds.isNotEmpty()) {
+                selectTab(openTabIds[newIdx])
+            } else {
+                activeTabId = null
+                editorRequestId = null
+                treeSelection = null
+                method = "GET"
+                url = ""
+                headersText = ""
+                bodyText = ""
+                paramsText = ""
+                auth = null
+                leftTabIndex = 0
+            }
+        }
+    }
+
     fun applyRequestToEditor(reqId: String) {
         val r = repository.getRequest(reqId) ?: return
+        saveCurrentTabSession(editorRequestId)
+        if (reqId !in openTabIds) {
+            openTabIds.add(reqId)
+        }
+        activeTabId = reqId
         editorRequestId = reqId
         method = r.method
         url = r.url
@@ -265,6 +353,11 @@ fun rememberAppViewModel(
         paramsText = r.paramsText
         bodyText = migrateFormBodyToEditorLinesIfNeeded(r.bodyText, r.headersText)
         auth = r.auth
+        leftTabIndex = 0
+        tabSessions[reqId] = TabSession(
+            method = method, url = url, headersText = headersText,
+            bodyText = bodyText, paramsText = paramsText, auth = auth,
+        )
         RecentRequestUsageStore.touch(reqId)
     }
 
@@ -277,6 +370,11 @@ fun rememberAppViewModel(
         b: String,
     ) {
         val r = repository.getRequest(newId) ?: return
+        saveCurrentTabSession(editorRequestId)
+        if (newId !in openTabIds) {
+            openTabIds.add(newId)
+        }
+        activeTabId = newId
         editorRequestId = newId
         method = m
         url = u
@@ -284,12 +382,26 @@ fun rememberAppViewModel(
         headersText = h
         bodyText = b
         auth = r.auth
+        leftTabIndex = 0
+        tabSessions[newId] = TabSession(
+            method = method, url = url, headersText = headersText,
+            bodyText = bodyText, paramsText = paramsText, auth = auth,
+        )
         RecentRequestUsageStore.touch(newId)
     }
 
     fun selectTreeNode(sel: TreeSelection) {
         when (sel) {
-            is TreeSelection.Request -> { saveEditorIfBound(); applyRequestToEditor(sel.id); treeSelection = sel }
+            is TreeSelection.Request -> {
+                if (sel.id in openTabIds) {
+                    selectTab(sel.id)
+                    treeSelection = sel
+                } else {
+                    saveEditorIfBound()
+                    applyRequestToEditor(sel.id)
+                    treeSelection = sel
+                }
+            }
             else -> treeSelection = sel
         }
     }
@@ -529,6 +641,9 @@ fun rememberAppViewModel(
         paramsText = paramsText, setParamsText = { paramsText = it },
         auth = auth, setAuth = { auth = it },
         editorRequestId = editorRequestId, setEditorRequestId = { editorRequestId = it },
+        openTabIds = openTabIds, activeTabId = activeTabId,
+        onTabSelected = { selectTab(it) },
+        onTabCloseRequest = { closeTab(it) },
         leftTabIndex = leftTabIndex, setLeftTabIndex = { leftTabIndex = it },
         methodMenuExpanded = methodMenuExpanded, setMethodMenuExpanded = { methodMenuExpanded = it },
         responseLines = currentResponseLines, responseHeaderLines = currentResponseHeaderLines,
