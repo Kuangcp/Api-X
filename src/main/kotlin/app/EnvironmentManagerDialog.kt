@@ -39,11 +39,27 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import java.util.UUID
+import kotlin.math.min
 
 @Composable
 fun EnvironmentManagerDialogWindow(
@@ -108,6 +124,33 @@ private fun EnvTextField(
             disabledLabelColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled),
         )
     )
+}
+
+@Composable
+private fun DashedDivider(
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(1.dp),
+    ) {
+        val dash = 3.dp.toPx()
+        val gap = 4.dp.toPx()
+        val y = size.height / 2f
+        var x = 0f
+        while (x < size.width) {
+            val segEnd = min(x + dash, size.width)
+            drawLine(
+                color = color,
+                start = Offset(x, y),
+                end = Offset(segEnd, y),
+                strokeWidth = 1f,
+            )
+            x += dash + gap
+        }
+    }
 }
 
 @Composable
@@ -334,50 +377,197 @@ private fun EnvironmentManagerDialogBody(
                         style = MaterialTheme.typography.subtitle2,
                         color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                     )
+                    val rowFieldStyle = MaterialTheme.typography.body2.copy(
+                        color = MaterialTheme.colors.onSurface,
+                    )
+                    val dashedLineColor = MaterialTheme.colors.onSurface.copy(alpha = 0.22f)
+                    var focusedKeyCell by remember { mutableStateOf<Int?>(null) }
+                    var focusedValueCell by remember { mutableStateOf<Int?>(null) }
                     Column(
                         modifier = Modifier
                             .weight(1f)
                             .verticalScroll(rememberScrollState())
                             .heightIn(min = 120.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 2.dp, vertical = 0.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text(
+                                "Key",
+                                style = MaterialTheme.typography.body2,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                modifier = Modifier
+                                    .weight(0.42f)
+                                    .padding(start = 2.dp),
+                            )
+                            Text(
+                                "Value",
+                                style = MaterialTheme.typography.body2,
+                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                modifier = Modifier.weight(0.58f),
+                            )
+                            Spacer(modifier = Modifier.width(40.dp))
+                        }
+                        DashedDivider(color = dashedLineColor)
                         for (i in variableRows.indices) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                EnvTextField(
-                                    value = variableRows[i].key,
-                                    onValueChange = { v ->
-                                        variableRows[i] = variableRows[i].copy(key = v)
-                                    },
-                                    modifier = Modifier.weight(0.42f),
-                                    label = { Text("变量名") },
-                                    placeholder = { Text("host") },
-                                    singleLine = true,
-                                )
-                                EnvTextField(
-                                    value = variableRows[i].value,
-                                    onValueChange = { v ->
-                                        variableRows[i] = variableRows[i].copy(value = v)
-                                    },
-                                    modifier = Modifier.weight(0.58f),
-                                    label = { Text("当前值") },
-                                    placeholder = { Text("https://api.example.com") },
-                                    singleLine = true,
-                                )
-                                TextButton(onClick = { variableRows.removeAt(i) }) {
-                                    Text("删除")
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(56.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    val isKeyFocused = focusedKeyCell == i
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.42f)
+                                            .fillMaxHeight()
+                                            .padding(start = 2.dp, end = 4.dp)
+                                            .then(
+                                                if (isKeyFocused) {
+                                                    Modifier
+                                                        .border(
+                                                            2.dp,
+                                                            MaterialTheme.colors.primary,
+                                                            RoundedCornerShape(3.dp),
+                                                        )
+                                                        .padding(horizontal = 3.dp)
+                                                } else Modifier
+                                            ),
+                                        contentAlignment = Alignment.CenterStart,
+                                    ) {
+                                        BasicTextField(
+                                            value = variableRows[i].key,
+                                            onValueChange = { v ->
+                                                variableRows[i] = variableRows[i].copy(key = v)
+                                            },
+                                            singleLine = true,
+                                            textStyle = rowFieldStyle,
+                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight()
+                                                .onFocusChanged { fc ->
+                                                    if (fc.isFocused) {
+                                                        focusedKeyCell = i
+                                                    } else if (focusedKeyCell == i) {
+                                                        focusedKeyCell = null
+                                                    }
+                                                },
+                                            decorationBox = { innerTextField ->
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.CenterStart,
+                                                ) {
+                                                    if (variableRows[i].key.isEmpty() && !isKeyFocused) {
+                                                        Text(
+                                                            "host",
+                                                            style = MaterialTheme.typography.body2,
+                                                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                        )
+                                                    }
+                                                    innerTextField()
+                                                }
+                                            },
+                                        )
+                                    }
+                                    val isValueFocused = focusedValueCell == i
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(0.58f)
+                                            .fillMaxHeight()
+                                            .padding(start = 2.dp, end = 4.dp)
+                                            .then(
+                                                if (isValueFocused) {
+                                                    Modifier
+                                                        .border(
+                                                            2.dp,
+                                                            MaterialTheme.colors.primary,
+                                                            RoundedCornerShape(3.dp),
+                                                        )
+                                                        .padding(horizontal = 3.dp)
+                                                } else Modifier
+                                            ),
+                                        contentAlignment = Alignment.CenterStart,
+                                    ) {
+                                        BasicTextField(
+                                            value = variableRows[i].value,
+                                            onValueChange = { v ->
+                                                variableRows[i] = variableRows[i].copy(value = v)
+                                            },
+                                            singleLine = true,
+                                            textStyle = rowFieldStyle,
+                                            cursorBrush = SolidColor(MaterialTheme.colors.primary),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .fillMaxHeight()
+                                                .onFocusChanged { fc ->
+                                                    if (fc.isFocused) {
+                                                        focusedValueCell = i
+                                                    } else if (focusedValueCell == i) {
+                                                        focusedValueCell = null
+                                                    }
+                                                },
+                                            decorationBox = { innerTextField ->
+                                                Box(
+                                                    modifier = Modifier.fillMaxSize(),
+                                                    contentAlignment = Alignment.CenterStart,
+                                                ) {
+                                                    if (variableRows[i].value.isEmpty() && !isValueFocused) {
+                                                        Text(
+                                                            "https://api.example.com",
+                                                            style = MaterialTheme.typography.body2,
+                                                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                        )
+                                                    }
+                                                    innerTextField()
+                                                }
+                                            },
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .width(40.dp)
+                                            .fillMaxHeight(),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        IconButton(
+                                            onClick = { variableRows.removeAt(i) },
+                                            modifier = Modifier.size(22.dp),
+                                        ) {
+                                            Icon(
+                                                Icons.Filled.Delete,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(14.dp),
+                                                tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                            )
+                                        }
+                                    }
                                 }
+                                DashedDivider(color = dashedLineColor)
                             }
                         }
-                    }
-                    TextButton(
-                        onClick = { variableRows.add(EnvVariable()) },
-                        modifier = Modifier.align(Alignment.Start),
-                    ) {
-                        Text("添加变量")
+                        TextButton(
+                            onClick = { variableRows.add(EnvVariable()) },
+                            modifier = Modifier.align(Alignment.Start),
+                            contentPadding = PaddingValues(horizontal = 2.dp, vertical = 0.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Add,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colors.primary,
+                            )
+                            Text(
+                                "添加",
+                                color = MaterialTheme.colors.onSurface,
+                                modifier = Modifier.padding(start = 2.dp),
+                            )
+                        }
                     }
                 }
             }

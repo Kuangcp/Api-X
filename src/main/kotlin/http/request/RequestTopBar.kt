@@ -49,6 +49,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowPlacement
@@ -59,7 +60,19 @@ import app.EnvironmentsState
  * 注意：[DropdownMenuItem] 内部固定 `minHeight`（约 48.dp），仅改 `contentPadding` 无法压低行高；
  * 环境列表改用 [EnvironmentDropdownMenuItem]。
  */
-private val EnvironmentDropdownMenuItemPadding = PaddingValues(horizontal = 16.dp, vertical = 6.dp)
+private val EnvironmentDropdownMenuItemPadding = PaddingValues(horizontal = 16.dp, vertical = 3.dp)
+
+private fun envItemColor(name: String, isDarkTheme: Boolean): Color? {
+    val lower = name.lowercase()
+    if (lower.contains("生产") || lower.contains("prod")) {
+        return if (isDarkTheme) Color(0xFFEF5350) else Color(0xFFC62828)
+    }
+    if (lower.contains("test") || lower.contains("测试")) {
+        return if (isDarkTheme) Color(0xFF81C784) else Color(0xFF2E7D32)
+    }
+    return null
+}
+
 @Composable
 private fun EnvironmentDropdownMenuItem(
     onClick: () -> Unit,
@@ -256,6 +269,25 @@ fun WindowScope.RequestTopBar(
                             expanded = envMenuExpanded,
                             onDismissRequest = { envMenuExpanded = false },
                         ) {
+                            if (environmentsState.environments.isNotEmpty()) {
+                                for (env in environmentsState.environments) {
+                                    EnvironmentDropdownMenuItem(
+                                        onClick = {
+                                            onActiveEnvironmentChange(env.id)
+                                            envMenuExpanded = false
+                                        },
+                                    ) {
+                                        Text(
+                                            env.name.ifBlank { "(未命名)" },
+                                            style = MaterialTheme.typography.body2,
+                                            maxLines = 1,
+                                            color = envItemColor(env.name, isDarkTheme)
+                                                ?: MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                                        )
+                                    }
+                                }
+                                Divider()
+                            }
                             EnvironmentDropdownMenuItem(
                                 onClick = {
                                     onActiveEnvironmentChange(null)
@@ -269,25 +301,6 @@ fun WindowScope.RequestTopBar(
                                     color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
                                 )
                             }
-                            if (environmentsState.environments.isNotEmpty()) {
-                                Divider()
-                                for (env in environmentsState.environments) {
-                                    EnvironmentDropdownMenuItem(
-                                        onClick = {
-                                            onActiveEnvironmentChange(env.id)
-                                            envMenuExpanded = false
-                                        },
-                                    ) {
-                                        Text(
-                                            env.name.ifBlank { "(未命名)" },
-                                            style = MaterialTheme.typography.body2,
-                                            maxLines = 1,
-                                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
-                                        )
-                                    }
-                                }
-                            }
-                            Divider()
                             EnvironmentDropdownMenuItem(
                                 onClick = {
                                     envMenuExpanded = false
