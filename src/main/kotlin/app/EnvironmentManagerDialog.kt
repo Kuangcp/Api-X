@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -38,6 +39,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import java.util.UUID
 
 @Composable
@@ -54,7 +59,7 @@ fun EnvironmentManagerDialogWindow(
     DialogWindow(
         onCloseRequest = onCloseRequest,
         title = "环境变量",
-        state = rememberDialogState(width = 720.dp, height = 520.dp),
+        state = rememberDialogState(width = 720.dp, height = 640.dp),
     ) {
         val colors = appMaterialColors(isDarkTheme, appBackgroundHex)
         MaterialTheme(
@@ -196,54 +201,88 @@ private fun EnvironmentManagerDialogBody(
                     Text("新建环境")
                 }
                 Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
+                var draggedIdx by remember { mutableStateOf<Int?>(null) }
+                var dragTotalOffset by remember { mutableStateOf(0f) }
+                val itemHeight = 30.dp
+                val density = LocalDensity.current
+                val itemHeightPx = with(density) { itemHeight.toPx() }
                 Column(
                     modifier = Modifier
                         .weight(1f)
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    for (env in draft.environments) {
-                        val sel = env.id == selectedId
-                        val isReallyActive = env.id == draft.activeEnvironmentId
-                        TextButton(
-                            onClick = {
-                                draft = persistCurrentEnvIntoDraft()
-                                selectedId = env.id
-                            },
+                    for ((index, env) in draft.environments.withIndex()) {
+                        val isDragged = draggedIdx == index
+                        val isSelected = env.id == selectedId
+                        Row(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .height(itemHeight)
                                 .then(
-                                    if (sel) {
+                                    if (isSelected) {
                                         Modifier.background(
                                             MaterialTheme.colors.primary.copy(alpha = 0.10f),
                                             RoundedCornerShape(6.dp),
                                         )
-                                    } else {
-                                        Modifier
-                                    },
-                                ),
+                                    } else Modifier
+                                )
+                                .offset(
+                                    y = if (isDragged) with(density) { dragTotalOffset.toDp() } else 0.dp,
+                                )
+                                .clickable(onClick = {
+                                    draft = persistCurrentEnvIntoDraft()
+                                    selectedId = env.id
+                                })
+                                .pointerInput(env.id) {
+                                    detectDragGesturesAfterLongPress(
+                                        onDragStart = {
+                                            draggedIdx = draft.environments.indexOfFirst { it.id == env.id }
+                                            dragTotalOffset = 0f
+                                        },
+                                        onDrag = { _, dragAmount ->
+                                            dragTotalOffset += dragAmount.y
+                                            val ci = draggedIdx ?: return@detectDragGesturesAfterLongPress
+                                            if (dragTotalOffset > itemHeightPx && ci > 0) {
+                                                val list = draft.environments.toMutableList()
+                                                val tmp = list[ci]
+                                                list[ci] = list[ci - 1]
+                                                list[ci - 1] = tmp
+                                                draft = draft.copy(environments = list)
+                                                draggedIdx = ci - 1
+                                                dragTotalOffset -= itemHeightPx
+                                            } else if (dragTotalOffset < -itemHeightPx && ci < draft.environments.lastIndex) {
+                                                val list = draft.environments.toMutableList()
+                                                val tmp = list[ci]
+                                                list[ci] = list[ci + 1]
+                                                list[ci + 1] = tmp
+                                                draft = draft.copy(environments = list)
+                                                draggedIdx = ci + 1
+                                                dragTotalOffset += itemHeightPx
+                                            }
+                                        },
+                                        onDragEnd = {
+                                            draggedIdx = null
+                                            dragTotalOffset = 0f
+                                        },
+                                        onDragCancel = {
+                                            draggedIdx = null
+                                            dragTotalOffset = 0f
+                                        },
+                                    )
+                                }
+                                .padding(horizontal = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             val nameColor =
-                                if (sel) MaterialTheme.colors.primary
+                                if (isSelected) MaterialTheme.colors.primary
                                 else MaterialTheme.colors.onSurface
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                // if (isReallyActive) {
-                                //     Text(
-                                //         "*",
-                                //         color = nameColor,
-                                //         modifier = Modifier.padding(end = 4.dp),
-                                //         maxLines = 1,
-                                //     )
-                                // }
-                                Text(
-                                    env.name.ifBlank { "(未命名)" },
-                                    modifier = Modifier.weight(1f),
-                                    color = nameColor,
-                                    maxLines = 2,
-                                )
-                            }
+                            Text(
+                                env.name.ifBlank { "(未命名)" },
+                                modifier = Modifier.weight(1f),
+                                color = nameColor,
+                                maxLines = 1,
+                                style = MaterialTheme.typography.body2,
+                            )
                         }
                     }
                 }
