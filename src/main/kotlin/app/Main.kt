@@ -27,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -36,9 +37,15 @@ import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.isSpecified
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
@@ -223,6 +230,10 @@ fun App(onExitRequest: () -> Unit) {
     ) {
         MaterialTheme(colors = appMaterialColors(vm.isDarkTheme, vm.appSettings.backgroundHex), typography = typographyFromSettings(vm.appSettings)) {
             Box(modifier = Modifier.fillMaxSize()) {
+                var isDragging by remember { mutableStateOf(false) }
+                var ghostDelta by remember { mutableStateOf(0f) }
+                var splitHandlePos by remember { mutableStateOf(Offset.Zero) }
+                var splitHandleH by remember { mutableStateOf(0) }
                 Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     RequestTopBar(
                         isLoading = vm.isLoading, isDarkTheme = vm.isDarkTheme, treeSidebarVisible = vm.treeSidebarVisible,
@@ -269,7 +280,8 @@ fun App(onExitRequest: () -> Unit) {
                             var treeDragStartWidth by remember { mutableStateOf(1f) }
                             SplitHandle(vm.contentRowWidthPx,
                                 onDragStart = { treeDragStartRatio = vm.treeSplitRatio; treeDragStartWidth = vm.contentRowWidthPx },
-                                onDrag = { totalDelta -> vm.setTreeSplitRatio(treeDragStartRatio + totalDelta / treeDragStartWidth) }
+                                onDrag = { totalDelta -> vm.setTreeSplitRatio(treeDragStartRatio + totalDelta / treeDragStartWidth) },
+                                onDragEnd = {},
                             )
                         }
                         var splitDragStartRatio by remember { mutableStateOf(0f) }
@@ -313,8 +325,17 @@ fun App(onExitRequest: () -> Unit) {
                             )
                         }
                         SplitHandle(vm.contentRowWidthPx * middleFraction,
-                            onDragStart = { splitDragStartRatio = vm.splitRatio; splitDragStartWidth = vm.contentRowWidthPx; splitDragStartMf = middleFraction },
-                            onDrag = { totalDelta -> vm.setSplitRatio(splitDragStartRatio + totalDelta / (splitDragStartWidth * splitDragStartMf)) }
+                            onDragStart = {
+                                isDragging = true; ghostDelta = 0f
+                                splitDragStartRatio = vm.splitRatio; splitDragStartWidth = vm.contentRowWidthPx; splitDragStartMf = middleFraction
+                            },
+                            onDrag = { totalDelta -> ghostDelta = totalDelta },
+                            onDragEnd = {
+                                val denom = splitDragStartWidth * splitDragStartMf
+                                vm.setSplitRatio((splitDragStartRatio + ghostDelta / denom).coerceIn(0.02f, 0.98f))
+                                isDragging = false; ghostDelta = 0f
+                            },
+                            onPositioned = { coords -> splitHandlePos = coords.boundsInRoot().topLeft; splitHandleH = coords.size.height },
                         )
                         ResponsePanel(
                             modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), exchangeMetrics = vm.exchangeMetrics,
@@ -331,6 +352,19 @@ fun App(onExitRequest: () -> Unit) {
                             historyEntries = vm.historyEntries, selectedHistoryEpochMs = vm.selectedHistoryEpochMs,
                             onHistorySelected = { loadHistory(vm, it) },
                         )
+                    }
+                }
+                if (isDragging && splitHandlePos != Offset.Zero) {
+                    val density = LocalDensity.current
+                    val ghostH = with(density) { splitHandleH.toDp() }
+                    Box(
+                        modifier = Modifier
+                            .offset { IntOffset((splitHandlePos.x + ghostDelta).toInt(), splitHandlePos.y.toInt()) }
+                            .width(10.dp).height(ghostH)
+                            .zIndex(10f),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Box(Modifier.width(2.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.25f)))
                     }
                 }
                 if (vm.toastMessage != null) {
@@ -366,16 +400,30 @@ fun App(onExitRequest: () -> Unit) {
 }
 
 @Composable
-private fun SplitHandle(widthPx: Float, onDragStart: () -> Unit, onDrag: (Float) -> Unit) {
+private fun SplitHandle(
+    widthPx: Float,
+    onDragStart: () -> Unit = {},
+    onDrag: (Float) -> Unit = {},
+    onDragEnd: () -> Unit = {},
+    onPositioned: (LayoutCoordinates) -> Unit = {},
+) {
     val currentOnDragStart by rememberUpdatedState(onDragStart)
     val currentOnDrag by rememberUpdatedState(onDrag)
-    Box(modifier = Modifier.width(10.dp).fillMaxSize().pointerInput(Unit) {
-        var totalDelta = 0f
-        detectDragGestures(
-            onDragStart = { totalDelta = 0f; currentOnDragStart() },
-            onDrag = { change, dragAmount -> change.consume(); totalDelta += dragAmount.x; currentOnDrag(totalDelta) }
-        )
-    }, contentAlignment = Alignment.Center) {
+    val currentOnDragEnd by rememberUpdatedState(onDragEnd)
+    val currentOnPositioned by rememberUpdatedState(onPositioned)
+    Box(
+        modifier = Modifier.width(10.dp).fillMaxSize()
+            .onGloballyPositioned { currentOnPositioned(it) }
+            .pointerInput(Unit) {
+                var totalDelta = 0f
+                detectDragGestures(
+                    onDragStart = { totalDelta = 0f; currentOnDragStart() },
+                    onDrag = { change, dragAmount -> change.consume(); totalDelta += dragAmount.x; currentOnDrag(totalDelta) },
+                    onDragEnd = { currentOnDragEnd() },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
         Box(modifier = Modifier.width(1.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f)))
     }
 }
