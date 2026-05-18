@@ -354,8 +354,9 @@ fun App(onExitRequest: () -> Unit) {
 
 @Composable
 private fun SplitHandle(widthPx: Float, onDrag: (Float) -> Unit) {
-    Box(modifier = Modifier.width(10.dp).fillMaxSize().pointerInput(widthPx) {
-        detectDragGestures { change, dragAmount -> change.consume(); onDrag(dragAmount.x) }
+    val currentOnDrag by rememberUpdatedState(onDrag)
+    Box(modifier = Modifier.width(10.dp).fillMaxSize().pointerInput(Unit) {
+        detectDragGestures { change, dragAmount -> change.consume(); currentOnDrag(dragAmount.x) }
     }, contentAlignment = Alignment.Center) {
         Box(modifier = Modifier.width(1.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f)))
     }
