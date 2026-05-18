@@ -21,6 +21,8 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -263,8 +265,16 @@ fun App(onExitRequest: () -> Unit) {
                                 onDuplicateRequestBelow = { duplicateRequest(vm, it) },
                                 onApplyTreeDrop = { payload, target -> applyTreeDrop(vm, payload, target) },
                             )
-                            SplitHandle(vm.contentRowWidthPx) { vm.setTreeSplitRatio(vm.treeSplitRatio + it / vm.contentRowWidthPx) }
+                            var treeDragStartRatio by remember { mutableStateOf(0f) }
+                            var treeDragStartWidth by remember { mutableStateOf(1f) }
+                            SplitHandle(vm.contentRowWidthPx,
+                                onDragStart = { treeDragStartRatio = vm.treeSplitRatio; treeDragStartWidth = vm.contentRowWidthPx },
+                                onDrag = { totalDelta -> vm.setTreeSplitRatio(treeDragStartRatio + totalDelta / treeDragStartWidth) }
+                            )
                         }
+                        var splitDragStartRatio by remember { mutableStateOf(0f) }
+                        var splitDragStartWidth by remember { mutableStateOf(1f) }
+                        var splitDragStartMf by remember { mutableStateOf(1f) }
                         Column(modifier = Modifier.weight(middleFraction * vm.splitRatio)) {
                             if (vm.openTabIds.isNotEmpty()) {
                                 RequestTabBar(
@@ -302,7 +312,10 @@ fun App(onExitRequest: () -> Unit) {
                                 ),
                             )
                         }
-                        SplitHandle(vm.contentRowWidthPx * middleFraction) { vm.setSplitRatio(vm.splitRatio + it / (vm.contentRowWidthPx * middleFraction)) }
+                        SplitHandle(vm.contentRowWidthPx * middleFraction,
+                            onDragStart = { splitDragStartRatio = vm.splitRatio; splitDragStartWidth = vm.contentRowWidthPx; splitDragStartMf = middleFraction },
+                            onDrag = { totalDelta -> vm.setSplitRatio(splitDragStartRatio + totalDelta / (splitDragStartWidth * splitDragStartMf)) }
+                        )
                         ResponsePanel(
                             modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), exchangeMetrics = vm.exchangeMetrics,
                             statusCodeText = vm.statusCodeText, responseTimeText = vm.responseTimeText, responseSizeText = vm.responseSizeText,
@@ -353,10 +366,15 @@ fun App(onExitRequest: () -> Unit) {
 }
 
 @Composable
-private fun SplitHandle(widthPx: Float, onDrag: (Float) -> Unit) {
+private fun SplitHandle(widthPx: Float, onDragStart: () -> Unit, onDrag: (Float) -> Unit) {
+    val currentOnDragStart by rememberUpdatedState(onDragStart)
     val currentOnDrag by rememberUpdatedState(onDrag)
     Box(modifier = Modifier.width(10.dp).fillMaxSize().pointerInput(Unit) {
-        detectDragGestures { change, dragAmount -> change.consume(); currentOnDrag(dragAmount.x) }
+        var totalDelta = 0f
+        detectDragGestures(
+            onDragStart = { totalDelta = 0f; currentOnDragStart() },
+            onDrag = { change, dragAmount -> change.consume(); totalDelta += dragAmount.x; currentOnDrag(totalDelta) }
+        )
     }, contentAlignment = Alignment.Center) {
         Box(modifier = Modifier.width(1.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f)))
     }
