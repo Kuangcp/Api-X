@@ -10,6 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.ScrollState
+import app.EnvVariable
 import http.ExchangeFontMetrics
 
 @Composable
@@ -21,6 +22,7 @@ fun BoxScope.RequestHeadersEditorTab(
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     headersScrollState: ScrollState,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     HeadersKeyValueEditor(
         exchangeMetrics = exchangeMetrics,
@@ -33,6 +35,7 @@ fun BoxScope.RequestHeadersEditorTab(
         hintLine = "",
         modifier = Modifier.fillMaxSize(),
         defaultEditMode = KeyValueEditorMode.Form,
+        envVars = envVars,
     )
     VerticalScrollbar(
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
@@ -49,6 +52,7 @@ fun BoxScope.RequestParamsEditorTab(
     paramsText: String,
     onParamsTextChange: (String) -> Unit,
     paramsScrollState: ScrollState,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     PlainKeyValueEditor(
         exchangeMetrics = exchangeMetrics,
@@ -61,6 +65,7 @@ fun BoxScope.RequestParamsEditorTab(
         hintLine = "可与 URL 栏内已有 ?query 用 & 合并。",
         modifier = Modifier.fillMaxSize(),
         defaultEditMode = KeyValueEditorMode.Form,
+        envVars = envVars,
     )
     VerticalScrollbar(
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),

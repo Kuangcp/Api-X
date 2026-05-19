@@ -29,6 +29,28 @@ data class EnvironmentsState(
 
     fun activeEnvironment(): Environment? =
         activeEnvironmentId?.let { id -> environments.find { it.id == id } }
+
+    /**
+     * 收集所有环境中的变量用于自动补全下拉列表。
+     * 非激活环境按列表顺序（后覆盖前），激活环境的变量最终覆盖同名项。
+     */
+    fun collectAllVariables(): List<EnvVariable> {
+        val activeId = activeEnvironmentId
+        val map = LinkedHashMap<String, EnvVariable>()
+        for (env in environments) {
+            if (env.id == activeId) continue
+            for (v in env.variables) {
+                if (v.key.isNotBlank()) map[v.key] = v
+            }
+        }
+        val active = activeEnvironment()
+        if (active != null) {
+            for (v in active.variables) {
+                if (v.key.isNotBlank()) map[v.key] = v
+            }
+        }
+        return map.values.toList()
+    }
 }
 
 /**

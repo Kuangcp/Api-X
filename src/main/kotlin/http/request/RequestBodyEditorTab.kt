@@ -54,6 +54,7 @@ import com.neoutils.highlight.compose.remember.rememberHighlight
 import com.neoutils.highlight.compose.remember.rememberTextFieldValue
 import com.neoutils.highlight.core.extension.textColor
 import com.neoutils.highlight.core.util.UiColor
+import app.EnvVariable
 import http.BodyContentKind
 import http.ExchangeFontMetrics
 import http.contentTypeValueForBodyKind
@@ -165,6 +166,7 @@ fun BoxScope.RequestBodyEditorTab(
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     bodyScrollState: ScrollState,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     val bodyKind = inferBodyKindFromHeaders(headersText)
     Column(
@@ -203,8 +205,21 @@ fun BoxScope.RequestBodyEditorTab(
                 hintLine = "",
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 defaultEditMode = KeyValueEditorMode.Form,
+                envVars = envVars,
             )
         } else {
+            var showBodyEnvVars by remember { mutableStateOf(false) }
+            var bodyEnvFilter by remember { mutableStateOf("") }
+            val bodyEnvTrigger = detectEnvVarTrigger(bodyText)
+            LaunchedEffect(bodyEnvTrigger) {
+                if (bodyEnvTrigger != null) {
+                    bodyEnvFilter = bodyEnvTrigger
+                    showBodyEnvVars = true
+                } else {
+                    showBodyEnvVars = false
+                }
+            }
+
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -244,6 +259,20 @@ fun BoxScope.RequestBodyEditorTab(
                             .fillMaxSize()
                             .verticalScroll(bodyScrollState)
                             .padding(10.dp)
+                    )
+                }
+
+                if (showBodyEnvVars && envVars.isNotEmpty()) {
+                    EnvVarAutocompletePopup(
+                        filterText = bodyEnvFilter,
+                        envVars = envVars,
+                        isDarkTheme = isDarkTheme,
+                        exchangeMetrics = exchangeMetrics,
+                        onSelect = { varName ->
+                            onBodyTextChange(applyEnvVarSelection(bodyText, varName))
+                            showBodyEnvVars = false
+                        },
+                        onDismissRequest = { showBodyEnvVars = false },
                     )
                 }
             }

@@ -63,6 +63,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
+import app.EnvVariable
 import http.ExchangeFontMetrics
 import http.filterHeaders
 import http.joinHeadersEditor
@@ -123,6 +124,7 @@ private fun KeyValueTextFormEditor(
     modifier: Modifier = Modifier,
     defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
     enableHeaderKeySuggestions: Boolean = false,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     var editMode by remember(editorRequestId, defaultEditMode) { mutableStateOf(defaultEditMode) }
     val formRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
@@ -259,23 +261,51 @@ private fun KeyValueTextFormEditor(
         ) {
             when (editMode) {
                 KeyValueEditorMode.Text -> {
-                    val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
-                    BasicTextField(
-                        value = text,
-                        onValueChange = onTextChange,
-                        enabled = !isLoading,
-                        cursorBrush = cursorBrush,
-                        textStyle = MaterialTheme.typography.body2.copy(
-                            fontSize = exchangeMetrics.body,
-                            color = MaterialTheme.colors.onSurface.copy(
-                                alpha = if (!isLoading) 1f else ContentAlpha.disabled,
+                    var showTextEnvVars by remember { mutableStateOf(false) }
+                    var textEnvFilter by remember { mutableStateOf("") }
+                    val textEnvTrigger = detectEnvVarTrigger(text)
+                    LaunchedEffect(textEnvTrigger) {
+                        if (textEnvTrigger != null) {
+                            textEnvFilter = textEnvTrigger
+                            showTextEnvVars = true
+                        } else {
+                            showTextEnvVars = false
+                        }
+                    }
+
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
+                        BasicTextField(
+                            value = text,
+                            onValueChange = onTextChange,
+                            enabled = !isLoading,
+                            cursorBrush = cursorBrush,
+                            textStyle = MaterialTheme.typography.body2.copy(
+                                fontSize = exchangeMetrics.body,
+                                color = MaterialTheme.colors.onSurface.copy(
+                                    alpha = if (!isLoading) 1f else ContentAlpha.disabled,
+                                ),
                             ),
-                        ),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .verticalScroll(scrollState)
-                            .padding(10.dp),
-                    )
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .verticalScroll(scrollState)
+                                .padding(10.dp),
+                        )
+
+                        if (showTextEnvVars && envVars.isNotEmpty()) {
+                            EnvVarAutocompletePopup(
+                                filterText = textEnvFilter,
+                                envVars = envVars,
+                                isDarkTheme = isDarkTheme,
+                                exchangeMetrics = exchangeMetrics,
+                                onSelect = { varName ->
+                                    onTextChange(applyEnvVarSelection(text, varName))
+                                    showTextEnvVars = false
+                                },
+                                onDismissRequest = { showTextEnvVars = false },
+                            )
+                        }
+                    }
                 }
                 KeyValueEditorMode.Form -> {
                     var focusedCell by remember { mutableStateOf<HeaderFormFocusedCell?>(null) }
@@ -543,6 +573,18 @@ private fun KeyValueTextFormEditor(
                                     }
                                     val valueFocused =
                                         focusedCell == HeaderFormFocusedCell(index, isValueColumn = true)
+                                    val valueText = row.second
+                                    var showValEnvVars by remember(editorRequestId, index) { mutableStateOf(false) }
+                                    var valEnvFilter by remember { mutableStateOf("") }
+                                    LaunchedEffect(index, valueText, valueFocused) {
+                                        val trigger = detectEnvVarTrigger(valueText)
+                                        if (trigger != null && valueFocused) {
+                                            valEnvFilter = trigger
+                                            showValEnvVars = true
+                                        } else {
+                                            showValEnvVars = false
+                                        }
+                                    }
                                     Box(
                                         modifier = Modifier
                                             .weight(0.50f)
@@ -564,7 +606,7 @@ private fun KeyValueTextFormEditor(
                                         contentAlignment = Alignment.CenterStart,
                                     ) {
                                         BasicTextField(
-                                            value = row.second,
+                                            value = valueText,
                                             onValueChange = { nv ->
                                                 formRows[index] = Triple(row.first, nv, row.third)
                                                 commitForm()
@@ -592,6 +634,23 @@ private fun KeyValueTextFormEditor(
                                                 }
                                             },
                                         )
+
+                                        if (showValEnvVars && envVars.isNotEmpty()) {
+                                            EnvVarAutocompletePopup(
+                                                filterText = valEnvFilter,
+                                                envVars = envVars,
+                                                isDarkTheme = isDarkTheme,
+                                                exchangeMetrics = exchangeMetrics,
+                                                yOffset = 28.dp,
+                                                onSelect = { varName ->
+                                                    val newText = applyEnvVarSelection(valueText, varName)
+                                                    formRows[index] = Triple(row.first, newText, row.third)
+                                                    commitForm()
+                                                    showValEnvVars = false
+                                                },
+                                                onDismissRequest = { showValEnvVars = false },
+                                            )
+                                        }
                                     }
                                     Box(
                                         modifier = Modifier
@@ -662,6 +721,7 @@ internal fun PlainKeyValueEditor(
     hintLine: String,
     modifier: Modifier = Modifier,
     defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     KeyValueTextFormEditor(
         exchangeMetrics = exchangeMetrics,
@@ -675,6 +735,7 @@ internal fun PlainKeyValueEditor(
         modifier = modifier,
         defaultEditMode = defaultEditMode,
         enableHeaderKeySuggestions = false,
+        envVars = envVars,
     )
 }
 
@@ -691,6 +752,7 @@ internal fun HeadersKeyValueEditor(
     hintLine: String,
     modifier: Modifier = Modifier,
     defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     KeyValueTextFormEditor(
         exchangeMetrics = exchangeMetrics,
@@ -704,5 +766,6 @@ internal fun HeadersKeyValueEditor(
         modifier = modifier,
         defaultEditMode = defaultEditMode,
         enableHeaderKeySuggestions = true,
+        envVars = envVars,
     )
 }

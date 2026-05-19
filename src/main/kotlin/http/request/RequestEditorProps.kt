@@ -1,5 +1,6 @@
 package http.request
 
+import app.EnvVariable
 import tree.PostmanAuth
 
 /**
@@ -26,4 +27,5 @@ data class RequestEditorProps(
     val onParamsTextChange: (String) -> Unit,
     val auth: PostmanAuth?,
     val onAuthChange: (PostmanAuth?) -> Unit,
+    val envVars: List<EnvVariable> = emptyList(),
 )

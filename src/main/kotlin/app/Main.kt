@@ -321,6 +321,7 @@ fun App(onExitRequest: () -> Unit) {
                                     onParamsTextChange = { vm.setParamsText(it) },
                                     auth = vm.auth,
                                     onAuthChange = { vm.setAuth(it) },
+                                    envVars = vm.environmentsState.collectAllVariables(),
                                 ),
                             )
                         }

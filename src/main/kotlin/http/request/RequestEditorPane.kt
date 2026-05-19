@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import app.EnvVariable
 import http.ExchangeFontMetrics
 import tree.PostmanAuth
 
@@ -45,6 +46,7 @@ fun RequestEditorPane(
     onParamsTextChange: (String) -> Unit,
     auth: PostmanAuth?,
     onAuthChange: (PostmanAuth?) -> Unit,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     val bodyScrollState = rememberScrollState()
     val headersScrollState = rememberScrollState()
@@ -94,7 +96,7 @@ fun RequestEditorPane(
                 .padding(top = 4.dp)
         ) {
             when (leftTabIndex) {
-                0 -> {
+                 0 -> {
                     RequestBodyEditorTab(
                         exchangeMetrics = exchangeMetrics,
                         editorRequestId = editorRequestId,
@@ -105,6 +107,7 @@ fun RequestEditorPane(
                         headersText = headersText,
                         onHeadersTextChange = onHeadersTextChange,
                         bodyScrollState = bodyScrollState,
+                        envVars = envVars,
                     )
                 }
                 1 -> {
@@ -116,6 +119,7 @@ fun RequestEditorPane(
                         headersText = headersText,
                         onHeadersTextChange = onHeadersTextChange,
                         headersScrollState = headersScrollState,
+                        envVars = envVars,
                     )
                 }
                 2 -> {
@@ -127,6 +131,7 @@ fun RequestEditorPane(
                         paramsText = paramsText,
                         onParamsTextChange = onParamsTextChange,
                         paramsScrollState = paramsScrollState,
+                        envVars = envVars,
                     )
                 }
                 3 -> {

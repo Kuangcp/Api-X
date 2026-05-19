@@ -30,12 +30,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.unit.dp
+import app.EnvVariable
 import http.ExchangeFontMetrics
 
 private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
@@ -105,7 +111,8 @@ fun RequestSidePanel(
                     urlFieldEnabled = !p.isLoading,
                     isLoading = p.isLoading,
                     onSendOrCancel = p.onSendOrCancel,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.weight(1f),
+                    envVars = p.envVars,
                 )
             }
         }
@@ -125,6 +132,7 @@ fun RequestSidePanel(
             onParamsTextChange = p.onParamsTextChange,
             auth = p.auth,
             onAuthChange = p.onAuthChange,
+            envVars = p.envVars,
         )
     }
 }
@@ -141,12 +149,27 @@ private fun UrlInputWithInlineSend(
     urlFieldEnabled: Boolean,
     isLoading: Boolean,
     onSendOrCancel: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    envVars: List<EnvVariable> = emptyList(),
 ) {
     val borderColor = MaterialTheme.colors.onSurface.copy(
         alpha = if (urlFieldEnabled) ContentAlpha.medium else ContentAlpha.disabled
     )
     val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
+
+    var showUrlEnvVars by remember { mutableStateOf(false) }
+    var urlEnvFilter by remember { mutableStateOf("") }
+
+    val urlEnvTrigger = detectEnvVarTrigger(url)
+    LaunchedEffect(urlEnvTrigger) {
+        if (urlEnvTrigger != null) {
+            urlEnvFilter = urlEnvTrigger
+            showUrlEnvVars = true
+        } else {
+            showUrlEnvVars = false
+        }
+    }
+
     Row(
         modifier = modifier
             .height(exchangeMetrics.urlBarHeight)
@@ -155,43 +178,63 @@ private fun UrlInputWithInlineSend(
             .background(MaterialTheme.colors.surface),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        BasicTextField(
-            value = url,
-            onValueChange = onUrlChange,
-            cursorBrush = cursorBrush,
+        Box(
             modifier = Modifier
                 .weight(1f)
                 .fillMaxHeight()
-                .defaultMinSize(minHeight = 0.dp),
-            enabled = urlFieldEnabled,
-            singleLine = true,
-            textStyle = MaterialTheme.typography.body2.copy(
-                fontSize = exchangeMetrics.body,
-                color = MaterialTheme.colors.onSurface.copy(
-                    alpha = if (urlFieldEnabled) 1f else ContentAlpha.disabled
-                )
-            ),
-            decorationBox = { innerTextField ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .fillMaxHeight()
-                        .padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(Modifier.weight(1f)) {
-                        if (url.isEmpty()) {
-                            Text(
-                                "输入 URL",
-                                fontSize = exchangeMetrics.body,
-                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                            )
+        ) {
+            BasicTextField(
+                value = url,
+                onValueChange = onUrlChange,
+                cursorBrush = cursorBrush,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .defaultMinSize(minHeight = 0.dp),
+                enabled = urlFieldEnabled,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.body2.copy(
+                    fontSize = exchangeMetrics.body,
+                    color = MaterialTheme.colors.onSurface.copy(
+                        alpha = if (urlFieldEnabled) 1f else ContentAlpha.disabled
+                    )
+                ),
+                decorationBox = { innerTextField ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .fillMaxHeight()
+                            .padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(Modifier.weight(1f)) {
+                            if (url.isEmpty()) {
+                                Text(
+                                    "输入 URL",
+                                    fontSize = exchangeMetrics.body,
+                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                                )
+                            }
+                            innerTextField()
                         }
-                        innerTextField()
                     }
                 }
+            )
+
+            if (showUrlEnvVars && envVars.isNotEmpty()) {
+                EnvVarAutocompletePopup(
+                    filterText = urlEnvFilter,
+                    envVars = envVars,
+                    isDarkTheme = isDarkTheme,
+                    exchangeMetrics = exchangeMetrics,
+                    yOffset = exchangeMetrics.urlBarHeight + 4.dp,
+                    onSelect = { varName ->
+                        onUrlChange(applyEnvVarSelection(url, varName))
+                        showUrlEnvVars = false
+                    },
+                    onDismissRequest = { showUrlEnvVars = false },
+                )
             }
-        )
+        }
         Box(
             modifier = Modifier
                 .height(22.dp)
