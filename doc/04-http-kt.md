@@ -37,7 +37,15 @@ fun sendRequestStreaming(
     url: String,
     body: String,
     headersText: String,
-    // ...
+    control: RequestControl,
+    connectMs: Long = 10_000L,
+    readMs: Long = 6_000L,
+    requestTimeoutMs: Long = 10_000L,
+    onSseDetected: (Boolean) -> Unit = {},
+    onStatusCode: (Int) -> Unit = {},
+    onProgress: (Long) -> Unit = {},
+    onResponseHeaders: (List<String>) -> Unit = {},
+    onChunk: (String) -> Unit = {},
 ) {
     val client = HttpClient.newBuilder()
         .connectTimeout(Duration.ofMillis(connectMs))
@@ -59,7 +67,7 @@ fun sendRequestStreaming(
         "POST" -> builder.POST(bodyPub).build()
         "PUT" -> builder.PUT(bodyPub).build()
         "DELETE" -> builder.DELETE().build()
-        // ...
+        else -> builder.method(m, bodyPub).build()  // 支持 PATCH, HEAD, OPTIONS 及自定义方法
     }
 }
 ```
@@ -120,7 +128,7 @@ fun requestBodyFlow(url: String): Flow<String> = flow {
 }
 ```
 
-> 项目中的 SSE 流式处理 (`src/main/kotlin/http/HttpStreaming.kt:286-320`):
+> 项目中的 SSE 流式处理 (`src/main/kotlin/http/HttpStreaming.kt`):
 ```kotlin
 if (isSse) {
     onChunk("SSE 流式响应中...\n\n")
@@ -147,34 +155,32 @@ if (isSse) {
 
 ### 回调式 API 与 Flow
 
-项目中使用回调处理进度：
+项目中使用回调处理进度（`BufferUpdate` 线程安全地积累行数据，主线程每 100ms 刷新）：
 
 ```kotlin
 fun sendRequestStreaming(
     // ...
+    control: RequestControl,   // 控制取消、超时、BufferUpdate
     onSseDetected: (Boolean) -> Unit,
     onStatusCode: (Int) -> Unit,
-    onResponseTime: (Long) -> Unit,
     onProgress: (Long) -> Unit,
     onResponseHeaders: (List<String>) -> Unit,
-    onChunk: (String) -> Unit
+    onChunk: (String) -> Unit,
 )
 ```
 
-调用处 (`src/main/kotlin/app/Main.kt`):
+调用处 (`src/main/kotlin/app/AppViewModel.kt:546-554`):
 ```kotlin
 sendRequestStreaming(
-    method = method,
-    url = fullUrl,
-    body = bodyText,
-    headersText = headersText,
-    control = requestControl,
-    onSseDetected = { isSseResponse = it },
-    onStatusCode = { statusCodeText = it.toString() },
-    onResponseTime = { responseTimeText = "${it}ms" },
-    onProgress = { /* 进度 */ },
-    onResponseHeaders = { responseHeaderLines.clear(); responseHeaderLines.addAll(it) },
-    onChunk = { responseLines.add(it) }
+    method = method, url = effectiveRequestUrl, body = reqBodySnap, headersText = finalHeaders,
+    control = control,
+    onSseDetected = { isSse -> EventQueue.invokeLater { session.isSseResponse = isSse } },
+    onStatusCode = { code -> EventQueue.invokeLater { session.statusCodeText = code.toString() } },
+    onProgress = { bytes -> EventQueue.invokeLater { session.responseSizeText = formatBytes(bytes) } },
+    onResponseHeaders = { lines -> EventQueue.invokeLater {
+        session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines)
+    } },
+    onChunk = { chunk -> control.lineBuffer.append(chunk); control.appendRawResponse(chunk) }
 )
 ```
 
@@ -215,7 +221,7 @@ private fun wrapResponseBodyStream(
 }
 ```
 
-> 项目中的实现 (`src/main/kotlin/http/HttpStreaming.kt:149-197`):
+> 项目中的实现 (`src/main/kotlin/http/HttpStreaming.kt`):
 ```kotlin
 private fun wrapResponseBodyStream(
     raw: InputStream,
@@ -227,7 +233,7 @@ private fun wrapResponseBodyStream(
     val supported = encodings.filter { it in DECODING_CHAIN }
     if (supported.isEmpty()) {
         if (encodings.isNotEmpty()) {
-            return BufferedInputStream(raw)
+            return BufferedInputStream(raw)  // 无法解压时透传
         }
         // 尝试自动检测 gzip
         val peek = BufferedInputStream(raw)
@@ -302,29 +308,66 @@ fun RequestPanel() {
 ```kotlin
 data class RequestControl(
     var cancelled: Boolean = false,
+    var requestFailed: Boolean = false,
     val startTimeMs: Long = System.currentTimeMillis(),
+    val lineBuffer: BufferUpdate = BufferUpdate(),
+    var activeInput: InputStream? = null,
+    var responseStatusCode: Int = -1,
+    var totalBytes: Long = 0,
     // ...
 )
 
 fun sendRequestStreaming(control: RequestControl, ...) {
-    while (running) {
-        if (control.cancelled) break
-        // 处理请求
-    }
-}
-```
-
-项目中的取消控制 (`src/main/kotlin/http/HttpStreaming.kt:227-228`):
-```kotlin
-fun sendRequestStreaming(..., control: RequestControl, ...) {
     try {
         if (control.cancelled) return
-        // ...
+        // 处理请求
+        while (running) {
+            if (control.cancelled) break
+        }
+    } finally {
+        closeQuietly(control.activeInput)  // 确保流关闭
     }
 }
 ```
 
-## 4.6 总结
+取消时还通过 `control.activeInput.close()` 中断阻塞的读取操作。
+项目中的取消控制 (`src/main/kotlin/app/AppViewModel.kt:591-624`):
+```kotlin
+fun cancelActiveRequest() {
+    val control = session.control ?: return
+    control.cancelled = true
+    closeQuietly(control.activeInput)  // 关闭输入流，中断阻塞
+    control.lineBuffer.append("\n[请求已取消]\n")
+    // 保存已获得的响应数据到 HAR
+}
+```
+
+## 4.6 请求体编码
+
+对于表单类型的请求体，使用 `bodyWirePayloadForHttp` 将 Editor 中的 `Key: Value` 行格式编码为 HTTP wire 格式：
+
+```kotlin
+fun bodyWirePayloadForHttp(bodyText: String, headersText: String): String {
+    return if (hasFormContentType(headersText) && bodyText.contains(':')) {
+        // 将 "key: value" 行转换为 "key=value&key2=value2"
+        FormUrlEncodedBody.encode(FormUrlEncodedBody.parse(bodyText))
+    } else {
+        bodyText  // 其他类型直接透传
+    }
+}
+```
+
+## 4.7 超时体系
+
+| 超时类型 | 默认值 | 说明 |
+|---------|--------|------|
+| `connectTimeout` | 10 秒 | 建立 TCP 连接的超时 |
+| `readTimeout` | 6 秒 | 读取单个块的超时 |
+| `requestTimeout` | 10 秒 | 整次请求总超时（含读取所有正文） |
+
+三个超时在 `AppSettings` 中独立配置，支持用户在设置面板中调整。
+
+## 4.8 总结
 
 | 特性 | 说明 |
 |------|------|
@@ -333,5 +376,7 @@ fun sendRequestStreaming(..., control: RequestControl, ...) {
 | `Dispatchers.IO` | IO 密集型操作专用线程池 |
 | `Flow` | 响应式流，处理流式数据 |
 | `BodyHandlers.ofInputStream` | 流式处理大响应 |
+| `BufferUpdate` | 线程安全的行缓冲，定刷新放 |
+| `bodyWirePayloadForHttp` | Form/JSON 自动编码 |
 
 **下篇**：请求面板与响应展示实现

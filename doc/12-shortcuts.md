@@ -130,78 +130,99 @@ if (showGlobalSearch) {
 }
 ```
 
-> 项目中的 Ctrl+K (`src/main/kotlin/app/Main.kt:34-42`):
+> 项目中的 Ctrl+K (`src/main/kotlin/app/Main.kt:220-228`):
 ```kotlin
-import androidx.compose.ui.input.key.Key
-import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.isCtrlPressed
-import androidx.compose.ui.input.key.isMetaPressed
-import androidx.compose.ui.input.key.isShiftPressed
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-
-Modifier.onPreviewKeyEvent { ev ->
-    if (ev.type == KeyEventType.KeyDown && ev.isCtrlPressed && ev.key == Key.K) {
-        showGlobalSearch = true
-        true
-    } else {
-        false
+Window(
+    onPreviewKeyEvent = { event ->
+        if (vm.recentSwitcherActive) {
+            true  // 按住 Ctrl 时禁用其他快捷键
+        } else {
+            if (event.type == KeyEventType.KeyDown) {
+                when {
+                    (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K ->
+                        { vm.setShowGlobalSearch(true); true }
+                    event.isCtrlPressed && event.key == Key.Enter ->
+                        { vm.onStartRequest(); true }
+                    event.key == Key.Escape ->
+                        { if (vm.isLoading) { vm.onCancelRequest(); true } else false }
+                    else -> false
+                }
+            } else false
+        }
     }
-}
+)
 ```
 
 ## 12.4 Ctrl+Tab 切换最近请求
 
-### 快捷键判断
+由于 Compose Desktop 的 `onPreviewKeyEvent` 无法捕获 Tab 键（被 AWT 焦点系统拦截），项目使用 **AWTEventListener** 在全局捕获快捷键：
+
+### 交互流程
 
 ```kotlin
-Modifier.onPreviewKeyEvent { ev ->
-    if (ev.type == KeyEventType.KeyDown && ev.isCtrlPressed && ev.key == Key.Tab) {
-        if (recentSwitcherIds.isNotEmpty()) {
-            recentSwitcherActive = true
-            if (ev.isShiftPressed) {
-                // Shift+Tab: 上一个
-                recentSwitcherIndex = (recentSwitcherIndex - 1).coerceAtLeast(0)
-            } else {
-                // Tab: 下一个
-                recentSwitcherIndex = (recentSwitcherIndex + 1).coerceAtMost(recentSwitcherIds.lastIndex)
+DisposableEffect(vm.recentSwitcherActive, vm.recentSwitcherIds, vm.recentSwitcherIndex) {
+    val listener = AWTEventListener { raw ->
+        val keyEvent = raw as? KeyEvent ?: return@AWTEventListener
+        
+        if (!vm.recentSwitcherActive) {
+            // Ctrl+Tab 按下 → 激活 switcher
+            if (keyEvent.id == KeyEvent.KEY_PRESSED &&
+                keyEvent.keyCode == KeyEvent.VK_TAB && keyEvent.isControlDown) {
+                activateRecentSwitcher(forward = !keyEvent.isShiftDown)
+                keyEvent.consume()
+            }
+            return@AWTEventListener
+        }
+        
+        when (keyEvent.id) {
+            KeyEvent.KEY_PRESSED -> {
+                when {
+                    keyEvent.keyCode == KeyEvent.VK_ESCAPE -> { vm.setRecentSwitcherActive(false); keyEvent.consume() }
+                    keyEvent.keyCode == KeyEvent.VK_TAB -> { cycleRecentSwitcher(!keyEvent.isShiftDown); keyEvent.consume() }
+                }
+            }
+            KeyEvent.KEY_RELEASED -> {
+                if (keyEvent.keyCode == KeyEvent.VK_CONTROL || !keyEvent.isControlDown) {
+                    commitRecentSwitcherSelectionAndClose()  // 释放 Ctrl 时提交选择
+                    keyEvent.consume()
+                }
             }
         }
-        true
-    } else {
-        false
     }
+    Toolkit.getDefaultToolkit().addAWTEventListener(listener, AWTEvent.KEY_EVENT_MASK)
+    onDispose { Toolkit.getDefaultToolkit().removeAWTEventListener(listener) }
 }
 ```
 
 ### 组合键条件
 
-- `ev.isCtrlPressed` - Ctrl 键按下
-- `ev.isMetaPressed` - Command 键 (macOS)
-- `ev.isShiftPressed` - Shift 键按下
+- `keyEvent.isControlDown` - Ctrl 键按下
+- `keyEvent.isShiftDown` - Shift 键按下
+- 使用 `AWTEvent.KEY_EVENT_MASK` 过滤键盘事件
 
-> 项目中的 Ctrl+Tab (`src/main/kotlin/app/Main.kt:293-305`):
+### 切换逻辑
+
 ```kotlin
-var recentSwitcherActive by remember { mutableStateOf(false) }
-var recentSwitcherIds by remember { mutableStateOf<List<String>>(emptyList()) }
-var recentSwitcherIndex by remember { mutableStateOf(0) }
-
-Modifier.onPreviewKeyEvent { ev ->
-    if (ev.type == KeyEventType.KeyDown && ev.isCtrlPressed && ev.key == Key.Tab) {
-        if (recentSwitcherIds.isNotEmpty()) {
-            recentSwitcherActive = true
-            if (ev.isShiftPressed) {
-                recentSwitcherIndex = (recentSwitcherIndex - 1).coerceAtLeast(0)
-            } else {
-                recentSwitcherIndex = (recentSwitcherIndex + 1).coerceAtMost(recentSwitcherIds.lastIndex)
-            }
-        }
-        true
+fun cycleRecentSwitcher(forward: Boolean) {
+    val list = vm.recentSwitcherIds
+    val next = if (forward) {
+        (vm.recentSwitcherIndex + 1) % list.size
     } else {
-        false
+        (vm.recentSwitcherIndex - 1 + list.size) % list.size
     }
+    vm.setRecentSwitcherIndex(next)
 }
 ```
+
+### 快捷键对照表
+
+| 快捷键 | 功能 |
+|--------|------|
+| `Ctrl+K` / `Cmd+K` | 全局搜索 |
+| `Ctrl+Enter` | 发送请求 |
+| `Ctrl+Tab` 按下 | 激活最近请求 switcher |
+| `Tab` / `Shift+Tab`（switcher 激活时） | 上/下选择 |
+| `Escape` | 取消请求 / 关闭 switcher |
 
 ## 12.5 冲突解决
 
@@ -367,18 +388,15 @@ fun RecentRequestSwitcherOverlay(
 
 | 快捷键 | 功能 |
 |--------|------|
-| `Ctrl+K` | 全局搜索 |
-| `Ctrl+Tab` | 切换最近请求 |
-| `Ctrl+S` | 保存 |
-| `Ctrl+N` | 新建 |
+| `Ctrl+K` / `Cmd+K` | 全局搜索 |
+| `Ctrl+Enter` | 发送请求 |
+| `Ctrl+Tab` | 激活最近请求切换 |
+| `Tab/Shift+Tab`（switcher 中） | 切换选择 |
+| `Ctrl` 释放（switcher 中） | 提交选择 |
 | `Escape` | 关闭/取消 |
-| `Enter` | 确认 |
-| `↑/↓` | 上下选择 |
 
 第三章已完成！包含 4 篇博客：
 - 博客 9：树形组件与侧边栏
 - 博客 10：对话框与全局搜索
 - 博客 11：主题系统与动态配色
 - 博客 12：桌面应用快捷键绑定
-
-需要继续生成第四章吗？

@@ -323,7 +323,33 @@ data class UiRequestSummary(
     val name: String,
     val method: String,
 )
+
+// 搜索用模型
+data class GlobalSearchRequestRow(
+    val id: String, val name: String,
+    val url: String, val headersText: String, val bodyText: String,
+)
 ```
+
+### HAR 1.2 格式
+
+响应历史使用 HAR (HTTP Archive) 1.2 格式存储，兼容 Chrome DevTools：
+
+```kotlin
+@Serializable
+data class HarSnapshot(
+    val savedAtEpochMs: Long,
+    val requestMethod: String,
+    val requestUrl: String,
+    val responseStatus: Int,
+    val responseBodyLines: List<String>,
+    val responseTimeMs: Long,
+    val responseSizeBytes: Long,
+    // ... 含 _apiX 扩展字段用于 Api-X 元数据
+)
+```
+
+每个请求最多保留 10 条 HAR 记录，存储在 `files/{requestId}/{epochMs}.json`。
 
 ## 7.7 总结
 

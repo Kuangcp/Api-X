@@ -25,14 +25,20 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-extended")
     implementation("org.xerial:sqlite-jdbc:3.47.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+    implementation("com.neoutils.highlight:highlight-compose:2.3.0")
 }
 ```
 
-> 项目中的配置 (`build.gradle.kts:1-39`):
+> 项目中的配置 (`build.gradle.kts:1-40`): 版本号统一在 `gradle.properties` 管理：
+```properties
+kotlin.version=2.3.20
+compose.version=1.10.3
+```
+
 ```kotlin
 plugins {
     kotlin("jvm")
@@ -52,10 +58,11 @@ repositories {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-extended")
     implementation("org.xerial:sqlite-jdbc:3.47.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+    implementation("com.neoutils.highlight:highlight-compose:2.3.0")
 }
 ```
 
@@ -215,12 +222,15 @@ kotlin.code.style=official
 android.useAndroidX=true
 ```
 
-> 项目中的配置 (`gradle.properties`):
+> 项目中的配置 (`gradle.properties`): 含 Kotlin/Compose 版本号统一管理
 ```properties
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 kotlin.code.style=official
-android.useAndroidX=true
+kotlin.version=2.3.20
+compose.version=1.10.3
 ```
+
+`settings.gradle.kts` 中通过 `providers.gradleProperty()` 读取版本号，统一管理所有 plugin 版本。
 
 ## 14.7 settings.gradle.kts
 

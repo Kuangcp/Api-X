@@ -57,7 +57,11 @@ fun RequestPanel() {
 }
 ```
 
-> 项目中的请求面板 (`src/main/kotlin/http/RequestPanel.kt`):
+> 项目中的请求面板分为多个组件：
+> - 顶部栏：`src/main/kotlin/http/request/RequestTopBar.kt`
+> - 左侧编辑区：`src/main/kotlin/http/request/RequestSidePanel.kt` + `RequestEditorPane.kt`
+> - 各标签页：`RequestBodyEditorTab.kt` / `RequestKeyValueTabs.kt` / `AuthEditor.kt`
+
 ```kotlin
 @Composable
 fun RequestTopBar(
@@ -66,6 +70,7 @@ fun RequestTopBar(
     onMethodChange: (String) -> Unit,
     onSend: () -> Unit,
     isLoading: Boolean,
+    // ... 主题、导入导出等
 ) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         // 方法下拉
@@ -83,14 +88,8 @@ fun RequestTopBar(
                 }
             }
         }
-        
-        // URL 输入（略）
-        
-        // 发送按钮
-        IconButton(onClick = onSend, enabled = !isLoading) {
-            if (isLoading) CircularProgressIndicator()
-            else Icon(Icons.Filled.Send, "发送请求")
-        }
+        // URL 输入 + 发送/取消按钮
+        // ...
     }
 }
 ```
@@ -209,9 +208,16 @@ private fun highlightJsonText(text: String, darkTheme: Boolean): AnnotatedString
 
 ### 使用高亮
 
+响应面板中的 Body 标签支持 JSON 语法高亮切换开关：
+
 ```kotlin
 @Composable
-fun ResponseBody(text: String, highlighted: Boolean, isDark: Boolean) {
+fun ResponseBody(
+    text: String,
+    highlighted: Boolean,
+    isDark: Boolean,
+    exchangeMetrics: ExchangeFontMetrics,
+) {
     val displayText = if (highlighted) {
         formatAndHighlightJsonOrNull(text, isDark) ?: text
     } else {
@@ -222,10 +228,12 @@ fun ResponseBody(text: String, highlighted: Boolean, isDark: Boolean) {
         text = displayText,
         modifier = Modifier.padding(8.dp),
         fontFamily = FontFamily.Monospace,
-        fontSize = 12.sp
+        fontSize = exchangeMetrics.body,
     )
 }
 ```
+
+JSON 编辑器（左侧 Body 标签页）另有 `neoutils/highlight-compose` 库提供实时 JSON 语法高亮（`com.neoutils.highlight:highlight-compose:2.3.0`）。
 
 ## 5.3 Form 表单数据处理
 
@@ -272,12 +280,15 @@ fun migrateFormBodyToEditorLinesIfNeeded(bodyText: String, headersText: String):
         .any { it.contains("application/x-www-form-urlencoded") }
     
     return if (hasFormContentType && bodyText.contains('=')) {
+        // 将 "key=value" 格式转为 Editor 中 "key: value" 格式
         FormUrlEncodedBody.encode(FormUrlEncodedBody.parse(bodyText))
     } else {
         bodyText
     }
 }
 ```
+
+发送时反向转换通过 `bodyWirePayloadForHttp` 将 Editor 中的 `key: value` 行格式编码为 wire 格式的 `key=value&...`。
 
 ## 5.4 请求历史存储
 
@@ -294,35 +305,49 @@ data class HistoryEntry(
 
 ### 存储实现
 
-> 项目中的实现 (`src/main/kotlin/db/RequestResponseStore.kt`):
+> 项目中的实现 (`src/main/kotlin/db/RequestResponseStore.kt`): 使用 HAR 1.2 格式存储，每个请求最多保留 10 条历史。
+
 ```kotlin
 object RequestResponseStore {
-    private val historyDir = File(dataHome(), "history")
-    
-    fun saveLatest(requestId: String, entry: ResponseSnapshot) {
-        historyDir.mkdirs()
-        val file = latestFile(requestId)
-        file.writeText(Json.encodeToString(ResponseSnapshot.serializer(), entry))
+    fun save(requestId: String, snapshot: HarSnapshot) {
+        // 写入 files/{requestId}/{epochMs}.json 的 HAR 格式文件
     }
-    
-    fun loadLatest(requestId: String): ResponseSnapshot? {
-        val file = latestFile(requestId)
-        return if (file.exists()) {
-            Json.decodeFromString(ResponseSnapshot.serializer(), file.readText())
-        } else null
-    }
-    
-    fun listHistory(requestId: String): List<HistoryEntry> {
-        // ...
-    }
+    fun loadLatest(requestId: String): HarSnapshot?
+    fun listHistory(requestId: String): List<HistoryEntry>
+    fun clearResponseAndBenchLogs(requestId: String)
 }
 ```
 
-> 项目中的调用 (`src/main/kotlin/app/Main.kt:234-236`):
+> 项目中的调用 (`src/main/kotlin/app/AppViewModel.kt:562-575`): 每次请求完成后自动保存 HAR 快照，包含完整的请求/响应信息。
+
 ```kotlin
-val historyEntries by remember(responseScopeKey) {
-    mutableStateOf(editorRequestId?.let { RequestResponseStore.listHistory(it) } ?: emptyList())
-}
+RequestResponseStore.save(boundRequestId, HarSnapshot(
+    savedAtEpochMs = System.currentTimeMillis(),
+    requestMethod = reqMethodSnap, requestUrl = effectiveRequestUrl,
+    requestHeadersFullText = reqHeadersFullSnap, requestBody = reqBodySnap,
+    responseStatus = code, responseStatusText = HarLogCodec.responseStatusPhrase(code),
+    responseHeaderLines = responseHeaderLinesForHar(...),
+    responseBodyLines = control.snapshotRawBodyLines(),
+    responseTimeMs = elapsed, responseSizeBytes = control.totalBytes,
+    rightTabIndex = tabAtStart, isSseResponse = control.responseWasSse,
+))
+```
+
+### 会话隔离
+
+每个请求拥有独立的 `RequestSession`，其中包含响应的行、头、状态、LazyListState 等。切换标签时不丢失已收到的响应数据：
+
+```kotlin
+data class RequestSession(
+    val responseLines: MutableList<String> = mutableListOf(),
+    val responseHeaderLines: MutableList<String> = mutableListOf(),
+    val responseListState: LazyListState = LazyListState(),
+    var isLoading: Boolean = false,
+    var isSseResponse: Boolean = false,
+    var statusCodeText: String = "",
+    var responseTimeText: String = "",
+    // ...
+)
 ```
 
 ## 5.5 响应状态展示
@@ -342,7 +367,7 @@ fun statusCodeColor(code: Int): Color = when {
 ### 响应时间格式化
 
 ```kotlin
-fun formatResponseTime(ms: Long): String = when {
+fun formatDuration(ms: Long): String = when {
     ms < 1000 -> "${ms}ms"
     ms < 60000 -> "${ms / 1000}s"
     else -> "${ms / 60000}分${(ms % 60000) / 1000}秒"
@@ -352,39 +377,64 @@ fun formatResponseTime(ms: Long): String = when {
 ### 响应大小格式化
 
 ```kotlin
-fun formatResponseSize(bytes: Long): String = when {
+fun formatBytes(bytes: Long): String = when {
     bytes < 1024 -> "${bytes}B"
     bytes < 1024 * 1024 -> "${bytes / 1024}KB"
     else -> "${bytes / (1024 * 1024)}MB"
 }
 ```
 
-## 5.6 Tab 切换
+## 5.6 编辑区 Tab 切换
+
+左侧编辑区 4 个标签页（Body / Headers / Params / Auth），通过 `leftTabIndex` 控制：
 
 ```kotlin
-var rightTabIndex by remember { mutableStateOf(0) }
-
-Row {
-    Tab(selected = rightTabIndex == 0, onClick = { rightTabIndex = 0 }) {
-        Text("响应体")
-    }
-    Tab(selected = rightTabIndex == 1, onClick = { rightTabIndex = 1 }) {
-        Text("请求头")
-    }
-    Tab(selected = rightTabIndex == 2, onClick = { rightTabIndex = 2 }) {
-        Text("响应头")
+val tabs = listOf("Body", "Headers", "Params", "Auth")
+tabs.forEachIndexed { index, title ->
+    Box(modifier = Modifier.clickable { onLeftTabIndexChange(index) }) {
+        Text(title)
     }
 }
 ```
 
-## 5.7 总结
+右侧响应面板 3 个标签页：
+- **Body** - 响应体（支持 JSON 高亮切换）
+- **Headers** - 解析后的响应头
+- **Request** - 实际发出的请求（含 URL、头、主体）
+
+## 5.7 并发请求
+
+每个请求标签独立管理 `RequestSession`，多个请求可同时发送。树形侧边栏中正在运行的请求会显示加载指示器：
+
+```kotlin
+val runningRequestIds = remember { mutableSetOf<String>() }
+// 请求开始时：runningRequestIds.add(boundRequestId)
+// 请求完成时：runningRequestIds.remove(boundRequestId)
+```
+
+## 5.8 Auth 编辑器
+
+每个请求支持四种认证方式：
+
+- **No Auth** - 无认证
+- **Inherit** - 从父级文件夹/集合继承
+- **Basic Auth** - 用户名/密码，通过 Base64 编码
+- **Bearer Token** - 在 Authorization 头中添加 Token
+- **API Key** - 自定义 Key-Value（支持 header 或 query 参数）
+
+Auth 解析逻辑在 `http/AuthResolver.kt`，继承链解析在 `CollectionRepository.resolveEffectiveAuth()`。
+
+## 5.9 总结
 
 | 功能 | 关键实现 |
 |------|---------|
-| 状态驱动 | `mutableStateOf` + `remember` |
+| 状态驱动 | `AppViewModel` + `RequestSession` |
 | JSON 高亮 | `AnnotatedString` + `buildAnnotatedString` |
 | 表单处理 | `FormUrlEncodedBody.parse/encode` |
-| 历史存储 | `RequestResponseStore` |
-| Tab 切换 | `TabRow` + 状态索引 |
+| 历史存储 | HAR 1.2 格式，`RequestResponseStore` |
+| Tab 切换 | leftTabIndex + rightTabIndex |
+| 并发请求 | 独立 `RequestSession` 隔离状态 |
+| Auth 系统 | `AuthResolver` + `AuthEditor` |
+| 请求体编码 | `bodyWirePayloadForHttp` |
 
 **下篇**：SQLite 在 Kotlin 中的使用

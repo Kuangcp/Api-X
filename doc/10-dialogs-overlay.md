@@ -2,30 +2,24 @@
 
 本文介绍 Compose 中的对话框、全局搜索实现与 RecentRequest 快速切换。
 
-## 10.1 Dialog 窗口
+## 10.1 对话框窗口管理
 
-### 基本 Dialog
+项目使用统一的 `ui/Dialogs.kt` 编排所有对话框（Settings / Environment Manager / Global Search / Collection Settings）：
 
 ```kotlin
 @Composable
-fun MyDialog(
-    onDismiss: () -> Unit,
+fun Dialogs(
+    showSettings: Boolean,
+    showEnvironmentManager: Boolean,
+    showGlobalSearch: Boolean,
+    showCollectionSettings: Boolean,
+    collectionSettingsTarget: TreeSelection?,
+    // ...
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(8.dp),
-            color = MaterialTheme.colors.surface
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("标题")
-                OutlinedTextField(...)
-                Row {
-                    TextButton(onClick = onDismiss) { Text("取消") }
-                    TextButton(onClick = { /* 确认 */ }) { Text("确认") }
-                }
-            }
-        }
-    }
+    if (showSettings) SettingsDialogWindow(...)
+    if (showEnvironmentManager) EnvironmentManagerDialogWindow(...)
+    if (showGlobalSearch) GlobalSearchDialogWindow(...)
+    if (showCollectionSettings) CollectionSettingsDialog(...)
 }
 ```
 
@@ -52,7 +46,7 @@ fun GlobalSearchDialogWindow(
 }
 ```
 
-> 项目中的实现 (`src/main/kotlin/app/GlobalSearchDialog.kt:52-82`):
+> 项目中的实现 (`src/main/kotlin/app/GlobalSearchDialog.kt`):
 ```kotlin
 @Composable
 fun GlobalSearchDialogWindow(
@@ -72,17 +66,36 @@ fun GlobalSearchDialogWindow(
         state = rememberDialogState(width = 560.dp, height = 480.dp),
     ) {
         val colors = appMaterialColors(isDarkTheme, appBackgroundHex)
-        MaterialTheme(
-            colors = colors,
-            typography = typographyBase,
-        ) {
+        MaterialTheme(colors = colors, typography = typographyBase) {
             GlobalSearchDialogBody(
-                tree = tree,
-                repository = repository,
-                onCloseRequest = onCloseRequest,
-                onPickRequest = onPickRequest,
+                tree = tree, repository = repository,
+                onCloseRequest = onCloseRequest, onPickRequest = onPickRequest,
             )
         }
+    }
+}
+```
+
+### CollectionSettingsDialog
+
+集合和文件夹级别的 Auth 配置对话框 (`src/main/kotlin/app/CollectionSettingsDialog.kt`)：
+
+```kotlin
+@Composable
+fun CollectionSettingsDialog(
+    visible: Boolean,
+    target: TreeSelection?,  // Collection 或 Folder
+    repository: CollectionRepository,
+    onCloseRequest: () -> Unit,
+) {
+    if (!visible || target == null) return
+    DialogWindow(
+        onCloseRequest = onCloseRequest,
+        title = "集合设置",
+        state = rememberDialogState(width = 480.dp, height = 320.dp),
+    ) {
+        // Auth 编辑器用于整个集合/文件夹的默认认证
+        AuthEditor(auth = currentAuth, onAuthChange = { saveAuth(it) }, ...)
     }
 }
 ```
@@ -347,36 +360,34 @@ fun RecentRequestSwitcherOverlay(
 }
 ```
 
-> 项目中的实现 (`src/main/kotlin/app/RecentRequestSwitcherOverlay.kt`):
+> 项目中的实现 (`src/main/kotlin/app/RecentRequestSwitcherOverlay.kt`): 使用 AWTEventListener 实现 Ctrl+Tab 的按下-保持-释放交互模式。
+
 ```kotlin
 @Composable
 fun RecentRequestSwitcherOverlay(
-    visible: Boolean,
     requestIds: List<String>,
-    onSelect: (String) -> Unit,
-    onDismiss: () -> Unit,
+    highlightIndex: Int,
+    tree: List<UiCollection>,
+    repository: CollectionRepository,
 ) {
-    if (!visible) return
-    
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Black.copy(alpha = 0.5f))
-            .clickable { onDismiss() }
     ) {
         Card(
-            modifier = Modifier
-                .align(Alignment.Center)
-                .width(400.dp)
+            modifier = Modifier.align(Alignment.Center).width(360.dp)
         ) {
-            Column {
-                Text("最近请求", style = MaterialTheme.typography.h6)
-                requestIds.forEachIndexed { index, id ->
+            LazyColumn {
+                itemsIndexed(requestIds) { index, id ->
+                    val name = requestLocationLabel(tree, id) ?: id
                     Row(
-                        modifier = Modifier.clickable { onSelect(id) }
+                        modifier = Modifier.background(
+                            if (index == highlightIndex) highlightColor
+                            else Color.Transparent
+                        )
                     ) {
-                        Text("${index + 1}. ")
-                        Text(id)
+                        Text("${index + 1}. $name")
                     }
                 }
             }
@@ -384,6 +395,12 @@ fun RecentRequestSwitcherOverlay(
     }
 }
 ```
+
+Ctrl+Tab 的交互流程（`src/main/kotlin/app/Main.kt:162-205`）：
+1. **按下 Ctrl+Tab** - 激活 switcher（AWTEventListener 捕获）
+2. **按住 Ctrl 时按 Tab/Shift+Tab** - 在列表中选择上下项
+3. **释放 Ctrl** - 提交选择并关闭 switcher
+4. **按 Escape** - 取消并关闭
 
 ## 10.5 Ctrl+Tab 切换
 

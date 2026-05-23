@@ -64,7 +64,7 @@ st.executeUpdate("""
 """.trimIndent())
 ```
 
-> 项目中的完整 Schema (`src/main/kotlin/db/CollectionDatabase.kt:45-102`):
+> 项目中的完整 Schema v1 (`src/main/kotlin/db/CollectionDatabase.kt`):
 ```kotlin
 private fun migrateToV1(st: Statement) {
     st.executeUpdate("""
@@ -110,6 +110,12 @@ private fun migrateToV1(st: Statement) {
     st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_folders_parent ON folders(parent_folder_id)")
     st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_requests_collection ON requests(collection_id)")
     st.executeUpdate("CREATE INDEX IF NOT EXISTS idx_requests_folder ON requests(folder_id)")
+}
+
+private fun migrateToV2(st: Statement) {
+    st.executeUpdate("""
+        ALTER TABLE requests ADD COLUMN params_text TEXT NOT NULL DEFAULT ''
+    """.trimIndent())
 }
 ```
 
@@ -167,11 +173,13 @@ fun getRequest(id: String): StoredHttpRequest? {
 }
 ```
 
-> 项目中的查询 (`src/main/kotlin/db/CollectionRepository.kt:65-91`):
+> 项目中的查询 (`src/main/kotlin/db/CollectionRepository.kt`): 含 `params_text` 和 `meta_json`（存储 Auth 信息）：
+
 ```kotlin
 fun getRequest(id: String): StoredHttpRequest? {
     conn.prepareStatement("""
-        SELECT id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, meta_json
+        SELECT id, collection_id, folder_id, name, method, url,
+               headers_text, params_text, body_text, meta_json
         FROM requests WHERE id = ?
     """).use { ps ->
         ps.setString(1, id)
@@ -189,7 +197,7 @@ fun getRequest(id: String): StoredHttpRequest? {
                 paramsText = rs.getString("params_text"),
                 bodyText = rs.getString("body_text"),
                 metaJson = metaJson,
-                auth = extractAuthFromMetaJson(metaJson),
+                auth = extractAuthFromMetaJson(metaJson),  // 从 meta_json 提取 Auth
             )
         }
     }
@@ -262,7 +270,8 @@ fun saveRequestEditorFields(id: String, method: String, url: String, ...) {
 }
 ```
 
-> 项目中的实现 (`src/main/kotlin/db/CollectionRepository.kt:120-149`):
+> 项目中的实现 (`src/main/kotlin/db/CollectionRepository.kt`): 含 `params_text` 和 `meta_json`（Auth 序列化存储）：
+
 ```kotlin
 fun saveRequestEditorFields(
     id: String,
@@ -275,10 +284,11 @@ fun saveRequestEditorFields(
 ) {
     val now = System.currentTimeMillis()
     val oldMetaJson = getRequestMetaJson(id)
-    val newMetaJson = mergeAuthIntoMetaJson(oldMetaJson, auth)
+    val newMetaJson = mergeAuthIntoMetaJson(oldMetaJson, auth)  // Auth 合并到 meta_json
 
     conn.prepareStatement("""
-        UPDATE requests SET method = ?, url = ?, headers_text = ?, params_text = ?, body_text = ?, meta_json = ?, updated_at = ?
+        UPDATE requests SET method = ?, url = ?, headers_text = ?,
+            params_text = ?, body_text = ?, meta_json = ?, updated_at = ?
         WHERE id = ?
     """).use { ps ->
         ps.setString(1, method)
@@ -337,7 +347,29 @@ fun MyScreen() {
 }
 ```
 
-## 6.6 总结
+## 6.6 Auth 继承查询
+
+Auth 信息存储在每层的 `meta_json` 字段中。通过 SQL 查询构建继承链：
+
+```kotlin
+fun resolveEffectiveAuth(requestId: String): PostmanAuth? {
+    val req = getRequest(requestId) ?: return null
+    if (req.auth != null && req.auth.type != "inherit") return req.auth
+    
+    // 查询文件夹级别的 Auth
+    if (req.folderId != null) {
+        val folderAuth = getFolderMetaAuth(req.folderId)
+        if (folderAuth != null && folderAuth.type != "inherit") return folderAuth
+    }
+    
+    // 查询集合级别的 Auth
+    return getCollectionMetaAuth(req.collectionId)
+}
+```
+
+继承优先级：**请求 → 文件夹 → 集合**。当设置为 "Inherit" 时自动向上查找。
+
+## 6.7 总结
 
 | 操作 | 方法 |
 |------|------|
@@ -345,7 +377,9 @@ fun MyScreen() {
 | 查询 | `PreparedStatement.executeQuery()` |
 | 更新 | `PreparedStatement.executeUpdate()` |
 | 事务 | `conn.setAutoCommit(false)` |
-| 迁移 | `schema_migrations` 版本控制 |
+| 迁移 | `schema_migrations` 版本控制（v1 + v2） |
+| Auth 存储 | `meta_json` 字段的 JSON 内嵌 |
+| Auth 继承 | request → folder → collection |
 | 关闭 | `use` 扩展自动关闭 |
 
 **下篇**：序列化与 JSON 处理

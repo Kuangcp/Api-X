@@ -139,12 +139,10 @@ val resolvedHeaders = headersText.applyEnvironmentVariables(varMap)
 val resolvedBody = bodyText.applyEnvironmentVariables(varMap)
 ```
 
-> 项目中的使用 (`src/main/kotlin/app/Main.kt:305-315`):
+> 项目中的使用 (`src/main/kotlin/app/AppViewModel.kt:211, 439`):
 ```kotlin
 var environmentsState by remember {
-    mutableStateOf(
-        withDefaultActiveWhenSingle(EnvironmentStore.snapshot())
-    )
+    mutableStateOf(withDefaultActiveWhenSingle(EnvironmentStore.snapshot()))
 }
 
 fun commitEnvironmentsState(newState: EnvironmentsState) {
@@ -153,8 +151,27 @@ fun commitEnvironmentsState(newState: EnvironmentsState) {
 }
 
 val env = environmentsState.activeEnvironment()
-val envVarMap = env?.variables?.let { envVarMapForActive(it) } ?: emptyMap()
+val envVarMap = env?.variables?.let { substitutionMapForActive(it) } ?: emptyMap()
 ```
+
+### 环境变量自动补全
+
+在所有文本编辑框（URL、Headers、Body、Params）中，输入 `{{` 会触发变量自动补全弹窗：
+
+```kotlin
+@Composable
+fun EnvVarAutocomplete(
+    value: String,
+    onValueChange: (String) -> Unit,
+    envVars: List<EnvVariable>,
+) {
+    // 检测 "{{" 触发位置
+    // 弹出过滤后的变量列表
+    // 选中后补全为 "{{variableName}}"
+}
+```
+
+补全组件 `http/request/EnvVarAutocomplete.kt` 适用于所有编辑器，通过 `KeyValueEditors.kt` 和各个 Tab 集成。
 
 ## 8.4 Auth 继承与处理
 

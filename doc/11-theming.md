@@ -79,12 +79,11 @@ IconButton(onClick = { isDarkTheme = !isDarkTheme }) {
 }
 ```
 
-> 项目中的主题切换 (`src/main/kotlin/app/Main.kt:293-297`):
+> 项目中的主题切换 (`src/main/kotlin/app/Main.kt:231`):
 ```kotlin
-var isDarkTheme by remember { mutableStateOf(true) }
-
 MaterialTheme(
-    colors = if (isDarkTheme) darkColors() else lightColors()
+    colors = appMaterialColors(vm.isDarkTheme, vm.appSettings.backgroundHex),
+    typography = typographyFromSettings(vm.appSettings)
 ) {
     // ...
 }
@@ -195,7 +194,39 @@ fun appMaterialColors(isDark: Boolean, backgroundHex: String?): Colors {
 }
 ```
 
-## 11.4 方法颜色高亮
+## 11.4 自定义颜色方案
+
+项目自定义的颜色方案定义在 `src/main/kotlin/app/AppTheme.kt`：
+
+```kotlin
+fun apiXDarkColors(): Colors = darkColors(
+    primary = Color(0xFFBB86FC),
+    background = Color(0xFF1B1B1B),
+    surface = Color(0xFF2A2A2A),
+)
+
+fun appMaterialColors(isDark: Boolean, backgroundHex: String?): Colors {
+    val background = backgroundHex?.let { parseHexColorOrNull(it) }
+    return if (background?.isVisuallyDarkBackground() == true) {
+        darkColors().copy(background = background)
+    } else if (background != null) {
+        lightColors().copy(background = background)
+    } else {
+        if (isDark) apiXDarkColors() else lightColors()
+    }
+}
+```
+
+Typography 在 `src/main/kotlin/app/AppTypography.kt` 中定义，支持通过设置面板调节字号：
+
+```kotlin
+fun typographyFromSettings(settings: AppSettings): Typography = Typography(
+    body1 = TextStyle(fontFamily = ... , fontSize = settings.fontSizeSp.sp),
+    // Request/Response 区使用独立字号 settings.requestResponseFontSizeSp
+)
+```
+
+## 11.5 方法颜色高亮
 
 ### HTTP 方法颜色
 

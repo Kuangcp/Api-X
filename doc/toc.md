@@ -19,15 +19,16 @@
 ### 1.2 Compose Desktop 入门
 - **博客 2**: [Compose Desktop 初体验：构建第一个桌面应用](./02-compose-desktop.md)
   - Kotlin Multiplatform 与 Compose 简介
-  - compose.desktop 依赖配置
-  - @Composable 函数与状态管理
+  - compose.desktop 依赖配置（动态版本管理）
+  - @Composable 函数与 AppViewModel 状态管理
   - remember / mutableStateOf 状态更新原理
 
 - **博客 3**: [Compose 布局基础与 Material Design](./03-compose-layout.md)
   - Row / Column / Box 布局
   - LazyColumn 高效列表渲染
-  - Material3 主题切换
+  - Material3 主题切换与自定义颜色
   - 修饰符（Modifier）链式调用
+  - SplitHandle 可拖拽分隔条
 
 ---
 
@@ -41,10 +42,14 @@
   - 响应流式处理（Streaming）
 
 - **博客 5**: [请求面板与响应展示实现](./05-request-response.md)
-  - 状态驱动的 UI 更新
-  - JSON 语法高亮实现
-  - Form 表单数据处理
-  - 请求历史存储
+  - AppViewModel 状态驱动 UI
+  - JSON 语法高亮 + neoutils highlight-compose
+  - Form 表单数据处理与 bodyWirePayloadForHttp
+  - 请求历史 HAR 1.2 存储
+  - 多标签编辑（TabSession）
+  - 会话隔离（RequestSession）
+  - Auth 编辑器（Basic/Bearer/API Key/Inherit）
+  - 并发请求支持
 
 ### 2.2 数据持久化
 - **博客 6**: [SQLite 在 Kotlin 中的使用](./06-sqlite-kt.md)
@@ -75,10 +80,11 @@
   - 拖拽与缩放处理
 
 - **博客 10**: [对话框与全局搜索](./10-dialogs-overlay.md)
-  - ModalBottomSheet 底部弹出
+  - Dialogs 统一编排（ui/Dialogs.kt）
   - 对话框状态管理
   - Ctrl+K 全局搜索实现
-  - RecentRequest 快速切换
+  - CollectionSettingsDialog（集合级 Auth）
+  - RecentRequest 快速切换（AWTEventListener）
 
 ### 3.2 主题与样式
 - **博客 11**: [Compose 主题系统与动态配色](./11-theming.md)
@@ -99,7 +105,8 @@
 
 ### 4.1 项目架构
 - **博客 13**: [Kotlin 桌面应用架构设计](./13-architecture.md)
-  - MVVM 模式在 Compose 中应用
+  - AppViewModel 模式
+  - TabSession / RequestSession 多标签状态隔离
   - Repository 数据层抽象
   - 模块分包策略（app/db/http/tree）
   - 依赖管理
@@ -113,9 +120,9 @@
 
 ### 4.3 数据同步与导入导出
 - **博客 15**: [Postman 数据格式兼容](./15-postman-sync.md)
-  - Postman Collection V2.1 格式
-  - JSON 导出与版本管理
-  - 数据目录同步机制
+  - Postman Collection V2.1 格式导入导出
+  - JSON 导出与版本管理（含 _api_x_id 元数据）
+  - 数据目录同步机制（Push/Pull）
   - Git 版本化管理数据
 
 ### 4.4 调试与监控

@@ -36,28 +36,23 @@ Box(modifier = Modifier.fillMaxSize()) {
 }
 ```
 
-> 项目中的实际布局 (`src/main/kotlin/app/Main.kt:475-490`):
+> 项目中的实际布局 (`src/main/kotlin/app/Main.kt:253-286`):
 ```kotlin
-Row(
-    Modifier.fillMaxWidth().height(48.dp)
-        .background(MaterialTheme.colors.background)
+Row(modifier = Modifier.fillMaxWidth().weight(1f)
+    .onSizeChanged { vm.setContentRowWidthPx(it.width.toFloat().coerceAtLeast(1f)) }
 ) {
-    if (treeSidebarVisible) {
-        Box(
-            Modifier.fillMaxHeight().width((contentWidthPx * treeSplitRatio).dp)
-        ) {
-            CollectionTreeSidebar(
-                // ...
-            )
-        }
-        Box(
-            Modifier.fillMaxHeight().width(1.dp).background(dividerColor)
+    if (vm.treeSidebarVisible) {
+        CollectionTreeSidebar(
+            modifier = Modifier.weight(vm.treeSplitRatio), ...
         )
+        SplitHandle(...)  // 可拖拽的分隔条
     }
-    // 右侧请求编辑区
-    Box(Modifier.fillMaxSize()) {
-        // ...
+    Column(modifier = Modifier.weight(middleFraction * vm.splitRatio)) {
+        RequestTabBar(...)
+        RequestSidePanel(modifier = Modifier.weight(1f), ...)
     }
+    SplitHandle(...)
+    ResponsePanel(modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), ...)
 }
 ```
 
@@ -167,12 +162,11 @@ MaterialTheme(
 }
 ```
 
-> 项目中的主题切换 (`src/main/kotlin/app/Main.kt:293, 293-297`):
+> 项目中的主题切换 (`src/main/kotlin/app/Main.kt:231`):
 ```kotlin
-var isDarkTheme by remember { mutableStateOf(true) }
-// ...
 MaterialTheme(
-    colors = if (isDarkTheme) darkColors() else lightColors()
+    colors = appMaterialColors(vm.isDarkTheme, vm.appSettings.backgroundHex),
+    typography = typographyFromSettings(vm.appSettings)
 ) {
     // 布局内容
 }
@@ -194,16 +188,25 @@ val colorScheme = darkColorScheme(
 )
 ```
 
-项目中定义的颜色 (`src/main/kotlin/app/Main.kt` 中的引用):
+项目中定义的颜色 (`src/main/kotlin/app/AppTheme.kt`):
 ```kotlin
-MaterialTheme(
-    colors = if (isDarkTheme) darkColors() else lightColors()
-) {
-    Button(
-        colors = ButtonDefaults.buttonColors(
-            backgroundColor = MaterialTheme.colors.primary
-        )
-    ) { }
+fun apiXDarkColors(): Colors {
+    return darkColors(
+        primary = Color(0xFFBB86FC),
+        background = Color(0xFF1B1B1B),
+        surface = Color(0xFF2A2A2A),
+    )
+}
+
+fun appMaterialColors(isDark: Boolean, backgroundHex: String?): Colors {
+    val background = backgroundHex?.let { parseHexColorOrNull(it) }
+    return if (background?.isVisuallyDarkBackground() == true) {
+        darkColors().copy(background = background)
+    } else if (background != null) {
+        lightColors().copy(background = background)
+    } else {
+        if (isDark) apiXDarkColors() else lightColors()
+    }
 }
 ```
 
@@ -225,12 +228,12 @@ Icon(
 )
 ```
 
-扩展图标库（项目依赖）：
+扩展图标库（项目依赖，版本由 `compose.version` 统一管理）：
 ```kotlin
-implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+implementation("org.jetbrains.compose.material:material-icons-extended")
 ```
 
-> 项目中的图标使用 (`src/main/kotlin/http/RequestPanel.kt`):
+> 项目中的图标使用 (`src/main/kotlin/http/request/RequestTopBar.kt`):
 ```kotlin
 IconButton(onClick = onSend) {
     Icon(
@@ -276,30 +279,22 @@ Card(
 
 ## 3.8 响应式分割布局
 
-项目中的分割布局实现 (`src/main/kotlin/app/Main.kt:475-510`):
+项目中的三栏分割布局实现 (`src/main/kotlin/app/Main.kt:253-356`): 左侧树形侧边栏 — 可拖拽分隔条 — 中间请求编辑区 — 可拖拽分隔条 — 右侧响应面板。
+
 ```kotlin
-Row(
-    Modifier.fillMaxWidth().height(48.dp)
-        .background(MaterialTheme.colors.background)
+Row(modifier = Modifier.fillMaxWidth().weight(1f)
+    .onSizeChanged { vm.setContentRowWidthPx(it.width.toFloat()) }
 ) {
-    if (treeSidebarVisible) {
-        Box(
-            // 左侧树：宽度比例
-            Modifier.fillMaxHeight()
-                .width((contentWidthPx * treeSplitRatio).dp)
-        ) {
-            CollectionTreeSidebar(...)
-        }
-        // 分隔线
-        Box(
-            Modifier.fillMaxHeight().width(1.dp)
-                .background(dividerColor)
-        )
+    if (vm.treeSidebarVisible) {
+        CollectionTreeSidebar(modifier = Modifier.weight(vm.treeSplitRatio), ...)
+        SplitHandle(...)  // 可拖拽分隔条
     }
-    // 右侧主区域
-    Box(Modifier.fillMaxSize()) {
-        // ...
+    Column(modifier = Modifier.weight(middleFraction * vm.splitRatio)) {
+        RequestTabBar(...)
+        RequestSidePanel(modifier = Modifier.weight(1f), ...)
     }
+    SplitHandle(...)
+    ResponsePanel(modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), ...)
 }
 ```
 
@@ -316,10 +311,13 @@ LaunchedEffect(scrollToItem) {
 }
 ```
 
-> 项目中的列表状态 (`src/main/kotlin/app/Main.kt:291`):
+> 项目中的列表状态 (`src/main/kotlin/app/AppViewModel.kt:98`):
 ```kotlin
-val responseListState = remember(responseScopeKey) { LazyListState() }
+val responseListState: LazyListState,
+val responseHeadersListState: LazyListState,
 ```
+
+每个请求会话 (`RequestSession`) 持有独立的 LazyListState，切换标签时响应列表状态保持。
 
 ## 总结
 

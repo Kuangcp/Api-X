@@ -23,75 +23,93 @@ src/main/kotlin/
 
 > 项目中的分包 (`src/main/kotlin/`):
 ```
-app/    # Main.kt, SettingsWindow, GlobalSearchDialog, EnvironmentManagerDialog
-db/    # CollectionRepository, CollectionDatabase, RequestResponseStore
-http/  # HttpStreaming, RequestPanel, ResponsePanel, JsonSyntaxHighlight
-tree/  # CollectionModels, CollectionTreeSidebar, PostmanCollectionV21Import
+app/          # Main.kt, AppViewModel, AppActions, AppSettings, AppTheme, ui/Dialogs
+  ui/         # Dialogs.kt - 统一对话框编排
+db/           # CollectionRepository, CollectionDatabase, RequestResponseStore, HarExchange
+http/         # HttpStreaming, AuthResolver, CurlParser, CurlExport, JsonSyntaxHighlight
+  request/    # RequestTopBar, RequestSidePanel, RequestEditorPane, RequestBodyEditorTab, RequestKeyValueTabs, AuthEditor, EnvVarAutocomplete, RequestTabBar
+  response/   # ResponsePanel
+tree/         # CollectionModels, CollectionTreeSidebar, PostmanCollectionV21Import/Export, PortableCollection, PostmanAuth
 ```
 
-## 13.2 MVVM 模式在 Compose 中应用
+## 13.2 AppViewModel 模式
 
-### 经典 MVVM
+项目中采用 **AppViewModel** 模式：将所有 UI 状态封装在 `AppViewModel` 数据类中，通过 `rememberAppViewModel()` Composable 函数创建。
 
+### AppViewModel 数据类
+
+```kotlin
+data class AppViewModel(
+    val repository: CollectionRepository,
+    val tree: List<UiCollection>,
+    val treeSelection: TreeSelection?,
+    val method: String,
+    val url: String,
+    val headersText: String,
+    val bodyText: String,
+    val paramsText: String,
+    val auth: PostmanAuth?,
+    val editorRequestId: String?,
+    val responseLines: MutableList<String>,
+    val isLoading: Boolean,
+    // ... 共 90+ 个字段
+    val onStartRequest: () -> Unit,
+    val onCancelRequest: () -> Unit,
+    val onRefreshTree: () -> Unit,
+)
 ```
-View (Composable) ← ViewModel (状态) ← Model (数据)
-```
 
-### Compose 中的变体
-
-在 Compose 中，状态本身相当于 ViewModel：
+### 状态创建
 
 ```kotlin
 @Composable
-fun RequestPanel(repository: Repository) {
-    // 状态（ViewModel）
-    var url by remember { mutableStateOf("") }
-    var isLoading by remember { mutableStateOf(false) }
-    
-    // UI（View）
-    Column {
-        OutlinedTextField(value = url, onValueChange = { url = it })
-        Button(onClick = {
-            isLoading = true
-            // 调用数据层
-            repository.saveUrl(url)
-            isLoading = false
-        }) {
-            Text("保存")
-        }
+fun App(onExitRequest: () -> Unit) {
+    val vm = rememberAppViewModel(repository, expandLoaded, windowState)
+    // 使用 vm 访问所有状态和方法
+    MaterialTheme(colors = appMaterialColors(vm.isDarkTheme, vm.appSettings.backgroundHex)) {
+        RequestTopBar(isLoading = vm.isLoading, ...)
+        RequestSidePanel(props = RequestEditorProps(...))
+        ResponsePanel(statusCodeText = vm.statusCodeText, ...)
     }
 }
 ```
 
-### 状态提升
-
-```kotlin
-@Composable
-fun App() {
-    // 提升状态到父组件
-    var method by remember { mutableStateOf("GET") }
-    
-    // 传递给子组件
-    RequestEditor(
-        method = method,
-        onMethodChange = { method = it }
-    )
-}
-```
-
-> 项目中的状态管理 (`src/main/kotlin/app/Main.kt:120-135`):
+> 项目中的状态管理 (`src/main/kotlin/app/AppViewModel.kt:176-213`):
 ```kotlin
 var method by remember { mutableStateOf("GET") }
-var methodMenuExpanded by remember { mutableStateOf(false) }
-var url by remember { mutableStateOf("https://httpbin.org/get") }
-var headersText by remember { mutableStateOf("") }
-var bodyText by remember { mutableStateOf("") }
+var headersText by remember { mutableStateOf("Content-Type: ...") }
+var bodyText by remember { mutableStateOf("key: value") }
 var paramsText by remember { mutableStateOf("") }
 var auth by remember { mutableStateOf<PostmanAuth?>(null) }
-
 var tree by remember { mutableStateOf(repository.loadTree()) }
 var treeSelection by remember { mutableStateOf<TreeSelection?>(null) }
+var editorRequestId by remember { mutableStateOf<String?>(null) }
 ```
+
+### TabSession 与 RequestSession
+
+多标签通过 `TabSession` 管理编辑区状态，`RequestSession` 管理响应状态：
+
+```kotlin
+data class TabSession(
+    val method: String = "GET",
+    val url: String = "",
+    val headersText: String = "",
+    val bodyText: String = "",
+    val paramsText: String = "",
+    val auth: PostmanAuth? = null,
+    val leftTabIndex: Int = 0,
+)
+
+data class RequestSession(
+    val responseLines: MutableList<String>,
+    val statusCodeText: String = "",
+    var isLoading: Boolean = false,
+    val control: RequestControl? = null,
+)
+```
+
+切换标签时保存当前 TabSession，加载目标标签的 TabSession 恢复编辑区。每个请求有独立的 RequestSession，支持并发请求互不干扰。
 
 ## 13.3 Repository 数据层抽象
 
@@ -152,23 +170,15 @@ fun getRequest(id: String): StoredHttpRequest? {
 ```kotlin
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-extended")
     implementation("org.xerial:sqlite-jdbc:3.47.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
+    implementation("com.neoutils.highlight:highlight-compose:2.3.0")
 }
 ```
 
-> 项目中的依赖 (`build.gradle.kts:29-39`):
-```kotlin
-dependencies {
-    implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
-    implementation("org.xerial:sqlite-jdbc:3.47.2.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
-}
-```
+> 版本号统一在 `gradle.properties` 管理：`kotlin.version=2.3.20`、`compose.version=1.10.3`
 
 ### 常用库
 
@@ -177,7 +187,8 @@ dependencies {
 | `kotlinx-coroutines-core` | 协程支持 |
 | `kotlinx-serialization-json` | JSON 序列化 |
 | `sqlite-jdbc` | SQLite 驱动 |
-| `kotlinx-collections` | 集合工具 |
+| `highlight-compose` | JSON 编辑器语法高亮 |
+| `compose.material-icons-extended` | Material Design 图标扩展 |
 
 ## 13.5 单例与对象
 
@@ -221,23 +232,31 @@ object EnvironmentStore {
 
 ## 13.6 数据流方向
 
-### UI → 数据 → 存储
+### UI → Model → 存储
 
 ```kotlin
-// UI 调用
-repository.saveRequestEditorFields(id, method, url, headers, params, body, auth)
-
-// Repository 执行
-conn.prepareStatement("UPDATE requests SET ...").use { ps ->
-    ps.executeUpdate()
+// 1) 用户在 UI 编辑 → 自动保存（450ms 防抖）
+LaunchedEffect(method, url, headersText, paramsText, bodyText, auth, editorRequestId) {
+    delay(450)
+    repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
 }
 
-// 文件存储
-object RequestResponseStore {
-    fun saveLatest(requestId: String, entry: ResponseSnapshot) {
-        val file = latestFile(requestId)
-        file.writeText(Json.encodeToString(entry))
-    }
+// 2) 发送请求 → 保存 HAR 快照
+fun startRequest() {
+    sendRequestStreaming(method, url, body, headersText, control, ...)
+    // 完成后
+    RequestResponseStore.save(boundRequestId, HarSnapshot(
+        requestMethod = method, requestUrl = url,
+        responseBodyLines = control.snapshotRawBodyLines(),
+        responseTimeMs = elapsed, responseSizeBytes = control.totalBytes,
+        // ...
+    ))
+}
+
+// 3) 拖拽/导入导出 → Repository 事务
+fun applyTreeDrop(payload, target) {
+    repository.moveRequest(payload.id, target)
+    refreshTree()
 }
 ```
 
@@ -270,24 +289,17 @@ data class UiRequestSummary(
 
 > 项目中的模型分层 (`src/main/kotlin/tree/CollectionModels.kt`):
 ```kotlin
-data class UiCollection(
-    val id: String,
-    val name: String,
-    val folders: List<UiFolder>,
-    val rootRequests: List<UiRequestSummary>,
-)
+data class UiCollection(...)
+data class UiFolder(...)
+data class UiRequestSummary(...)
 
-data class UiFolder(
+// 全局搜索专用模型
+data class GlobalSearchRequestRow(
     val id: String,
     val name: String,
-    val folders: List<UiFolder>,
-    val requests: List<UiRequestSummary>,
-)
-
-data class UiRequestSummary(
-    val id: String,
-    val name: String,
-    val method: String,
+    val url: String,
+    val headersText: String,
+    val bodyText: String,
 )
 ```
 

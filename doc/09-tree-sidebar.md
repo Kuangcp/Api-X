@@ -65,6 +65,14 @@ sealed class TreeSelection {
     data class Folder(val id: String) : TreeSelection()
     data class Request(val id: String) : TreeSelection()
 }
+
+data class TreeDragPayload(val id: String, val kind: TreeSelection)
+sealed class TreeDropTarget {
+    data class BeforeItem(val id: String) : TreeDropTarget()
+    data class IntoCollection(val id: String) : TreeDropTarget()
+    data class IntoFolder(val id: String) : TreeDropTarget()
+    data class AfterItem(val id: String) : TreeDropTarget()
+}
 ```
 
 ## 9.2 LazyColumn 实现多级树
@@ -222,16 +230,20 @@ fun TreeItemRequest(
 }
 ```
 
-> 项目中的右键菜单 (`src/main/kotlin/tree/CollectionTreeSidebar.kt`):
+> 项目中的右键菜单 (`src/main/kotlin/tree/CollectionTreeSidebar.kt`): 集、文件夹、请求各有不同的菜单选项，包含导入/导出/复制等：
+
 ```kotlin
 ContextMenuArea {
     itemsProvider = {
         listOfNotNull(
-            ContextMenuItem("重命名") { /* ... */ },
-            ContextMenuItem("新建文件夹") { /* ... */ },
-            ContextMenuItem("新建请求") { /* ... */ },
-            ContextMenuItem("导出为 cURL") { /* ... */ },
-            // ...
+            ContextMenuItem("重命名") { onRename(sel, newName) },
+            ContextMenuItem("新建文件夹") { onContextAddFolder(sel) },
+            ContextMenuItem("新建请求") { onContextAddRequest(sel) },
+            ContextMenuItem("集合设置") { onSettings(sel) },    // Auth 配置
+            ContextMenuItem("导出为 cURL") { onExportRequestAsCurl(sel) },
+            ContextMenuItem("导出为 Postman") { onExportPostmanCollection(sel) },
+            ContextMenuItem("复制") { onDuplicateRequestBelow(sel) },
+            ContextMenuItem("删除") { onDelete(sel) },
         )
     }
 }

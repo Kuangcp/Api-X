@@ -125,7 +125,7 @@ jvmArgs += listOf(
 2. **内存占用高** - 切换 SOFTWARE 测试
 3. **显示异常** - 检查 GPU 驱动
 
-> 项目中的配置 (`build.gradle.kts:52`):
+> 项目中的配置 (`build.gradle.kts`):
 ```kotlin
 "-Dskiko.renderApi=OPENGL",
 ```

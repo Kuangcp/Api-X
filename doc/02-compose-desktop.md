@@ -25,8 +25,14 @@ plugins {
 
 dependencies {
     implementation(compose.desktop.currentOs)
-    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-extended")
 }
+```
+
+版本号在 `gradle.properties` 统一管理：
+```properties
+kotlin.version=2.3.20
+compose.version=1.10.3
 ```
 
 ## 2.2 最简单的 Compose Desktop 应用
@@ -43,11 +49,11 @@ fun main() = application {
 }
 ```
 
-运行方式 (`src/main/kotlin/app/Main.kt:101-102`)：
+运行方式 (`src/main/kotlin/app/Main.kt:99-100`)：
 ```kotlin
 @Composable
 fun App(onExitRequest: () -> Unit) {
-    // 应用主界面
+    // 应用主界面（AppViewModel 管理状态）
 }
 ```
 
@@ -73,7 +79,7 @@ fun MyComponent(title: String) {
 }
 ```
 
-> 项目中的 Composable (`src/main/kotlin/http/RequestPanel.kt`):
+> 项目中的 Composable (`src/main/kotlin/http/request/RequestTopBar.kt`):
 ```kotlin
 @Composable
 fun RequestTopBar(
@@ -117,13 +123,13 @@ fun Counter() {
 2. `by remember` 让状态在重组时保持（类似缓存）
 3. 修改 `count++` 会自动触发 UI 重绘
 
-> 项目中的状态用法 (`src/main/kotlin/app/Main.kt:120-130`):
+> 项目中的状态用法 (`src/main/kotlin/app/AppViewModel.kt:176-185`):
 ```kotlin
 var method by remember { mutableStateOf("GET") }
 var methodMenuExpanded by remember { mutableStateOf(false) }
 var url by remember { mutableStateOf("https://httpbin.org/get") }
 var headersText by remember {
-    mutableStateOf("Content-Type: application/x-www-form-urlencoded")
+    mutableStateOf("Content-Type: application/x-www-form-urlencoded\nAccept: */*")
 }
 ```
 
@@ -148,21 +154,15 @@ LaunchedEffect(Unit) {
 }
 ```
 
-> 项目中的实际用法 (`src/main/kotlin/app/Main.kt:144-149`):
+> 项目中的实际用法 (`src/main/kotlin/app/AppViewModel.kt:259-267`):
 ```kotlin
-val editorIdSnap by rememberUpdatedState(editorRequestId)
-val methodSnap by rememberUpdatedState(method)
-val urlSnap by rememberUpdatedState(url)
-val headersSnap by rememberUpdatedState(headersText)
-val paramsSnap by rememberUpdatedState(paramsText)
-val bodySnap by rememberUpdatedState(bodyText)
-
-DisposableEffect(repository) {
+DisposableEffect(Unit) {
     onDispose {
-        // 在协程/回调中获取最新状态
-        editorIdSnap?.let {
-            repository.saveRequestEditorFields(it, methodSnap, urlSnap, headersSnap, paramsSnap, bodySnap, auth)
+        val id = editorRequestId
+        if (id != null) {
+            repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
         }
+        repository.close()
     }
 }
 ```
@@ -187,12 +187,13 @@ fun MyScreen() {
 }
 ```
 
-> 项目中的 LaunchedEffect (`src/main/kotlin/app/Main.kt:321-325`):
+> 项目中的 LaunchedEffect (`src/main/kotlin/app/AppViewModel.kt:444-449`):
 ```kotlin
 LaunchedEffect(method, url, headersText, paramsText, bodyText, auth, editorRequestId) {
     val id = editorRequestId ?: return@LaunchedEffect
     delay(450)  // 防抖
     repository.saveRequestEditorFields(id, method, url, headersText, paramsText, bodyText, auth)
+    refreshTree()
 }
 ```
 
@@ -209,19 +210,14 @@ fun MyScreen(repository: Repository) {
 }
 ```
 
-> 项目中的资源清理 (`src/main/kotlin/app/Main.kt:151-166`):
+> 项目中的资源清理 (`src/main/kotlin/app/AppViewModel.kt:259-267`):
 ```kotlin
-DisposableEffect(repository) {
+DisposableEffect(Unit) {
     onDispose {
-        editorIdSnap?.let {
+        val id = editorRequestId
+        if (id != null) {
             repository.saveRequestEditorFields(
-                it,
-                methodSnap,
-                urlSnap,
-                headersSnap,
-                paramsSnap,
-                bodySnap,
-                auth,
+                id, method, url, headersText, paramsText, bodyText, auth,
             )
         }
         repository.close()
