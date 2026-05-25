@@ -12,6 +12,8 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.time.LocalTime
+import java.time.format.DateTimeFormatter
 import java.util.zip.GZIPInputStream
 import java.util.zip.Inflater
 import java.util.zip.InflaterInputStream
@@ -23,6 +25,8 @@ private val RESTRICTED_HEADERS = setOf(
     "host",
     "upgrade"
 )
+
+private val TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss.SSS")
 
 private fun requestWallClockExceeded(control: RequestControl, requestTimeoutMs: Long): Boolean =
     System.currentTimeMillis() - control.startTimeMs > requestTimeoutMs
@@ -277,6 +281,8 @@ fun sendRequestStreaming(
         onStatusCode(code)
         if (!isSse) {
             onResponseTime(System.currentTimeMillis() - control.startTimeMs)
+        } else {
+            onChunk("${LocalTime.now().format(TIME_FORMATTER)} [SSE 连接已建立]\n\n")
         }
 
         val rawBody = response.body()
@@ -284,7 +290,6 @@ fun sendRequestStreaming(
         try {
             control.activeInput = stream
             if (isSse) {
-                onChunk("SSE 流式响应中...\n\n")
                 var firstSseEventArrived = false
                 BufferedReader(InputStreamReader(stream)).use { reader ->
                     while (true) {
@@ -304,7 +309,7 @@ fun sendRequestStreaming(
                         onProgress(control.totalBytes)
                     }
                 }
-                if (!control.cancelled) onChunk("\n[SSE 连接已结束]")
+                if (!control.cancelled) onChunk("\n${LocalTime.now().format(TIME_FORMATTER)} [SSE 连接已结束]")
             } else {
                 val reader = InputStreamReader(stream, StandardCharsets.UTF_8)
                 val buffer = CharArray(2048)
