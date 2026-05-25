@@ -169,6 +169,7 @@ fun CollectionTreeSidebar(
     onContextAddRequest: (TreeSelection) -> Unit,
     onRename: (TreeSelection, String) -> Unit,
     onDelete: (TreeSelection) -> Unit,
+    onCountFolderContents: ((TreeSelection.Folder) -> Pair<Int, Int>)?,
     onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
@@ -181,6 +182,13 @@ fun CollectionTreeSidebar(
     var renameTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var renameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<TreeSelection?>(null) }
+    var folderDeleteCounts by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    LaunchedEffect(deleteTarget) {
+        folderDeleteCounts = if (deleteTarget is TreeSelection.Folder && onCountFolderContents != null) {
+            onCountFolderContents(deleteTarget as TreeSelection.Folder)
+        } else null
+    }
 
     val dropRegistry = remember { DropZoneRegistry() }
     var treeDragPayload by remember { mutableStateOf<TreeDragPayload?>(null) }
@@ -328,6 +336,7 @@ fun CollectionTreeSidebar(
                             },
                             onContextAddFolder = onContextAddFolder,
                             onContextAddRequest = onContextAddRequest,
+                            onDeleteRequest = { deleteTarget = it },
                             onSettings = onSettings,
                             onExportRequestAsCurl = onExportRequestAsCurl,
                             onExportPostmanCollection = onExportPostmanCollection,
@@ -408,10 +417,26 @@ fun CollectionTreeSidebar(
 
     deleteTarget?.let { target ->
         val label = findTreeLabel(tree, target) ?: "该项"
+        val message = if (target is TreeSelection.Folder) {
+            val (fc, rc) = folderDeleteCounts ?: (0 to 0)
+            buildString {
+                append("删除「$label」？\n")
+                val parts = mutableListOf<String>()
+                if (fc > 0) parts.add("$fc 个文件夹")
+                if (rc > 0) parts.add("$rc 个请求")
+                if (parts.isNotEmpty()) {
+                    append("将删除 ${parts.joinToString("、")}。")
+                } else {
+                    append("该文件夹为空。")
+                }
+            }
+        } else {
+            "删除「$label」？子项会一并删除。"
+        }
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("确认删除", fontSize = 16.sp) },
-            text = { Text("删除「$label」？子项会一并删除。", fontSize = 13.sp) },
+            text = { Text(message, fontSize = 13.sp) },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -444,6 +469,7 @@ private fun CollectionTreeBlock(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
+    onDeleteRequest: (TreeSelection) -> Unit,
     onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
@@ -542,6 +568,7 @@ private fun CollectionTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onContextAddFolder = onContextAddFolder,
                 onContextAddRequest = onContextAddRequest,
+                onDeleteRequest = onDeleteRequest,
                 onSettings = onSettings,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
@@ -611,6 +638,7 @@ private fun FolderTreeBlock(
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
+    onDeleteRequest: (TreeSelection) -> Unit,
     onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
@@ -638,6 +666,7 @@ private fun FolderTreeBlock(
             listOf(
                 ContextMenuItem("新建文件夹") { onContextAddFolder(folderSel) },
                 ContextMenuItem("新建请求") { onContextAddRequest(folderSel) },
+                ContextMenuItem("删除") { onDeleteRequest(folderSel) },
                 ContextMenuItem("设置") { onSettings(folderSel) },
             )
         }
@@ -722,6 +751,7 @@ private fun FolderTreeBlock(
                 onBeginTreeRename = onBeginTreeRename,
                 onContextAddFolder = onContextAddFolder,
                 onContextAddRequest = onContextAddRequest,
+                onDeleteRequest = onDeleteRequest,
                 onSettings = onSettings,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,

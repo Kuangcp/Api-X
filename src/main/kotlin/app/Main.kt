@@ -268,6 +268,7 @@ fun App(onExitRequest: () -> Unit) {
                                 onContextAddRequest = { vm.onAddRequestAt(it) },
                                 onRename = { sel, newName -> when (sel) { is TreeSelection.Collection -> vm.repository.renameCollection(sel.id, newName); is TreeSelection.Folder -> vm.repository.renameFolder(sel.id, newName); is TreeSelection.Request -> vm.repository.renameRequest(sel.id, newName) }; vm.onRefreshTree() },
                                 onDelete = { deleteSelection(vm, it) },
+                                onCountFolderContents = { vm.repository.countFolderContents(it.id) },
                                 onSettings = { vm.setCollectionSettingsTarget(it); vm.setShowCollectionSettings(true) },
                                 folderAddEnabled = vm.repository.newFolderTarget(vm.treeSelection) != null,
                                 requestAddEnabled = vm.repository.newRequestTarget(vm.treeSelection) != null,

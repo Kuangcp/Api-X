@@ -482,6 +482,33 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /**
+     * 递归统计文件夹下的子文件夹数和请求数（含自身直系请求）。
+     * @return Pair(文件夹数, 请求数)
+     */
+    fun countFolderContents(folderId: String): Pair<Int, Int> {
+        var folderCount = 0
+        var requestCount = 0
+        conn.prepareStatement("SELECT id FROM folders WHERE parent_folder_id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                while (rs.next()) {
+                    folderCount++
+                    val sub = countFolderContents(rs.getString("id"))
+                    folderCount += sub.first
+                    requestCount += sub.second
+                }
+            }
+        }
+        conn.prepareStatement("SELECT COUNT(*) FROM requests WHERE folder_id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) requestCount += rs.getInt(1)
+            }
+        }
+        return folderCount to requestCount
+    }
+
+    /**
      * 在同一集合内移动文件夹：调整 [parent_folder_id] 与同级 [sort_order]。
      * 不可将文件夹拖入自身或其子孙下。
      */

@@ -6,6 +6,7 @@ JDK 21
 
 - `gradle run` 调试运行
 - `gradle createDistributable` 打包
+- 本地数据所在目录  ~/.local/share/api-x
 
 ## 功能列表
 
