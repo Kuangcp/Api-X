@@ -202,6 +202,7 @@ fun loadHistory(vm: AppViewModel, epochMs: Long?) {
         vm.setResponsePartialLine(null)
         vm.setStatusCodeText(response.statusCodeText); vm.setResponseTimeText(response.responseTimeText)
         vm.setResponseSizeText(response.responseSizeText); vm.setIsSseResponse(response.isSseResponse)
+        vm.setResponseSseEventCount(response.responseSseEventCount)
         vm.setRightTabIndex(response.rightTabIndex.coerceIn(0, 2))
         vm.setExchangeRequestPlainText(response.requestPlainText.ifBlank { "尚无已发送请求记录；��送��将显示实际发出的请求头与正文。" })
     }

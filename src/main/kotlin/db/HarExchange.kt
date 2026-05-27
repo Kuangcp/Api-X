@@ -40,6 +40,7 @@ data class HarSnapshot(
     val responseSizeLabel: String,
     val rightTabIndex: Int,
     val isSseResponse: Boolean,
+    val responseSseEventCountText: String = "",
 )
 
 private val harJson = kotlinx.serialization.json.Json {
@@ -230,6 +231,7 @@ object HarLogCodec {
         put("responseSizeText", JsonPrimitive(s.responseSizeLabel))
         put("rightTabIndex", JsonPrimitive(s.rightTabIndex))
         put("isSseResponse", JsonPrimitive(s.isSseResponse))
+        put("responseSseEventCountText", JsonPrimitive(s.responseSseEventCountText))
         put("requestHeadersFullText", JsonPrimitive(s.requestHeadersFullText))
         put("requestBodyText", JsonPrimitive(s.requestBody))
     }
@@ -263,6 +265,7 @@ object HarLogCodec {
             val sizeLabel = apiX?.get("responseSizeText")?.jsonPrimitive?.contentOrNull ?: ""
             val tab = apiX?.get("rightTabIndex")?.jsonPrimitive?.intOrNull ?: 0
             val sse = apiX?.get("isSseResponse")?.jsonPrimitive?.booleanOrNull ?: false
+            val sseEventCount = apiX?.get("responseSseEventCountText")?.jsonPrimitive?.contentOrNull ?: ""
             return CachedHttpResponse(
                 savedAtEpochMs = savedAt,
                 statusCodeText = if (status > 0) status.toString() else "",
@@ -271,6 +274,7 @@ object HarLogCodec {
                 responseBodyLines = bodyLines,
                 responseHeaderLines = headerLines,
                 isSseResponse = sse,
+                responseSseEventCount = sseEventCount,
                 rightTabIndex = tab,
                 requestPlainText = requestPlain,
             )

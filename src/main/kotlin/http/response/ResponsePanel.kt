@@ -71,6 +71,7 @@ fun ResponsePanel(
     statusCodeText: String,
     responseTimeText: String,
     responseSizeText: String,
+    responseSseEventCount: String = "",
     responseLines: List<String>,
     responsePartialLine: String?,
     responseHeaderLines: List<String>,
@@ -172,7 +173,11 @@ fun ResponsePanel(
                 )
                 Text(" ", fontSize = tab, color = metaColor)
                 Text("$responseTimeText ", fontSize = tab, color = metaColor)
-                Text(responseSizeText, fontSize = tab, color = metaColor)
+                if (responseSseEventCount.isNotBlank()) {
+                    Text("$responseSizeText $responseSseEventCount", fontSize = tab, color = metaColor)
+                } else {
+                    Text(responseSizeText, fontSize = tab, color = metaColor)
+                }
             }
             val iconTint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
             val iconBtnMod = Modifier.size(32.dp)

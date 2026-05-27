@@ -107,6 +107,8 @@ data class AppViewModel(
     val setResponseTimeText: (String) -> Unit,
     val responseSizeText: String,
     val setResponseSizeText: (String) -> Unit,
+    val responseSseEventCount: String,
+    val setResponseSseEventCount: (String) -> Unit,
     val responsePartialLine: String?,
     val setResponsePartialLine: (String?) -> Unit,
     val exchangeRequestPlainText: String,
@@ -230,6 +232,7 @@ fun rememberAppViewModel(
                 session.responseTimeText = cached.responseTimeText
                 session.responseSizeText = cached.responseSizeText
                 session.isSseResponse = cached.isSseResponse
+                session.responseSseEventCount = cached.responseSseEventCount
                 session.rightTabIndex = cached.rightTabIndex.coerceIn(0, 2)
                 session.exchangeRequestPlainText = cached.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" }
             } else {
@@ -250,6 +253,7 @@ fun rememberAppViewModel(
     val currentStatusCodeText: String = requestSessions[editorRequestId]?.statusCodeText ?: ""
     val currentResponseTimeText: String = requestSessions[editorRequestId]?.responseTimeText ?: ""
     val currentResponseSizeText: String = requestSessions[editorRequestId]?.responseSizeText ?: ""
+    val currentResponseSseEventCount: String = requestSessions[editorRequestId]?.responseSseEventCount ?: ""
     val currentResponsePartialLine: String? = requestSessions[editorRequestId]?.responsePartialLine
     val currentExchangeRequestPlainText: String = requestSessions[editorRequestId]?.exchangeRequestPlainText ?: "请先选择或创建一个请求"
     val currentRightTabIndex: Int = requestSessions[editorRequestId]?.rightTabIndex ?: 0
@@ -521,6 +525,7 @@ fun rememberAppViewModel(
         session.statusCodeText = ""
         session.responseTimeText = ""
         session.responseSizeText = ""
+        session.responseSseEventCount = ""
         applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
         val flusher = thread(isDaemon = true) {
             var lastTimerSec = -1L
@@ -549,6 +554,7 @@ fun rememberAppViewModel(
                 onStatusCode = { code -> EventQueue.invokeLater { if (session.control === control) session.statusCodeText = code.toString() } },
                 onResponseTime = { },
                 onProgress = { bytes -> EventQueue.invokeLater { if (session.control === control) session.responseSizeText = formatBytes(bytes) } },
+                onSseEventCount = { count -> EventQueue.invokeLater { if (session.control === control) session.responseSseEventCount = "${count}个事件" } },
                 onResponseHeaders = { lines -> EventQueue.invokeLater { if (session.control === control) { session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines) } } },
                 onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } }
             )
@@ -568,6 +574,7 @@ fun rememberAppViewModel(
                         responseBodyLines = control.snapshotRawBodyLines(), responseTimeMs = elapsed, responseSizeBytes = control.totalBytes,
                         responseTimeLabel = timeText, responseSizeLabel = formatBytes(control.totalBytes),
                         rightTabIndex = tabAtStart.coerceIn(0, 2), isSseResponse = control.responseWasSse,
+                        responseSseEventCountText = session.responseSseEventCount,
                     ))
                     if (editorRequestId == boundRequestId) {
                         session.historyEntries = RequestResponseStore.listHistory(boundRequestId)
@@ -617,6 +624,7 @@ fun rememberAppViewModel(
             responseBodyLines = control.snapshotRawBodyLines(), responseTimeMs = System.currentTimeMillis() - control.startTimeMs,
             responseSizeBytes = control.totalBytes, responseTimeLabel = timeText, responseSizeLabel = formatBytes(control.totalBytes),
             rightTabIndex = session.rightTabIndex.coerceIn(0, 2), isSseResponse = control.responseWasSse,
+            responseSseEventCountText = session.responseSseEventCount,
         ))
         session.workerThread?.interrupt()
         session.flusherThread?.interrupt()
@@ -653,6 +661,7 @@ fun rememberAppViewModel(
         statusCodeText = currentStatusCodeText, setStatusCodeText = { requestSessions[editorRequestId]?.statusCodeText = it },
         responseTimeText = currentResponseTimeText, setResponseTimeText = { requestSessions[editorRequestId]?.responseTimeText = it },
         responseSizeText = currentResponseSizeText, setResponseSizeText = { requestSessions[editorRequestId]?.responseSizeText = it },
+        responseSseEventCount = currentResponseSseEventCount, setResponseSseEventCount = { requestSessions[editorRequestId]?.responseSseEventCount = it },
         responsePartialLine = currentResponsePartialLine, setResponsePartialLine = { requestSessions[editorRequestId]?.responsePartialLine = it },
         exchangeRequestPlainText = currentExchangeRequestPlainText, setExchangeRequestPlainText = { requestSessions[editorRequestId]?.exchangeRequestPlainText = it },
         rightTabIndex = currentRightTabIndex, setRightTabIndex = { requestSessions[editorRequestId]?.rightTabIndex = it.coerceIn(0, 2) },

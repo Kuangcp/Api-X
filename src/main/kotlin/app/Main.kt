@@ -342,6 +342,7 @@ fun App(onExitRequest: () -> Unit) {
                         ResponsePanel(
                             modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), exchangeMetrics = vm.exchangeMetrics,
                             statusCodeText = vm.statusCodeText, responseTimeText = vm.responseTimeText, responseSizeText = vm.responseSizeText,
+                            responseSseEventCount = vm.responseSseEventCount,
                             responseLines = vm.responseLines, responsePartialLine = vm.responsePartialLine, responseHeaderLines = vm.responseHeaderLines,
                             requestPlainText = vm.exchangeRequestPlainText, rightTabIndex = vm.rightTabIndex, onRightTabIndexChange = { vm.setRightTabIndex(it.coerceIn(0, 2)) },
                             isSseResponse = vm.isSseResponse, isResponseLoading = vm.isLoading,
@@ -349,7 +350,7 @@ fun App(onExitRequest: () -> Unit) {
                             copyResponseBodyEnabled = vm.editorRequestId != null && responseBodyTextForClipboard(vm.responseLines, vm.responsePartialLine).isNotBlank(),
                             onCopyResponseBody = { val text = responseBodyTextForClipboard(vm.responseLines, vm.responsePartialLine); if (text.isNotBlank()) writeClipboardText(text) },
                             clearResponseLogsEnabled = vm.editorRequestId != null && !vm.isLoading,
-                            onClearResponseLogs = { val id = vm.editorRequestId ?: return@ResponsePanel; RequestResponseStore.clearResponseAndBenchLogs(id); vm.responseLines.clear(); vm.responseLines.add("响应结果会显示在这里"); vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)"); vm.setResponsePartialLine(null); vm.setStatusCodeText(""); vm.setResponseTimeText(""); vm.setResponseSizeText(""); vm.setIsSseResponse(false); vm.setExchangeRequestPlainText("尚无已发送请求记录；发送后将显示实际发出的请求头与正文。") },
+                            onClearResponseLogs = { val id = vm.editorRequestId ?: return@ResponsePanel; RequestResponseStore.clearResponseAndBenchLogs(id); vm.responseLines.clear(); vm.responseLines.add("响应结果会显示在这里"); vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)"); vm.setResponsePartialLine(null); vm.setStatusCodeText(""); vm.setResponseTimeText(""); vm.setResponseSizeText(""); vm.setResponseSseEventCount(""); vm.setIsSseResponse(false); vm.setExchangeRequestPlainText("尚无已发送请求记录；发送后将显示实际发出的请求头与正文。") },
                             jsonSyntaxHighlightEnabled = vm.jsonSyntaxHighlightEnabled, onJsonSyntaxHighlightEnabledChange = { vm.setJsonSyntaxHighlightEnabled(it) },
                             historyEntries = vm.historyEntries, selectedHistoryEpochMs = vm.selectedHistoryEpochMs,
                             onHistorySelected = { loadHistory(vm, it) },

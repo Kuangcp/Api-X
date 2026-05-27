@@ -226,7 +226,8 @@ fun sendRequestStreaming(
     onResponseTime: (Long) -> Unit,
     onProgress: (Long) -> Unit,
     onResponseHeaders: (List<String>) -> Unit,
-    onChunk: (String) -> Unit
+    onChunk: (String) -> Unit,
+    onSseEventCount: (Int) -> Unit = {},
 ) {
     try {
         if (control.cancelled) return
@@ -291,6 +292,8 @@ fun sendRequestStreaming(
             control.activeInput = stream
             if (isSse) {
                 var firstSseEventArrived = false
+                var sseEventCount = 0
+                var lastLineWasEmpty = true
                 BufferedReader(InputStreamReader(stream)).use { reader ->
                     while (true) {
                         if (control.cancelled || Thread.currentThread().isInterrupted) break
@@ -300,14 +303,27 @@ fun sendRequestStreaming(
                             break
                         }
                         val line = reader.readLine() ?: break
-                        if (!firstSseEventArrived && line.isNotBlank()) {
-                            firstSseEventArrived = true
-                            onResponseTime(System.currentTimeMillis() - control.startTimeMs)
+                        if (line.isEmpty()) {
+                            if (!lastLineWasEmpty) {
+                                sseEventCount++
+                                onSseEventCount(sseEventCount)
+                            }
+                            lastLineWasEmpty = true
+                        } else {
+                            if (!firstSseEventArrived) {
+                                firstSseEventArrived = true
+                                onResponseTime(System.currentTimeMillis() - control.startTimeMs)
+                            }
+                            lastLineWasEmpty = false
                         }
                         onChunk("$line\n")
                         control.totalBytes += (line + "\n").toByteArray(StandardCharsets.UTF_8).size.toLong()
                         onProgress(control.totalBytes)
                     }
+                }
+                if (!lastLineWasEmpty && firstSseEventArrived) {
+                    sseEventCount++
+                    onSseEventCount(sseEventCount)
                 }
                 if (!control.cancelled) onChunk("\n${LocalTime.now().format(TIME_FORMATTER)} [SSE 连接已结束]")
             } else {
