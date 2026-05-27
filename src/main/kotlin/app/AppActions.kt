@@ -49,18 +49,35 @@ fun importCollection(vm: AppViewModel) {
 
 fun importCurl(vm: AppViewModel) {
     try {
-        val activeId = vm.editorRequestId
-        if (activeId == null) { showToast(vm, "请先在编辑器中打开一个请求后再导入 cURL"); return }
         val clipboardText = readClipboardText()
         val parsed = parseCurlCommand(clipboardText)
         vm.onSaveEditor()
-        // 仍在当前请求上，用于 cURL 未带 URL 时的回退
-        val urlIfCurlUrlBlank = vm.url
-        val newId = vm.repository.createRequestBelow(activeId) ?: throw IllegalStateException("无法在当前请求下新建条目")
-        vm.onRefreshTree()
-        val placed = vm.repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
-        vm.setExpandedCollectionIds(vm.expandedCollectionIds + placed.collectionId)
-        if (placed.folderId != null) vm.setExpandedFolderIds(vm.expandedFolderIds + placed.folderId)
+
+        val newId: String
+        val urlIfCurlUrlBlank: String
+
+        val treeSel = vm.treeSelection
+        if (treeSel is TreeSelection.Folder) {
+            val target = vm.repository.newRequestTarget(treeSel)
+            if (target == null) { showToast(vm, "无法在选中文件夹下创建请求"); return }
+            val (cid, fid) = target
+            newId = vm.repository.createRequest(cid, fid, "新请求")
+            vm.onRefreshTree()
+            val placed = vm.repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
+            vm.setExpandedCollectionIds(vm.expandedCollectionIds + placed.collectionId)
+            if (fid != null) vm.setExpandedFolderIds(vm.expandedFolderIds + fid)
+            urlIfCurlUrlBlank = ""
+        } else {
+            val activeId = vm.editorRequestId
+            if (activeId == null) { showToast(vm, "请先在编辑器中打开一个请求后再导入 cURL"); return }
+            urlIfCurlUrlBlank = vm.url
+            newId = vm.repository.createRequestBelow(activeId) ?: throw IllegalStateException("无法在当前请求下新建条目")
+            vm.onRefreshTree()
+            val placed = vm.repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
+            vm.setExpandedCollectionIds(vm.expandedCollectionIds + placed.collectionId)
+            if (placed.folderId != null) vm.setExpandedFolderIds(vm.expandedFolderIds + placed.folderId)
+        }
+
         val rawUrl = parsed.url.ifBlank { urlIfCurlUrlBlank }
         if (rawUrl.isNotBlank()) {
             try {
@@ -85,6 +102,17 @@ fun importCurl(vm: AppViewModel) {
             bodyForEditor
         )
         vm.setTreeSelection(TreeSelection.Request(newId))
+
+        // 如果 curl 的 Header 中没有认证相关数据，默认将 Auth Type 设为从父级继承
+        val authHeaderKeys = listOf("authorization", "proxy-authorization", "x-api-key", "api-key", "x-auth-token")
+        val hasAuthHeader = parsed.headers.any { h ->
+            val key = h.substringBefore(':').trim().lowercase()
+            authHeaderKeys.any { key.startsWith(it) }
+        }
+        if (!hasAuthHeader) {
+            vm.setAuth(tree.PostmanAuth(type = "inherit"))
+        }
+
         vm.repository.saveRequestEditorFields(newId, vm.method, vm.url, vm.headersText, vm.paramsText, vm.bodyText, vm.auth)
         showToast(vm, "已新建请求并导入剪贴板中的 cURL")
         vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)")
