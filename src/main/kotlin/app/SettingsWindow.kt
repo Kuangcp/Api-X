@@ -23,6 +23,7 @@ import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.RadioButton
 import androidx.compose.material.Slider
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.Text
@@ -100,6 +101,9 @@ private fun SettingsDialogBody(
     var httpProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpProxyUrl) }
     var httpsProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpsProxyUrl) }
     var bypassText by remember { mutableStateOf(AppSettingsStore.snapshot().bypassRegexLines) }
+    var httpProtocolVersion by remember {
+        mutableStateOf(AppSettingsStore.snapshot().httpProtocolVersion)
+    }
     var errorText by remember { mutableStateOf<String?>(null) }
 
     val outlinedFieldColors = TextFieldDefaults.outlinedTextFieldColors(
@@ -294,6 +298,16 @@ private fun SettingsDialogBody(
                             singleLine = true,
                             colors = outlinedFieldColors,
                         )
+                        Text(
+                            "HTTP 协议版本",
+                            style = MaterialTheme.typography.subtitle2,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ProtocolOption("自动", "", httpProtocolVersion) { httpProtocolVersion = it }
+                            ProtocolOption("HTTP/1.1", "HTTP_1_1", httpProtocolVersion) { httpProtocolVersion = it }
+                            ProtocolOption("HTTP/2", "HTTP_2", httpProtocolVersion) { httpProtocolVersion = it }
+                        }
                     }
                     else -> {
                         Text(
@@ -375,6 +389,7 @@ private fun SettingsDialogBody(
                             httpProxyUrl = httpProxy.trim(),
                             httpsProxyUrl = httpsProxy.trim(),
                             bypassRegexLines = bypassText.trimEnd(),
+                            httpProtocolVersion = httpProtocolVersion,
                         ),
                     )
                 },
@@ -447,4 +462,27 @@ private fun validateBypassLines(text: String): String? {
         }
     }
     return null
+}
+
+@Composable
+private fun ProtocolOption(
+    label: String,
+    value: String,
+    selectedValue: String,
+    onSelect: (String) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.clickable { onSelect(value) },
+    ) {
+        RadioButton(
+            selected = selectedValue == value,
+            onClick = { onSelect(value) },
+        )
+        Text(
+            text = label,
+            color = MaterialTheme.colors.onSurface,
+            style = MaterialTheme.typography.body2,
+        )
+    }
 }

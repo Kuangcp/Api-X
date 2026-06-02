@@ -239,6 +239,14 @@ fun sendRequestStreaming(
         val client = HttpClient.newBuilder()
             .connectTimeout(Duration.ofMillis(connectMs))
             .proxy(ApiXProxySelector)
+            .apply {
+                val v = when (s.httpProtocolVersion) {
+                    "HTTP_1_1" -> HttpClient.Version.HTTP_1_1
+                    "HTTP_2" -> HttpClient.Version.HTTP_2
+                    else -> null
+                }
+                if (v != null) version(v)
+            }
             .build()
         val builder = HttpRequest.newBuilder()
             .uri(URI.create(url.trim()))

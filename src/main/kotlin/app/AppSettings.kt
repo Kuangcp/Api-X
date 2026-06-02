@@ -23,6 +23,8 @@ data class AppSettings(
     val httpsProxyUrl: String = "",
     /** 每行一条正则，匹配请求主机名则直连（不走代理）。 */
     val bypassRegexLines: String = "",
+    /** HTTP 协议版本：空/"" 为自动协商，或 "HTTP_1_1"、"HTTP_2"。 */
+    val httpProtocolVersion: String = "",
 ) {
     companion object {
         private const val KEY_FONT_FAMILY = "ui.fontFamily"
@@ -37,6 +39,7 @@ data class AppSettings(
         private const val KEY_HTTP_PROXY = "proxy.http"
         private const val KEY_HTTPS_PROXY = "proxy.https"
         private const val KEY_BYPASS = "proxy.bypassRegex"
+        private const val KEY_HTTP_PROTOCOL = "http.protocolVersion"
 
         private fun path() = AppPaths.dataDirectory().resolve("app-settings.properties")
 
@@ -66,6 +69,9 @@ data class AppSettings(
                     httpProxyUrl = props.getProperty(KEY_HTTP_PROXY, "").trim(),
                     httpsProxyUrl = props.getProperty(KEY_HTTPS_PROXY, "").trim(),
                     bypassRegexLines = props.getProperty(KEY_BYPASS, "").trim(),
+                    httpProtocolVersion = props.getProperty(KEY_HTTP_PROTOCOL, "").let {
+                        if (it in listOf("", "HTTP_1_1", "HTTP_2")) it else ""
+                    },
                 )
             }.getOrElse { AppSettings() }
         }
@@ -83,6 +89,7 @@ data class AppSettings(
                 props.setProperty(KEY_HTTP_PROXY, settings.httpProxyUrl)
                 props.setProperty(KEY_HTTPS_PROXY, settings.httpsProxyUrl)
                 props.setProperty(KEY_BYPASS, settings.bypassRegexLines)
+                props.setProperty(KEY_HTTP_PROTOCOL, settings.httpProtocolVersion)
                 Files.newOutputStream(path()).use { out ->
                     props.store(out, "api-x app settings")
                 }
