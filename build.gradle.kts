@@ -44,16 +44,17 @@ compose.desktop {
         mainClass = "app.MainKt"
         jvmArgs += listOf(
             "-Xms256m",
-            "-Xmx700m",
+            "-Xmx512m",
             "-Xss512k",
             "-XX:MaxDirectMemorySize=512M",
-            "-XX:+UseG1GC",
+            "-XX:+UseShenandoahGC",
             "-XX:NativeMemoryTracking=detail",
             // Skiko：OPENGL 由 GPU 合成，列表滚动更顺滑；若需对比内存/RSS 可临时改为 SOFTWARE / SOFTWARE_FAST
             "-Dskiko.renderApi=OPENGL",
         )
 
         nativeDistributions {
+            // javaHome = file("/home/zk/.sdkman/candidates/java/21.0.11-tem")
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "api-x"
             packageVersion = "1.0.0"
