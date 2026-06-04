@@ -70,6 +70,9 @@ private fun envItemColor(name: String, isDarkTheme: Boolean): Color? {
     if (lower.contains("test") || lower.contains("测试")) {
         return if (isDarkTheme) Color(0xFF81C784) else Color(0xFF2E7D32)
     }
+    if (lower.contains("local") || lower.contains("本地")) {
+        return if (isDarkTheme) Color(0xFF42A5F5) else Color(0xFF1565C0)
+    }
     return null
 }
 
@@ -124,6 +127,9 @@ fun WindowScope.RequestTopBar(
     val activeLabel = environmentsState.activeEnvironment()?.name?.trim()?.takeIf { it.isNotEmpty() }
         ?: "无环境"
     val envButtonText = "环境: $activeLabel"
+    val activeEnvColor = environmentsState.activeEnvironment()?.name?.let {
+        envItemColor(it, isDarkTheme)
+    }
 
     val isWindowMaximized = mainWindowState.placement == WindowPlacement.Maximized ||
         mainWindowState.placement == WindowPlacement.Fullscreen
@@ -255,7 +261,8 @@ fun WindowScope.RequestTopBar(
                                     envButtonText,
                                     maxLines = 1,
                                     style = MaterialTheme.typography.body2,
-                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
+                                    color = activeEnvColor
+                                        ?: MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.high),
                                 )
                                 Icon(
                                     imageVector = Icons.Filled.ArrowDropDown,
