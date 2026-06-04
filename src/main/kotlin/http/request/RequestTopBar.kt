@@ -277,7 +277,17 @@ fun WindowScope.RequestTopBar(
                             onDismissRequest = { envMenuExpanded = false },
                         ) {
                             if (environmentsState.environments.isNotEmpty()) {
+                                var lastPrefix: String? = null
                                 for (env in environmentsState.environments) {
+                                    val prefix = env.name
+                                        .substringBefore(" ")
+                                        .substringBefore("-")
+                                        .trim()
+                                        .takeIf { it.isNotEmpty() && it != env.name }
+                                    if (prefix != null && lastPrefix != null && prefix != lastPrefix) {
+                                        Divider()
+                                    }
+                                    lastPrefix = prefix
                                     EnvironmentDropdownMenuItem(
                                         onClick = {
                                             onActiveEnvironmentChange(env.id)
