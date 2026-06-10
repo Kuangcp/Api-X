@@ -15,7 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -54,6 +54,24 @@ import http.ExchangeFontMetrics
 import http.HttpExchangeErrorStatusMark
 import http.contentTypeHeaderIndicatesJson
 import http.formatAndHighlightJsonOrNull
+import kotlinx.coroutines.delay
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.OutlinedTextField
+import androidx.compose.material.TextFieldDefaults
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 
 /** 响应头展示用：按第一个 `:` 拆成 name / value（value 内可含冒号）。 */
 private fun splitResponseHeaderLine(line: String): Pair<String, String> {
@@ -131,8 +149,27 @@ fun ResponsePanel(
     val jsonBodyScrollState = rememberScrollState()
     val requestScrollState = rememberScrollState()
 
-    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonAnnotatedBody) {
-        if (isSseResponse && rightTabIndex == 0 && jsonAnnotatedBody == null) {
+    var searchActive by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+    var currentMatchIndex by remember { mutableIntStateOf(0) }
+    val searchFocusRequester = remember { FocusRequester() }
+
+    val matchingLineIndices = remember(linesSnapshot, searchQuery) {
+        if (searchQuery.isBlank()) emptyList()
+        else linesSnapshot.mapIndexedNotNull { index, line ->
+            if (line.contains(searchQuery, ignoreCase = true)) index else null
+        }
+    }
+    val totalMatches = matchingLineIndices.size
+
+    fun navigateToMatch(direction: Int) {
+        if (matchingLineIndices.isEmpty()) return
+        val next = (currentMatchIndex + direction + matchingLineIndices.size) % matchingLineIndices.size
+        currentMatchIndex = next
+    }
+
+    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonAnnotatedBody, searchActive) {
+        if (!searchActive && isSseResponse && rightTabIndex == 0 && jsonAnnotatedBody == null) {
             val total = responseLines.size + if (responsePartialLine != null) 1 else 0
             if (total > 0) {
                 responseListState.scrollToItem(total - 1)
@@ -140,8 +177,29 @@ fun ResponsePanel(
         }
     }
 
+    LaunchedEffect(currentMatchIndex, searchQuery, searchActive) {
+        if (searchActive && searchQuery.isNotBlank() && matchingLineIndices.isNotEmpty()) {
+            if (currentMatchIndex < matchingLineIndices.size) {
+                responseListState.scrollToItem(matchingLineIndices[currentMatchIndex])
+            }
+        }
+    }
+
     Column(
-        modifier = modifier.fillMaxHeight().fillMaxWidth().padding(start = 6.dp),
+        modifier = modifier
+            .fillMaxHeight()
+            .fillMaxWidth()
+            .padding(start = 6.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown &&
+                    (event.isCtrlPressed || event.isMetaPressed) &&
+                    event.key == Key.F
+                ) {
+                    searchActive = !searchActive
+                    if (!searchActive) searchQuery = ""
+                    true
+                } else false
+            },
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Row(
@@ -182,6 +240,17 @@ fun ResponsePanel(
             val iconTint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
             val iconBtnMod = Modifier.size(32.dp)
             val iconMod = Modifier.size(17.dp)
+            IconButton(
+                onClick = { searchActive = !searchActive; if (!searchActive) searchQuery = "" },
+                modifier = iconBtnMod,
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = "搜索响应正文",
+                    modifier = iconMod,
+                    tint = if (searchActive) MaterialTheme.colors.primary else iconTint,
+                )
+            }
             IconButton(
                 onClick = onCopyResponseBody,
                 enabled = copyResponseBodyEnabled,
@@ -447,6 +516,89 @@ fun ResponsePanel(
                                     ),
                                 )
                             }
+                            if (searchActive) {
+                                LaunchedEffect(Unit) {
+                                    delay(50)
+                                    searchFocusRequester.requestFocus()
+                                }
+                                val searchTint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                                val searchTintDim = searchTint.copy(alpha = 0.3f)
+                                val searchBg = MaterialTheme.colors.onSurface.copy(alpha = 0.06f)
+                                val searchBorder = MaterialTheme.colors.onSurface.copy(alpha = 0.2f)
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(searchBg)
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    OutlinedTextField(
+                                        value = searchQuery,
+                                        onValueChange = { searchQuery = it; currentMatchIndex = 0 },
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .focusRequester(searchFocusRequester),
+                                        placeholder = {
+                                            Text(
+                                                "搜索...",
+                                                fontSize = exchangeMetrics.tab,
+                                                color = MaterialTheme.colors.onSurface.copy(alpha = 0.5f),
+                                            )
+                                        },
+                                        singleLine = true,
+                                        colors = TextFieldDefaults.outlinedTextFieldColors(
+                                            textColor = MaterialTheme.colors.onSurface,
+                                            cursorColor = MaterialTheme.colors.primary,
+                                            focusedBorderColor = MaterialTheme.colors.primary.copy(alpha = 0.6f),
+                                            unfocusedBorderColor = searchBorder,
+                                            backgroundColor = Color.Transparent,
+                                        ),
+                                    )
+                                    Text(
+                                        text = if (totalMatches > 0) "${currentMatchIndex + 1}/$totalMatches" else "0/0",
+                                        fontSize = exchangeMetrics.tab,
+                                        color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                        modifier = Modifier.padding(horizontal = 6.dp),
+                                    )
+                                    IconButton(
+                                        onClick = { navigateToMatch(-1) },
+                                        modifier = Modifier.size(28.dp),
+                                        enabled = totalMatches > 0,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowUp,
+                                            contentDescription = "上一个匹配",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (totalMatches > 0) searchTint else searchTintDim,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { navigateToMatch(1) },
+                                        modifier = Modifier.size(28.dp),
+                                        enabled = totalMatches > 0,
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = "下一个匹配",
+                                            modifier = Modifier.size(18.dp),
+                                            tint = if (totalMatches > 0) searchTint else searchTintDim,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { searchActive = false; searchQuery = "" },
+                                        modifier = Modifier.size(28.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.Close,
+                                            contentDescription = "关闭搜索",
+                                            modifier = Modifier.size(16.dp),
+                                            tint = searchTint,
+                                        )
+                                    }
+                                }
+                            }
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
@@ -479,9 +631,26 @@ fun ResponsePanel(
                                                 .padding(end = 12.dp),
                                             state = responseListState,
                                         ) {
-                                            items(responseLines) { line ->
+                                            itemsIndexed(responseLines) { index, line ->
+                                                val isMatch = searchActive && searchQuery.isNotBlank() &&
+                                                    line.contains(searchQuery, ignoreCase = true)
+                                                val isCurrentMatch = isMatch &&
+                                                    matchingLineIndices.getOrNull(currentMatchIndex) == index
                                                 Text(
                                                     line,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .then(
+                                                            if (isCurrentMatch) {
+                                                                Modifier.background(
+                                                                    MaterialTheme.colors.primary.copy(alpha = 0.25f)
+                                                                )
+                                                            } else if (isMatch) {
+                                                                Modifier.background(
+                                                                    MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+                                                                )
+                                                            } else Modifier
+                                                        ),
                                                     fontSize = exchangeMetrics.body,
                                                     color = MaterialTheme.colors.onSurface,
                                                 )
