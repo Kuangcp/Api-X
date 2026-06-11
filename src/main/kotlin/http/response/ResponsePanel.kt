@@ -54,7 +54,10 @@ import http.ExchangeFontMetrics
 import http.HttpExchangeErrorStatusMark
 import http.contentTypeHeaderIndicatesJson
 import http.formatAndHighlightJsonOrNull
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.TextFieldDefaults
@@ -148,6 +151,7 @@ fun ResponsePanel(
     }
     val jsonBodyScrollState = rememberScrollState()
     val requestScrollState = rememberScrollState()
+    val scope = rememberCoroutineScope()
 
     var searchActive by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
@@ -680,6 +684,37 @@ fun ResponsePanel(
                             }
                         }
                     }
+                }
+                IconButton(
+                    onClick = {
+                        when (rightTabIndex) {
+                            0 -> {
+                                if (jsonAnnotatedBody != null) {
+                                    scope.launch { jsonBodyScrollState.animateScrollTo(0) }
+                                } else {
+                                    scope.launch { responseListState.animateScrollToItem(0) }
+                                }
+                            }
+                            1 -> scope.launch { responseHeadersListState.animateScrollToItem(0) }
+                            2 -> scope.launch { requestScrollState.animateScrollTo(0) }
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(4.dp)
+                        .size(32.dp)
+                        .clip(CircleShape)
+                        .background(
+                            MaterialTheme.colors.primary.copy(alpha = 0.85f),
+                            CircleShape
+                        ),
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.KeyboardArrowUp,
+                        contentDescription = "回到顶部",
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colors.onPrimary,
+                    )
                 }
             }
         }
