@@ -651,16 +651,22 @@ fun ResponsePanel(
                                                                 )
                                                             } else Modifier
                                                         ),
-                                                    fontSize = exchangeMetrics.body,
-                                                    color = MaterialTheme.colors.onSurface,
+                                                    style = TextStyle(
+                                                        fontSize = exchangeMetrics.body,
+                                                        lineHeight = exchangeMetrics.body * 0.85f,
+                                                        color = MaterialTheme.colors.onSurface,
+                                                    ),
                                                 )
                                             }
                                             responsePartialLine?.let { partial ->
                                                 item("partial") {
                                                     Text(
                                                         partial,
-                                                        fontSize = exchangeMetrics.body,
-                                                        color = MaterialTheme.colors.onSurface,
+                                                        style = TextStyle(
+                                                            fontSize = exchangeMetrics.body,
+                                                            lineHeight = exchangeMetrics.body * 0.85f,
+                                                            color = MaterialTheme.colors.onSurface,
+                                                        ),
                                                     )
                                                 }
                                             }

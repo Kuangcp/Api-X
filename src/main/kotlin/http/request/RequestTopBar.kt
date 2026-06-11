@@ -287,6 +287,13 @@ fun WindowScope.RequestTopBar(
                                     if (prefix != null && lastPrefix != null && prefix != lastPrefix) {
                                         Divider()
                                     }
+                                    val hidePrefix = prefix != null && prefix == lastPrefix
+                                    val displayName =
+                                        if (hidePrefix) {
+                                            env.name.substringAfter("-").trim()
+                                        } else {
+                                            env.name
+                                        }
                                     lastPrefix = prefix
                                     EnvironmentDropdownMenuItem(
                                         onClick = {
@@ -295,7 +302,8 @@ fun WindowScope.RequestTopBar(
                                         },
                                     ) {
                                         Text(
-                                            env.name.ifBlank { "(未命名)" },
+                                            displayName.ifBlank { "(未命名)" },
+                                            modifier = if (hidePrefix) Modifier.padding(start = 36.dp) else Modifier,
                                             style = MaterialTheme.typography.body2,
                                             maxLines = 1,
                                             color = envItemColor(env.name, isDarkTheme)

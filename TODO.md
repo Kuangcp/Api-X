@@ -21,18 +21,14 @@ request body json高亮 格式化
 
 1. 多标签页（Multi-Tab）
 现有问题是每次只能编辑一个请求，切换时当前编辑状态会丢失。增加 Tab 栏可以同时打开多个请求，类似 Postman / Insomnia 的工作方式。
-- 
-请求树双击/中键在新 Tab 打开
-- 
 Tab 可关闭、拖拽排序
-- 
 每个 Tab 独立维护未保存的编辑状态
+
 2. 代码片段生成（Code Snippet）
 将当前请求一键导出为代码，常见场景：前端对接、后端测试、分享给同事。
-- 
 支持语言：cURL（已有）、Python（requests）、JavaScript（fetch）、Java（OkHttp）、Go、Shell
-- 
 导出格式可配置（是否包含认证信息、headers 等）
+
 3. 变量自动补全
 在 URL、Headers、Body、Params 等任意输入 {{ 时弹出当前环境的变量列表供选择，减少记忆和手误。
 
@@ -50,6 +46,7 @@ Tab 可关闭、拖拽排序
 
 - [X] 响应区域 默认展示Raw格式, 考虑性能问题, 需要手动切换到 格式化高亮形式
 - [X] 需要加一个 Request 的tab 展示实际发送请求的request内容, 因为左侧现在有变量和勾选的机制, 不知道实际的请求情况
+- 需要支持搜索定位 
 
 
 > benchmark 功能
@@ -67,3 +64,40 @@ Tab 可关闭、拖拽排序
 request目录下的bench目录 存放的是: 压测配置json(参数: 并发数, 总次数, 结果报表: 所有RT值, P50 P75 P90 P99,最小 最大,平均 的RT统计值, QPS, TPS), 包含压测抛出来的的所有har
 
 
+> 架构与工程
+- **缺少自动化测试**：项目完全没有测试（src/test/ 不存在），建议引入 kotlin.test / JUnit5
+为核心逻辑（CollectionRepository、EnvironmentSubstitute、CurlParser 等）编写单元测试
+- **AppViewModel 过于臃肿**：单一 Composable 持有全部应用状态（tab、session、环境、设置等），建议拆分为多个小
+ViewModel（TabViewModel、SessionViewModel、EnvironmentViewModel）
+- **无依赖注入**：手动管理所有依赖，建议引入简单 DI（手动构造或 koin）降低耦合
+- **无日志框架集成**：TODO.md 提到 `kotlin-logging + Logback` 但 build.gradle.kts 中未配置
+- **SQLite 无连接池/WAL 模式**：单连接直连，大数据量下性能瓶颈，建议开启 WAL 模式并复用连接
+
+> 构建与依赖
+- **gradlew 与 AGENTS.md 冲突**：repo 包含 gradlew 但 AGENTS.md 禁止使用，建议删除 gradlew/gradlew.bat 避免混淆
+- **material-icons-extended 版本未与 Compose 对齐**：1.7.3 可能滞后于 Compose 1.10.3，建议统一版本管理
+- **缺少 Kotlin 编译器严格检查**：未开启 `allWarningsAsErrors`、`optIn` 等编译选项
+
+> 性能
+- **大响应体内存风险**：响应内容全部在内存中，超大响应（>500MB）可能导致 OOM，建议流式写入临时文件
+- **Tree 无虚拟化**：集合/请求量大时 LazyColumn 仍会创建大量节点，建议启用 `key` + 适当分页
+- **状态粒度过粗导致不必要的重组**：`AppViewModel` 整体作为单个 `mutableStateOf`，任何字段变化触发全量重组，
+建议拆分为多个 `mutableStateOf`
+
+> UI/UX
+- **无国际化（i18n）**：所有 UI 字符串硬编码为中文，建议抽取为资源文件，便于后续多语言
+- **无可访问性支持**：缺少 contentDescription、focusable 等属性，屏幕阅读器无法使用
+- **无键盘树导航**：树形列表不支持键盘上下键展开/折叠，仅支持鼠标拖拽
+- **快捷键无统一管理**：快捷键分散在多个文件，建议集中到单一文件中管理
+
+> 代码质量
+- **app/ 包过于膨胀**：23 个文件平铺在 app/ 包下，建议按功能拆分子包（app/viewmodel/、app/dialog/、app/settings/
+等）
+- **业务逻辑与 UI 混合**：多处 Composable 函数中内联业务逻辑（如导入/导出解析），建议抽取到普通类中
+- **字符串散落在代码中**：无资源文件或常量类，不利于维护和翻译
+- **无输入校验**：URL、Header、Body 等输入在发送前无格式校验，无效请求直接发送
+
+> 可靠性
+- **无崩溃恢复机制**：Composable 异常无 ErrorBoundary，整个应用崩溃
+- **SQLite 迁移无框架**：当前版本号+手动 SQL 方式，无 Flyway/Liquibase 等迁移框架，协作时易出错
+- **无请求超时兜底**：HttpClient 未显式设置 connectTimeout / requestTimeout，极端网络下可能永久阻塞
