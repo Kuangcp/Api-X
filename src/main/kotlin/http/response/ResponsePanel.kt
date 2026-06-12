@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -46,8 +47,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import db.HistoryEntry
 import http.ExchangeFontMetrics
@@ -636,31 +640,49 @@ fun ResponsePanel(
                                             state = responseListState,
                                         ) {
                                             itemsIndexed(responseLines) { index, line ->
-                                                val isMatch = searchActive && searchQuery.isNotBlank() &&
-                                                    line.contains(searchQuery, ignoreCase = true)
-                                                val isCurrentMatch = isMatch &&
-                                                    matchingLineIndices.getOrNull(currentMatchIndex) == index
-                                                Text(
-                                                    line,
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .then(
-                                                            if (isCurrentMatch) {
-                                                                Modifier.background(
-                                                                    MaterialTheme.colors.primary.copy(alpha = 0.25f)
-                                                                )
-                                                            } else if (isMatch) {
-                                                                Modifier.background(
-                                                                    MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
-                                                                )
-                                                            } else Modifier
+                                                if (line.isBlank()) {
+                                                    Spacer(Modifier.fillMaxWidth().height(8.dp))
+                                                } else {
+                                                    val isDataLine = line.startsWith("data:")
+                                                    val displayLine =
+                                                        if (isDataLine) "data:  ${line.removePrefix("data:").trimStart()}" else line
+                                                    val isMatch = searchActive && searchQuery.isNotBlank() &&
+                                                        line.contains(searchQuery, ignoreCase = true)
+                                                    val isCurrentMatch = isMatch &&
+                                                        matchingLineIndices.getOrNull(currentMatchIndex) == index
+                                                    Text(
+                                                        buildAnnotatedString {
+                                                            if (isDataLine) {
+                                                                withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
+                                                                    append("data:  ")
+                                                                }
+                                                                withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
+                                                                    append(line.removePrefix("data:").trimStart())
+                                                                }
+                                                            } else {
+                                                                append(displayLine)
+                                                            }
+                                                        },
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .then(
+                                                                if (isCurrentMatch) {
+                                                                    Modifier.background(
+                                                                        MaterialTheme.colors.primary.copy(alpha = 0.25f)
+                                                                    )
+                                                                } else if (isMatch) {
+                                                                    Modifier.background(
+                                                                        MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+                                                                    )
+                                                                } else Modifier
+                                                            ),
+                                                        style = TextStyle(
+                                                            fontSize = exchangeMetrics.body,
+                                                            lineHeight = exchangeMetrics.body * 1.35f,
+                                                            color = MaterialTheme.colors.onSurface,
                                                         ),
-                                                    style = TextStyle(
-                                                        fontSize = exchangeMetrics.body,
-                                                        lineHeight = exchangeMetrics.body * 0.85f,
-                                                        color = MaterialTheme.colors.onSurface,
-                                                    ),
-                                                )
+                                                    )
+                                                }
                                             }
                                             responsePartialLine?.let { partial ->
                                                 item("partial") {
@@ -668,7 +690,7 @@ fun ResponsePanel(
                                                         partial,
                                                         style = TextStyle(
                                                             fontSize = exchangeMetrics.body,
-                                                            lineHeight = exchangeMetrics.body * 0.85f,
+                                                            lineHeight = exchangeMetrics.body * 1.35f,
                                                             color = MaterialTheme.colors.onSurface,
                                                         ),
                                                     )
