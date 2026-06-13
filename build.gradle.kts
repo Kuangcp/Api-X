@@ -32,6 +32,7 @@ dependencies {
     // (in a separate module for demo project and in testMain).
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
+    implementation(compose.components.resources)
     implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
     implementation("org.xerial:sqlite-jdbc:3.47.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
@@ -54,7 +55,6 @@ compose.desktop {
         )
 
         nativeDistributions {
-            // javaHome = file("/home/zk/.sdkman/candidates/java/21.0.11-tem")
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "api-x"
             packageVersion = "1.0.0"
@@ -73,5 +73,12 @@ compose.desktop {
                 }
             }
         }
+    }
+}
+
+// 开启警告 强报错
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
+    compilerOptions {
+        allWarningsAsErrors.set(true)
     }
 }

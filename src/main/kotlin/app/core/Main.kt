@@ -51,7 +51,9 @@ import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
-import androidx.compose.ui.res.painterResource
+import com.github.kuangcp.api_x.generated.resources.Res
+import com.github.kuangcp.api_x.generated.resources.app_icon
+import org.jetbrains.compose.resources.painterResource
 import db.AppPaths
 import db.CollectionRepository
 import db.RequestResponseStore
@@ -96,10 +98,7 @@ import java.awt.event.KeyEvent
 @Composable
 fun App(onExitRequest: () -> Unit) {
     val loaded = remember { WindowPrefs.load() }
-    val hasWindowIcon = remember {
-        AppClasspathAnchor::class.java.classLoader?.getResource("app-icon.png") != null
-    }
-    val windowIcon = if (hasWindowIcon) painterResource("app-icon.png") else null
+    val windowIcon = painterResource(Res.drawable.app_icon)
     val windowState = rememberWindowState(
         position = if (loaded.xDp != null && loaded.yDp != null) {
             WindowPosition.Absolute(loaded.xDp.dp, loaded.yDp.dp)

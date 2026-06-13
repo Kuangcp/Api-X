@@ -2,10 +2,12 @@
 
 [中文说明](Readme-CN.md)
 
-JDK 21 + Gradle 8.11 + Kotlin 2.3.20 + compose 1.10.3
+JDK 21 + Gradle 8.11 + Kotlin 2.3.20 + compose 1.11.1
 
 - `gradle run` — run in development / debug
 - `gradle createDistributable` — build a distributable package
+
+[Compatibility and versions﻿](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
 
 ## Features
 

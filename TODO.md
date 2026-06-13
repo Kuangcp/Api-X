@@ -74,24 +74,24 @@ ViewModel（TabViewModel、SessionViewModel、EnvironmentViewModel）
 - **SQLite 无连接池/WAL 模式**：单连接直连，大数据量下性能瓶颈，建议开启 WAL 模式并复用连接
 
 > 构建与依赖
-- **gradlew 与 AGENTS.md 冲突**：repo 包含 gradlew 但 AGENTS.md 禁止使用，建议删除 gradlew/gradlew.bat 避免混淆
 - **material-icons-extended 版本未与 Compose 对齐**：1.7.3 可能滞后于 Compose 1.10.3，建议统一版本管理
 - **缺少 Kotlin 编译器严格检查**：未开启 `allWarningsAsErrors`、`optIn` 等编译选项
 
 > 性能
 - **大响应体内存风险**：响应内容全部在内存中，超大响应（>500MB）可能导致 OOM，建议流式写入临时文件
 - **Tree 无虚拟化**：集合/请求量大时 LazyColumn 仍会创建大量节点，建议启用 `key` + 适当分页
-- **状态粒度过粗导致不必要的重组**：`AppViewModel` 整体作为单个 `mutableStateOf`，任何字段变化触发全量重组，
+- [X] **状态粒度过粗导致不必要的重组**：`AppViewModel` 整体作为单个 `mutableStateOf`，任何字段变化触发全量重组，
 建议拆分为多个 `mutableStateOf`
 
-> UI/UX
-- **无国际化（i18n）**：所有 UI 字符串硬编码为中文，建议抽取为资源文件，便于后续多语言
-- **无可访问性支持**：缺少 contentDescription、focusable 等属性，屏幕阅读器无法使用
-- **无键盘树导航**：树形列表不支持键盘上下键展开/折叠，仅支持鼠标拖拽
-- **快捷键无统一管理**：快捷键分散在多个文件，建议集中到单一文件中管理
+
+    > UI/UX
+    - **无国际化（i18n）**：所有 UI 字符串硬编码为中文，建议抽取为资源文件，便于后续多语言
+    - **无可访问性支持**：缺少 contentDescription、focusable 等属性，屏幕阅读器无法使用
+    - **无键盘树导航**：树形列表不支持键盘上下键展开/折叠，仅支持鼠标拖拽
+    - **快捷键无统一管理**：快捷键分散在多个文件，建议集中到单一文件中管理
 
 > 代码质量
-- **app/ 包过于膨胀**：23 个文件平铺在 app/ 包下，建议按功能拆分子包（app/viewmodel/、app/dialog/、app/settings/
+- [X] **app/ 包过于膨胀**：23 个文件平铺在 app/ 包下，建议按功能拆分子包（app/viewmodel/、app/dialog/、app/settings/
 等）
 - **业务逻辑与 UI 混合**：多处 Composable 函数中内联业务逻辑（如导入/导出解析），建议抽取到普通类中
 - **字符串散落在代码中**：无资源文件或常量类，不利于维护和翻译
