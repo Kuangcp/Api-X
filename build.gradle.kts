@@ -32,7 +32,7 @@ dependencies {
     // (in a separate module for demo project and in testMain).
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
-    implementation(compose.components.resources)
+    implementation("org.jetbrains.compose.components:components-resources:${property("compose.version")}")
     implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
     implementation("org.xerial:sqlite-jdbc:3.47.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
