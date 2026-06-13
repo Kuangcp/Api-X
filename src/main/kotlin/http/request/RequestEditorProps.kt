@@ -1,6 +1,6 @@
 package http.request
 
-import app.EnvVariable
+import app.settings.EnvVariable
 import tree.PostmanAuth
 
 /**

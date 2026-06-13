@@ -54,7 +54,7 @@ import com.neoutils.highlight.compose.remember.rememberHighlight
 import com.neoutils.highlight.compose.remember.rememberTextFieldValue
 import com.neoutils.highlight.core.extension.textColor
 import com.neoutils.highlight.core.util.UiColor
-import app.EnvVariable
+import app.settings.EnvVariable
 import http.BodyContentKind
 import http.ExchangeFontMetrics
 import http.contentTypeValueForBodyKind

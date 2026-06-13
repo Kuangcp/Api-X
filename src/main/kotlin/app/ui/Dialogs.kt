@@ -1,13 +1,13 @@
 package app.ui
 
-import app.AppSettings
-import app.AppSettingsStore
-import app.EnvironmentsState
-import app.SettingsDialogWindow
-import app.EnvironmentManagerDialogWindow
-import app.GlobalSearchDialogWindow
-import app.CollectionSettingsDialog
-import app.typographyFromSettings
+import app.settings.AppSettings
+import app.settings.AppSettingsStore
+import app.settings.EnvironmentsState
+import app.settings.SettingsDialogWindow
+import app.dialog.EnvironmentManagerDialogWindow
+import app.dialog.GlobalSearchDialogWindow
+import app.dialog.CollectionSettingsDialog
+import app.ui.typographyFromSettings
 import androidx.compose.runtime.Composable
 import db.CollectionRepository
 import http.ExchangeFontMetrics

@@ -63,7 +63,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
-import app.EnvVariable
+import app.settings.EnvVariable
 import http.ExchangeFontMetrics
 import http.filterHeaders
 import http.joinHeadersEditor

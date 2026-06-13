@@ -10,7 +10,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.ScrollState
-import app.EnvVariable
+import app.settings.EnvVariable
 import http.ExchangeFontMetrics
 
 @Composable

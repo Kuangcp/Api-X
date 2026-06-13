@@ -1,7 +1,7 @@
 package http
 
-import app.AppSettings
-import app.AppSettingsStore
+import app.settings.AppSettings
+import app.settings.AppSettingsStore
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy

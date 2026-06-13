@@ -1,7 +1,7 @@
 package http
 
-import app.EnvVariable
-import app.EnvironmentsState
+import app.settings.EnvVariable
+import app.settings.EnvironmentsState
 
 private val PLACEHOLDER_REGEX = Regex("""\{\{\s*([^{}]+?)\s*\}\}""")
 

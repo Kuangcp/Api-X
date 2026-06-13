@@ -24,7 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import app.EnvVariable
+import app.settings.EnvVariable
 import http.ExchangeFontMetrics
 import tree.PostmanAuth
 

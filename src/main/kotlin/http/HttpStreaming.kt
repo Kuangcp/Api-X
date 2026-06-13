@@ -1,6 +1,6 @@
 package http
 
-import app.AppSettingsStore
+import app.settings.AppSettingsStore
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStream
