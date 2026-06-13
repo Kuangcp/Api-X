@@ -1,6 +1,7 @@
 package http
 
-import app.settings.AppSettingsStore
+import app.settings.AppSettings
+import app.settings.AppSettingsBridge
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStream
@@ -231,7 +232,7 @@ fun sendRequestStreaming(
 ) {
     try {
         if (control.cancelled) return
-        val s = AppSettingsStore.snapshot()
+        val s = AppSettingsBridge.store.snapshot()
         val connectMs = s.httpConnectTimeoutMillis.coerceIn(1L, 86_400_000L)
         val requestTimeoutMs = s.httpRequestTimeoutMillis.coerceIn(1L, 86_400_000L)
         val readTimeoutMs = s.httpReadTimeoutMillis.coerceIn(1L, 86_400_000L)

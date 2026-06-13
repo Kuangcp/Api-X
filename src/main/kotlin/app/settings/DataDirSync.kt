@@ -36,7 +36,7 @@ object DataDirSync {
      * 将当前库中各集合导出为 `data/collection/{id}.json`（Postman v2.1），
      * 环境写入 `data/env/environments.json`（主存文件或当前 [EnvironmentStore] 快照）。
      */
-    fun pushToDataDir(repository: CollectionRepository): DataPushResult {
+    fun pushToDataDir(repository: CollectionRepository, envStore: EnvironmentStore): DataPushResult {
         return try {
             val collDir = AppPaths.gitDataCollectionDir()
             val envFile = AppPaths.gitDataEnvironmentsFile()
@@ -56,7 +56,7 @@ object DataDirSync {
                 envOk = true
             } else {
                 if (envFile.parent != null) Files.createDirectories(envFile.parent)
-                EnvironmentStore.writeSnapshotToPath(envFile)
+                envStore.writeSnapshotToPath(envFile)
                 envOk = true
             }
             DataPushResult(n, envOk, null)
@@ -69,7 +69,7 @@ object DataDirSync {
      * 从 [data] 下加载：集合仅新增与按 id 更新，不删库内已有行；环境为按 id 合并、不删。
      * @param data 通常为 [AppPaths.gitDataRoot]。
      */
-    fun pullFromDataDir(repository: CollectionRepository, data: Path = AppPaths.gitDataRoot()): DataPullResult {
+    fun pullFromDataDir(repository: CollectionRepository, envStore: EnvironmentStore, data: Path = AppPaths.gitDataRoot()): DataPullResult {
         return try {
             var merged = 0
             var created = 0
@@ -109,8 +109,8 @@ object DataDirSync {
                         Files.readString(envInData, StandardCharsets.UTF_8),
                     )
                 }.getOrElse { EnvironmentsState() }
-                val mergedState = mergeEnvironmentsStateNoDelete(EnvironmentStore.snapshot(), fromFile)
-                EnvironmentStore.replace(mergedState)
+                val mergedState = mergeEnvironmentsStateNoDelete(envStore.snapshot(), fromFile)
+                envStore.replace(mergedState)
                 envMerged = true
             }
             DataPullResult(merged, created, envMerged, fileErr, null)

@@ -13,7 +13,7 @@ private val envJson = Json {
     encodeDefaults = true
 }
 
-object EnvironmentStore {
+class EnvironmentStore {
     private val ref = AtomicReference(loadRaw().normalized())
 
     fun snapshot(): EnvironmentsState = ref.get()

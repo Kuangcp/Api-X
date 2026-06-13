@@ -53,6 +53,7 @@ fun SettingsDialogWindow(
     visible: Boolean,
     isDarkTheme: Boolean,
     typographyBase: Typography,
+    initial: AppSettings,
     onCloseRequest: () -> Unit,
     onSaved: (AppSettings) -> Unit,
 ) {
@@ -71,6 +72,7 @@ fun SettingsDialogWindow(
             typography = typographyBase,
         ) {
             SettingsDialogBody(
+                initial = initial,
                 onCancel = onCloseRequest,
                 onSave = {
                     onSaved(it)
@@ -83,30 +85,31 @@ fun SettingsDialogWindow(
 
 @Composable
 private fun SettingsDialogBody(
+    initial: AppSettings,
     onCancel: () -> Unit,
     onSave: (AppSettings) -> Unit,
 ) {
     var section by remember { mutableIntStateOf(0) }
-    var fontFamily by remember { mutableStateOf(AppSettingsStore.snapshot().fontFamilyName) }
-    var fontSize by remember { mutableFloatStateOf(AppSettingsStore.snapshot().fontSizeSp) }
+    var fontFamily by remember { mutableStateOf(initial.fontFamilyName) }
+    var fontSize by remember { mutableFloatStateOf(initial.fontSizeSp) }
     var requestResponseFontSize by remember {
-        mutableFloatStateOf(AppSettingsStore.snapshot().requestResponseFontSizeSp)
+        mutableFloatStateOf(initial.requestResponseFontSizeSp)
     }
-    var backgroundHex by remember { mutableStateOf(AppSettingsStore.snapshot().backgroundHex) }
+    var backgroundHex by remember { mutableStateOf(initial.backgroundHex) }
     var connectTimeoutMs by remember {
-        mutableStateOf(AppSettingsStore.snapshot().httpConnectTimeoutMillis.toString())
+        mutableStateOf(initial.httpConnectTimeoutMillis.toString())
     }
     var readTimeoutMs by remember {
-        mutableStateOf(AppSettingsStore.snapshot().httpReadTimeoutMillis.toString())
+        mutableStateOf(initial.httpReadTimeoutMillis.toString())
     }
     var requestTimeoutMs by remember {
-        mutableStateOf(AppSettingsStore.snapshot().httpRequestTimeoutMillis.toString())
+        mutableStateOf(initial.httpRequestTimeoutMillis.toString())
     }
-    var httpProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpProxyUrl) }
-    var httpsProxy by remember { mutableStateOf(AppSettingsStore.snapshot().httpsProxyUrl) }
-    var bypassText by remember { mutableStateOf(AppSettingsStore.snapshot().bypassRegexLines) }
+    var httpProxy by remember { mutableStateOf(initial.httpProxyUrl) }
+    var httpsProxy by remember { mutableStateOf(initial.httpsProxyUrl) }
+    var bypassText by remember { mutableStateOf(initial.bypassRegexLines) }
     var httpProtocolVersion by remember {
-        mutableStateOf(AppSettingsStore.snapshot().httpProtocolVersion)
+        mutableStateOf(initial.httpProtocolVersion)
     }
     var errorText by remember { mutableStateOf<String?>(null) }
 

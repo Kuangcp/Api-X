@@ -99,7 +99,7 @@ data class AppSettings(
 }
 
 /** 内存中的当前设置，供 UI 与 [http.ApiXProxySelector] 读取。 */
-object AppSettingsStore {
+class AppSettingsStore {
     private val ref = AtomicReference(AppSettings.load())
 
     fun snapshot(): AppSettings = ref.get()
@@ -108,4 +108,12 @@ object AppSettingsStore {
         ref.set(settings)
         AppSettings.save(settings)
     }
+}
+
+/**
+ * HTTP 层（后台线程）持有 [AppSettingsStore] 的桥接引用，
+ * 在 Main.kt 启动时赋值，避免将 store 穿过整个 UI 树。
+ */
+object AppSettingsBridge {
+    lateinit var store: AppSettingsStore
 }

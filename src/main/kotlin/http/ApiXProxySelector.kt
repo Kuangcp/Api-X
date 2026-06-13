@@ -1,7 +1,7 @@
 package http
 
 import app.settings.AppSettings
-import app.settings.AppSettingsStore
+import app.settings.AppSettingsBridge
 import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.Proxy
@@ -23,7 +23,7 @@ object ApiXProxySelector : ProxySelector() {
         val host = uri.host
         if (host.isNullOrEmpty()) return listOf(Proxy.NO_PROXY)
 
-        val s = AppSettingsStore.snapshot()
+        val s = AppSettingsBridge.store.snapshot()
         if (shouldBypass(host, s.bypassRegexLines)) {
             return listOf(Proxy.NO_PROXY)
         }

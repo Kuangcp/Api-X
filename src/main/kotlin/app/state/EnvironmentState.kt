@@ -7,13 +7,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 
-class EnvironmentState {
+class EnvironmentState(private val store: EnvironmentStore) {
     var environmentsState by mutableStateOf(
-        withDefaultActiveWhenSingle(EnvironmentStore.snapshot())
+        withDefaultActiveWhenSingle(store.snapshot())
     )
 
     fun commit(newState: EnvironmentsState) {
-        EnvironmentStore.replace(newState)
-        environmentsState = EnvironmentStore.snapshot()
+        store.replace(newState)
+        environmentsState = store.snapshot()
     }
 }

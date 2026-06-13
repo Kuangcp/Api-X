@@ -84,6 +84,9 @@ import app.state.RecentSwitcherState
 import app.settings.WindowPrefs
 import app.settings.TreeExpandPrefs
 import app.settings.LastRequestPrefs
+import app.settings.EnvironmentStore
+import app.settings.AppSettingsStore
+import app.settings.AppSettingsBridge
 import app.dialog.RecentRequestSwitcherOverlay
 import app.ui.Dialogs
 import app.ui.appMaterialColors
@@ -111,15 +114,21 @@ fun App(onExitRequest: () -> Unit) {
     val repository = remember { CollectionRepository(AppPaths.collectionDatabasePath()) }
     val expandLoaded = remember { TreeExpandPrefs.load() }
 
-    val treeState = remember { TreeState(repository, expandLoaded) }
-    val editorState = remember { RequestEditorState(repository) }
-    val responseState = remember { ResponseState() }
-    val themeState = remember { ThemeState() }
-    val dialogState = remember { DialogState() }
-    val environmentState = remember { EnvironmentState() }
-    val appSettingsState = remember { AppSettingsState() }
-    val toastState = remember { ToastState() }
-    val recentSwitcherState = remember { RecentSwitcherState() }
+    val environmentStore = remember { EnvironmentStore() }
+    val appSettingsStore = remember { AppSettingsStore() }
+    remember { AppSettingsBridge.store = appSettingsStore }
+
+    val (
+        treeState,
+        editorState,
+        responseState,
+        themeState,
+        dialogState,
+        environmentState,
+        appSettingsState,
+        toastState,
+        recentSwitcherState,
+    ) = rememberAppDependencies(repository, expandLoaded, environmentStore, appSettingsStore)
 
     val exchangeMetrics = remember(appSettingsState.appSettings.requestResponseFontSizeSp) {
         exchangeFontMetrics(appSettingsState.appSettings.requestResponseFontSizeSp)
@@ -266,8 +275,8 @@ fun App(onExitRequest: () -> Unit) {
                         onWindowCloseRequest = { persistWindowGeometry(windowState); onExitRequest() },
                         onImportCollectionClick = { importCollection(treeState, toastState, repository) },
                         onImportCurlClick = { importCurl(treeState, editorState, responseState, toastState, repository) },
-                        onPushDataClick = { pushData(repository, toastState) },
-                        onPullDataClick = { pullData(treeState, environmentState, toastState, repository) },
+                        onPushDataClick = { pushData(repository, environmentStore, toastState) },
+                        onPullDataClick = { pullData(treeState, environmentState, environmentStore, toastState, repository) },
                     )
                     Row(modifier = Modifier.fillMaxWidth().weight(1f).onSizeChanged { contentRowWidthPx = it.width.toFloat().coerceAtLeast(1f) }) {
                         val middleFraction = if (treeState.treeSidebarVisible) 1f - treeState.treeSplitRatio else 1f
@@ -444,9 +453,10 @@ fun App(onExitRequest: () -> Unit) {
                     showSettings = dialogState.showSettings,
                     isDarkTheme = themeState.isDarkTheme,
                     appSettings = appSettingsState.appSettings,
+                    appSettingsStore = appSettingsStore,
                     exchangeMetrics = exchangeMetrics,
                     onCloseSettings = { dialogState.showSettings = false },
-                    onSavedSettings = { appSettingsState.appSettings = it },
+                    onSavedSettings = { appSettingsState.replace(it) },
                     showEnvironmentManager = dialogState.showEnvironmentManager,
                     environmentsState = environmentState.environmentsState,
                     onCloseEnvironmentManager = { dialogState.showEnvironmentManager = false },
@@ -624,3 +634,44 @@ private fun ToastMessage(message: String, onDismiss: () -> Unit) {
 }
 
 fun main() = application { App(onExitRequest = { exitApplication() }) }
+
+data class AppDependencies(
+    val treeState: TreeState,
+    val editorState: RequestEditorState,
+    val responseState: ResponseState,
+    val themeState: ThemeState,
+    val dialogState: DialogState,
+    val environmentState: EnvironmentState,
+    val appSettingsState: AppSettingsState,
+    val toastState: ToastState,
+    val recentSwitcherState: RecentSwitcherState,
+)
+
+@Composable
+private fun rememberAppDependencies(
+    repository: CollectionRepository,
+    expandLoaded: TreeExpandPrefs.Loaded,
+    environmentStore: EnvironmentStore,
+    appSettingsStore: AppSettingsStore,
+): AppDependencies {
+    val treeState = remember { TreeState(repository, expandLoaded) }
+    val editorState = remember { RequestEditorState(repository) }
+    val responseState = remember { ResponseState() }
+    val themeState = remember { ThemeState() }
+    val dialogState = remember { DialogState() }
+    val environmentState = remember { EnvironmentState(environmentStore) }
+    val appSettingsState = remember { AppSettingsState(appSettingsStore) }
+    val toastState = remember { ToastState() }
+    val recentSwitcherState = remember { RecentSwitcherState() }
+    return AppDependencies(
+        treeState = treeState,
+        editorState = editorState,
+        responseState = responseState,
+        themeState = themeState,
+        dialogState = dialogState,
+        environmentState = environmentState,
+        appSettingsState = appSettingsState,
+        toastState = toastState,
+        recentSwitcherState = recentSwitcherState,
+    )
+}

@@ -19,6 +19,7 @@ fun Dialogs(
     showSettings: Boolean,
     isDarkTheme: Boolean,
     appSettings: AppSettings,
+    appSettingsStore: AppSettingsStore,
     exchangeMetrics: ExchangeFontMetrics,
     onCloseSettings: () -> Unit,
     onSavedSettings: (AppSettings) -> Unit,
@@ -41,8 +42,9 @@ fun Dialogs(
             visible = showSettings,
             isDarkTheme = isDarkTheme,
             typographyBase = typographyFromSettings(appSettings),
+            initial = appSettings,
             onCloseRequest = onCloseSettings,
-            onSaved = { saved -> AppSettingsStore.replace(saved); onSavedSettings(saved) },
+            onSaved = { saved -> appSettingsStore.replace(saved); onSavedSettings(saved) },
         )
     }
 

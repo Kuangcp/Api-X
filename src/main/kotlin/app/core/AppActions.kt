@@ -146,10 +146,11 @@ fun importCurl(
 
 fun pushData(
     repository: CollectionRepository,
+    environmentStore: EnvironmentStore,
     toastState: ToastState,
 ) {
     thread {
-        val r = DataDirSync.pushToDataDir(repository)
+        val r = DataDirSync.pushToDataDir(repository, environmentStore)
         EventQueue.invokeLater {
             if (r.error != null) JOptionPane.showMessageDialog(null, r.error, "同步到 data 失败", JOptionPane.ERROR_MESSAGE)
             else showToast(toastState, "已写入 ${AppPaths.gitDataRoot()}：${r.collectionFilesWritten} 个 collection JSON；${if (r.envWritten) "环境已同步到 data/env" else "环境未写入"}")
@@ -160,16 +161,17 @@ fun pushData(
 fun pullData(
     treeState: TreeState,
     environmentState: EnvironmentState,
+    environmentStore: EnvironmentStore,
     toastState: ToastState,
     repository: CollectionRepository,
 ) {
     thread {
-        val r = DataDirSync.pullFromDataDir(repository)
+        val r = DataDirSync.pullFromDataDir(repository, environmentStore)
         EventQueue.invokeLater {
             if (r.error != null) JOptionPane.showMessageDialog(null, r.error, "从 data 合并失败", JOptionPane.ERROR_MESSAGE)
             else {
                 treeState.refresh()
-                environmentState.environmentsState = EnvironmentStore.snapshot()
+                environmentState.environmentsState = environmentStore.snapshot()
                 val errLines = r.fileErrors.joinToString("\n")
                 val baseMsg = "已合并：更新 ${r.merged} 个集合、新建 ${r.created} 个；环境 ${if (r.envMerged) "已合并" else "未变更"}"
                 if (r.fileErrors.isNotEmpty()) JOptionPane.showMessageDialog(null, "$baseMsg\n\n部分文件未导入：\n$errLines", "从 data 合并", JOptionPane.INFORMATION_MESSAGE)
