@@ -318,6 +318,7 @@ fun App(onExitRequest: () -> Unit) {
                                 folderAddEnabled = repository.newFolderTarget(treeState.treeSelection) != null,
                                 requestAddEnabled = repository.newRequestTarget(treeState.treeSelection) != null,
                                 onExportRequestAsCurl = { exportAsCurl(repository, environmentState, toastState, it) },
+                                onExportRequestAsGo = { exportAsGo(repository, environmentState, toastState, it) },
                                 onExportPostmanCollection = { exportPostmanCollection(repository, toastState, responseState, it) },
                                 onDuplicateRequestBelow = { duplicateRequest(treeState, editorState, repository, it) },
                                 onApplyTreeDrop = { payload, target -> applyTreeDrop(treeState, repository, payload, target) },

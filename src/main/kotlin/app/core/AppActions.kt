@@ -17,6 +17,7 @@ import http.applyEnvironmentVariables
 import http.mergeUrlWithParams
 import http.parseHeadersForSend
 import http.requestToCurlCommand
+import http.requestToGoTestMethod
 import http.splitUrlQueryForParamsEditor
 import http.substitutionMapForActive
 import http.migrateFormBodyToEditorLinesIfNeeded
@@ -222,6 +223,26 @@ fun exportAsCurl(
     val vmEnv = environmentState.environmentsState.substitutionMapForActive()
     writeClipboardText(requestToCurlCommand(r.method, mergeUrlWithParams(applyEnvironmentVariables(r.url, vmEnv), parseHeadersForSend(applyEnvironmentVariables(r.paramsText, vmEnv))), applyEnvironmentVariables(r.headersText, vmEnv), applyEnvironmentVariables(r.bodyText, vmEnv)))
     showToast(toastState, "已复制 cURL 到剪贴板")
+}
+
+fun exportAsGo(
+    repository: CollectionRepository,
+    environmentState: EnvironmentState,
+    toastState: ToastState,
+    rid: String,
+) {
+    val r = repository.getRequest(rid) ?: return
+    val vmEnv = environmentState.environmentsState.substitutionMapForActive()
+    writeClipboardText(requestToGoTestMethod(
+        r.method,
+        mergeUrlWithParams(
+            applyEnvironmentVariables(r.url, vmEnv),
+            parseHeadersForSend(applyEnvironmentVariables(r.paramsText, vmEnv)),
+        ),
+        applyEnvironmentVariables(r.headersText, vmEnv),
+        applyEnvironmentVariables(r.bodyText, vmEnv),
+    ))
+    showToast(toastState, "已复制 Go 测试代码到剪贴板")
 }
 
 fun exportPostmanCollection(

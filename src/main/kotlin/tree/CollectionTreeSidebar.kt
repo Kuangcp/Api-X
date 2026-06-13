@@ -172,6 +172,7 @@ fun CollectionTreeSidebar(
     onCountFolderContents: ((TreeSelection.Folder) -> Pair<Int, Int>)?,
     onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onExportRequestAsGo: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     onApplyTreeDrop: (TreeDragPayload, TreeDropTarget) -> Boolean,
@@ -339,6 +340,7 @@ fun CollectionTreeSidebar(
                             onDeleteRequest = { deleteTarget = it },
                             onSettings = onSettings,
                             onExportRequestAsCurl = onExportRequestAsCurl,
+                            onExportRequestAsGo = onExportRequestAsGo,
                             onExportPostmanCollection = onExportPostmanCollection,
                             onDuplicateRequestBelow = onDuplicateRequestBelow,
                             dragging = treeDragPayload,
@@ -472,6 +474,7 @@ private fun CollectionTreeBlock(
     onDeleteRequest: (TreeSelection) -> Unit,
     onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onExportRequestAsGo: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
@@ -571,6 +574,7 @@ private fun CollectionTreeBlock(
                 onDeleteRequest = onDeleteRequest,
                 onSettings = onSettings,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 dragging = dragging,
                 dropRegistry = dropRegistry,
@@ -606,6 +610,7 @@ private fun CollectionTreeBlock(
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
@@ -641,6 +646,7 @@ private fun FolderTreeBlock(
     onDeleteRequest: (TreeSelection) -> Unit,
     onSettings: (TreeSelection) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onExportRequestAsGo: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
@@ -754,6 +760,7 @@ private fun FolderTreeBlock(
                 onDeleteRequest = onDeleteRequest,
                 onSettings = onSettings,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 dragging = dragging,
                 dropRegistry = dropRegistry,
@@ -789,6 +796,7 @@ private fun FolderTreeBlock(
                 onSelectNode = onSelectNode,
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
+                onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
@@ -817,6 +825,7 @@ private fun RequestTreeRow(
     onSelectNode: (TreeSelection) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
+    onExportRequestAsGo: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
     onTreeDragMove: (Offset) -> Unit,
@@ -839,6 +848,9 @@ private fun RequestTreeRow(
             listOf(
                 ContextMenuItem("cURL") {
                     onExportRequestAsCurl(req.id)
+                },
+                ContextMenuItem("Go") {
+                    onExportRequestAsGo(req.id)
                 },
                 ContextMenuItem("复制") {
                     onDuplicateRequestBelow(req.id)
