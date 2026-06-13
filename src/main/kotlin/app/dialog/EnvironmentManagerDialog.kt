@@ -29,6 +29,7 @@ import androidx.compose.material.lightColors
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -250,7 +251,7 @@ private fun EnvironmentManagerDialogBody(
                     Text("新建环境")
                 }
                 Divider(color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f))
-                var draggedIdx by remember { mutableStateOf<Int?>(null) }
+                var draggedItemId by remember { mutableStateOf<String?>(null) }
                 var dragTotalOffset by remember { mutableStateOf(0f) }
                 val itemHeight = 30.dp
                 val density = LocalDensity.current
@@ -261,91 +262,93 @@ private fun EnvironmentManagerDialogBody(
                         .verticalScroll(rememberScrollState()),
                 ) {
                     for ((index, env) in draft.environments.withIndex()) {
-                        val isDragged = draggedIdx == index
-                        val isSelected = env.id == selectedId
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(itemHeight)
-                                .then(
-                                    if (isSelected) {
-                                        Modifier.background(
-                                            MaterialTheme.colors.primary.copy(alpha = 0.10f),
-                                            RoundedCornerShape(6.dp),
-                                        )
-                                    } else Modifier
-                                )
-                                .offset(
-                                    y = if (isDragged) with(density) { dragTotalOffset.toDp() } else 0.dp,
-                                )
-                                .clickable(onClick = {
-                                    draft = persistCurrentEnvIntoDraft()
-                                    selectedId = env.id
-                                })
-                                .padding(start = 2.dp, end = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Box(
+                        key(env.id) {
+                            val isDragged = draggedItemId == env.id
+                            val isSelected = env.id == selectedId
+                            Row(
                                 modifier = Modifier
-                                    .width(24.dp)
-                                    .fillMaxHeight()
-                                    .pointerInput(env.id) {
-                                        detectDragGestures(
-                                            onDragStart = {
-                                                draggedIdx = draft.environments.indexOfFirst { it.id == env.id }
-                                                dragTotalOffset = 0f
-                                            },
-                                            onDrag = { change, dragAmount ->
-                                                change.consume()
-                                                dragTotalOffset += dragAmount.y
-                                                val ci = draggedIdx ?: return@detectDragGestures
-                                                if (dragTotalOffset > itemHeightPx && ci < draft.environments.lastIndex) {
-                                                    val list = draft.environments.toMutableList()
-                                                    val tmp = list[ci]
-                                                    list[ci] = list[ci + 1]
-                                                    list[ci + 1] = tmp
-                                                    draft = draft.copy(environments = list)
-                                                    draggedIdx = ci + 1
-                                                    dragTotalOffset -= itemHeightPx
-                                                } else if (dragTotalOffset < -itemHeightPx && ci > 0) {
-                                                    val list = draft.environments.toMutableList()
-                                                    val tmp = list[ci]
-                                                    list[ci] = list[ci - 1]
-                                                    list[ci - 1] = tmp
-                                                    draft = draft.copy(environments = list)
-                                                    draggedIdx = ci - 1
-                                                    dragTotalOffset += itemHeightPx
-                                                }
-                                            },
-                                            onDragEnd = {
-                                                draggedIdx = null
-                                                dragTotalOffset = 0f
-                                            },
-                                            onDragCancel = {
-                                                draggedIdx = null
-                                                dragTotalOffset = 0f
-                                            },
-                                        )
-                                    },
-                                contentAlignment = Alignment.Center,
+                                    .fillMaxWidth()
+                                    .height(itemHeight)
+                                    .then(
+                                        if (isSelected) {
+                                            Modifier.background(
+                                                MaterialTheme.colors.primary.copy(alpha = 0.10f),
+                                                RoundedCornerShape(6.dp),
+                                            )
+                                        } else Modifier
+                                    )
+                                    .offset(
+                                        y = if (isDragged) with(density) { dragTotalOffset.toDp() } else 0.dp,
+                                    )
+                                    .clickable(onClick = {
+                                        draft = persistCurrentEnvIntoDraft()
+                                        selectedId = env.id
+                                    })
+                                    .padding(start = 2.dp, end = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                Icon(
-                                    Icons.Filled.Menu,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.28f),
+                                Box(
+                                    modifier = Modifier
+                                        .width(24.dp)
+                                        .fillMaxHeight()
+                                        .pointerInput(Unit) {
+                                            detectDragGestures(
+                                                onDragStart = {
+                                                    draggedItemId = env.id
+                                                    dragTotalOffset = 0f
+                                                },
+                                                onDrag = { change, dragAmount ->
+                                                    change.consume()
+                                                    dragTotalOffset += dragAmount.y
+                                                    val id = draggedItemId ?: return@detectDragGestures
+                                                    val ci = draft.environments.indexOfFirst { it.id == id }
+                                                    if (ci < 0) return@detectDragGestures
+                                                    if (dragTotalOffset > itemHeightPx && ci < draft.environments.lastIndex) {
+                                                        val list = draft.environments.toMutableList()
+                                                        val tmp = list[ci]
+                                                        list[ci] = list[ci + 1]
+                                                        list[ci + 1] = tmp
+                                                        draft = draft.copy(environments = list)
+                                                        dragTotalOffset -= itemHeightPx
+                                                    } else if (dragTotalOffset < -itemHeightPx && ci > 0) {
+                                                        val list = draft.environments.toMutableList()
+                                                        val tmp = list[ci]
+                                                        list[ci] = list[ci - 1]
+                                                        list[ci - 1] = tmp
+                                                        draft = draft.copy(environments = list)
+                                                        dragTotalOffset += itemHeightPx
+                                                    }
+                                                },
+                                                onDragEnd = {
+                                                    draggedItemId = null
+                                                    dragTotalOffset = 0f
+                                                },
+                                                onDragCancel = {
+                                                    draggedItemId = null
+                                                    dragTotalOffset = 0f
+                                                },
+                                            )
+                                        },
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Menu,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colors.onSurface.copy(alpha = 0.28f),
+                                    )
+                                }
+                                val nameColor =
+                                    if (isSelected) MaterialTheme.colors.primary
+                                    else MaterialTheme.colors.onSurface
+                                Text(
+                                    env.name.ifBlank { "(未命名)" },
+                                    modifier = Modifier.weight(1f),
+                                    color = nameColor,
+                                    maxLines = 1,
+                                    style = MaterialTheme.typography.body2,
                                 )
                             }
-                            val nameColor =
-                                if (isSelected) MaterialTheme.colors.primary
-                                else MaterialTheme.colors.onSurface
-                            Text(
-                                env.name.ifBlank { "(未命名)" },
-                                modifier = Modifier.weight(1f),
-                                color = nameColor,
-                                maxLines = 1,
-                                style = MaterialTheme.typography.body2,
-                            )
                         }
                     }
                 }
