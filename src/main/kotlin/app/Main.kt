@@ -28,7 +28,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.isCtrlPressed
@@ -53,48 +52,31 @@ import androidx.compose.ui.window.WindowState
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import androidx.compose.ui.res.painterResource
-import java.awt.AWTEvent
-import java.awt.EventQueue
-import java.awt.KeyboardFocusManager
-import java.awt.Toolkit
-import java.nio.charset.StandardCharsets
-import java.nio.file.Files
-import java.awt.event.AWTEventListener
-import java.awt.event.KeyEvent
-import javax.swing.JFileChooser
-import javax.swing.JOptionPane
-import javax.swing.filechooser.FileNameExtensionFilter
-import kotlin.concurrent.thread
-import kotlinx.coroutines.delay
 import db.AppPaths
 import db.CollectionRepository
 import db.RequestResponseStore
+import http.ExchangeFontMetrics
+import http.exchangeFontMetrics
 import http.request.RequestEditorProps
 import http.request.RequestSidePanel
 import http.request.RequestTabBar
 import http.request.RequestTopBar
 import http.response.ResponsePanel
-import http.HttpExchangeErrorStatusMark
-import http.exchangeFontMetrics
-import http.formatActualRequestPlainText
-import http.parseHeadersForSend
-import http.requestToCurlCommand
-import http.mergeUrlWithParams
-import http.applyEnvironmentVariables
-import http.migrateFormBodyToEditorLinesIfNeeded
-import http.splitUrlQueryForParamsEditor
-import http.substitutionMapForActive
-import http.parseCurlCommand
+import kotlinx.coroutines.delay
+import tree.collectAllFolderIds
 import tree.CollectionTreeSidebar
 import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.TreeSelection
 import tree.expandSetsForRequest
-import tree.parsePostmanCollectionJsonToPortable
-import tree.portableCollectionToPostmanV21Json
 import tree.firstRequestSelection
-import tree.UiCollection
 import app.ui.Dialogs
+import java.awt.AWTEvent
+import java.awt.EventQueue
+import java.awt.KeyboardFocusManager
+import java.awt.Toolkit
+import java.awt.event.AWTEventListener
+import java.awt.event.KeyEvent
 
 @Composable
 fun App(onExitRequest: () -> Unit) {
@@ -114,58 +96,74 @@ fun App(onExitRequest: () -> Unit) {
     )
     val repository = remember { CollectionRepository(AppPaths.collectionDatabasePath()) }
     val expandLoaded = remember { TreeExpandPrefs.load() }
-    val vm = rememberAppViewModel(repository, expandLoaded, windowState)
+
+    val treeState = remember { TreeState(repository, expandLoaded) }
+    val editorState = remember { RequestEditorState(repository) }
+    val responseState = remember { ResponseState() }
+    val themeState = remember { ThemeState() }
+    val dialogState = remember { DialogState() }
+    val environmentState = remember { EnvironmentState() }
+    val appSettingsState = remember { AppSettingsState() }
+    val toastState = remember { ToastState() }
+    val recentSwitcherState = remember { RecentSwitcherState() }
+
+    val exchangeMetrics = remember(appSettingsState.appSettings.requestResponseFontSizeSp) {
+        exchangeFontMetrics(appSettingsState.appSettings.requestResponseFontSizeSp)
+    }
+
+    var splitRatio by remember { mutableStateOf(0.5f) }
+    var contentRowWidthPx by remember { mutableStateOf(1f) }
+
+    val currentSession = editorState.editorRequestId?.let { responseState.getOrCreateSession(it) }
 
     fun cycleRecentSwitcher(forward: Boolean) {
-        val list = vm.recentSwitcherIds
+        val list = recentSwitcherState.ids
         if (list.isEmpty()) {
-            vm.setRecentSwitcherActive(false)
+            recentSwitcherState.active = false
             return
         }
         val next = if (forward) {
-            (vm.recentSwitcherIndex + 1) % list.size
+            (recentSwitcherState.index + 1) % list.size
         } else {
-            (vm.recentSwitcherIndex - 1 + list.size) % list.size
+            (recentSwitcherState.index - 1 + list.size) % list.size
         }
-        vm.setRecentSwitcherIndex(next)
+        recentSwitcherState.index = next
     }
 
     fun commitRecentSwitcherSelectionAndClose() {
-        vm.setRecentSwitcherActive(false)
-        val list = vm.recentSwitcherIds
+        recentSwitcherState.active = false
+        val list = recentSwitcherState.ids
         if (list.isEmpty()) return
-        val id = list[vm.recentSwitcherIndex.coerceIn(0, list.lastIndex)]
-        if (vm.repository.getRequest(id) != null) {
-            expandSetsForRequest(vm.tree, id)?.let { (cols, folders) ->
-                vm.setExpandedCollectionIds(vm.expandedCollectionIds + cols)
-                vm.setExpandedFolderIds(vm.expandedFolderIds + folders)
+        val id = list[recentSwitcherState.index.coerceIn(0, list.lastIndex)]
+        if (repository.getRequest(id) != null) {
+            expandSetsForRequest(treeState.tree, id)?.let { (cols, folders) ->
+                treeState.expandedCollectionIds = treeState.expandedCollectionIds + cols
+                treeState.expandedFolderIds = treeState.expandedFolderIds + folders
             }
-            vm.onSelectTreeNode(TreeSelection.Request(id))
-            vm.setTreeScrollToRequestId(id)
+            selectTreeNode(TreeSelection.Request(id), treeState, editorState)
+            treeState.treeScrollToRequestId = id
         }
     }
 
     fun activateRecentSwitcher(forward: Boolean) {
-        val list = vm.getMruRequestIds()
+        val list = editorState.mruRequestIdsForSwitcher()
         if (list.isEmpty()) return
-        vm.setRecentSwitcherIds(list)
-        vm.setRecentSwitcherActive(true)
-        vm.setRecentSwitcherIndex(
-            when {
-                list.size == 1 -> 0
-                forward -> 1
-                else -> list.lastIndex
-            },
-        )
+        recentSwitcherState.ids = list
+        recentSwitcherState.active = true
+        recentSwitcherState.index = when {
+            list.size == 1 -> 0
+            forward -> 1
+            else -> list.lastIndex
+        }
     }
 
-    DisposableEffect(vm.recentSwitcherActive, vm.recentSwitcherIds, vm.recentSwitcherIndex) {
+    DisposableEffect(recentSwitcherState.active, recentSwitcherState.ids, recentSwitcherState.index) {
         val listener = AWTEventListener { raw ->
             val keyEvent = raw as? KeyEvent ?: return@AWTEventListener
             val activeWindow = KeyboardFocusManager.getCurrentKeyboardFocusManager().activeWindow ?: return@AWTEventListener
             if (!activeWindow.isFocused) return@AWTEventListener
 
-            if (!vm.recentSwitcherActive) {
+            if (!recentSwitcherState.active) {
                 if (
                     keyEvent.id == KeyEvent.KEY_PRESSED &&
                     keyEvent.keyCode == KeyEvent.VK_TAB &&
@@ -181,7 +179,7 @@ fun App(onExitRequest: () -> Unit) {
                 KeyEvent.KEY_PRESSED -> {
                     when {
                         keyEvent.keyCode == KeyEvent.VK_ESCAPE -> {
-                            vm.setRecentSwitcherActive(false)
+                            recentSwitcherState.active = false
                             keyEvent.consume()
                         }
                         keyEvent.keyCode == KeyEvent.VK_TAB -> {
@@ -204,6 +202,11 @@ fun App(onExitRequest: () -> Unit) {
         }
     }
 
+    RequestEditorEffects(editorState, treeState, repository)
+    LastRequestEffects(editorState)
+    TreeEffects(treeState, editorState, repository, expandLoaded)
+    AppDisposableEffect(editorState, repository)
+
     Window(
         title = "Api-X",
         icon = windowIcon,
@@ -214,21 +217,21 @@ fun App(onExitRequest: () -> Unit) {
             onExitRequest()
         },
         onPreviewKeyEvent = { event ->
-            if (vm.recentSwitcherActive) {
+            if (recentSwitcherState.active) {
                 true
             } else {
                 if (event.type == KeyEventType.KeyDown) {
                     when {
-                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { vm.setShowGlobalSearch(true); true }
-                        event.isCtrlPressed && event.key == Key.Enter -> { vm.onStartRequest(); true }
-                        event.key == Key.Escape -> { if (vm.isLoading) { vm.onCancelRequest(); true } else false }
+                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { dialogState.showGlobalSearch = true; true }
+                        event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, environmentState, repository); true }
+                        event.key == Key.Escape -> { if (currentSession?.isLoading == true) { cancelActiveRequest(editorState, responseState, environmentState, repository); true } else false }
                         else -> false
                     }
                 } else false
             }
         },
     ) {
-        MaterialTheme(colors = appMaterialColors(vm.isDarkTheme, vm.appSettings.backgroundHex), typography = typographyFromSettings(vm.appSettings)) {
+        MaterialTheme(colors = appMaterialColors(themeState.isDarkTheme, appSettingsState.appSettings.backgroundHex), typography = typographyFromSettings(appSettingsState.appSettings)) {
             Box(modifier = Modifier.fillMaxSize()) {
                 var isDragging by remember { mutableStateOf(false) }
                 var ghostDelta by remember { mutableStateOf(0f) }
@@ -236,124 +239,170 @@ fun App(onExitRequest: () -> Unit) {
                 var splitHandleH by remember { mutableStateOf(0) }
                 Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     RequestTopBar(
-                        isLoading = vm.isLoading, isDarkTheme = vm.isDarkTheme, treeSidebarVisible = vm.treeSidebarVisible,
-                        onTreeSidebarToggle = { vm.setTreeSidebarVisible(!vm.treeSidebarVisible) },
-                        environmentsState = vm.environmentsState,
-                        onActiveEnvironmentChange = { vm.onCommitEnvironments(vm.environmentsState.copy(activeEnvironmentId = it)) },
-                        onManageEnvironmentsClick = { vm.setShowEnvironmentManager(true) },
-                        onThemeToggle = { vm.setIsDarkTheme(!vm.isDarkTheme) },
-                        onSettingsClick = { vm.setShowSettings(true) },
+                        isLoading = currentSession?.isLoading ?: false,
+                        isDarkTheme = themeState.isDarkTheme,
+                        treeSidebarVisible = treeState.treeSidebarVisible,
+                        onTreeSidebarToggle = { treeState.treeSidebarVisible = !treeState.treeSidebarVisible },
+                        environmentsState = environmentState.environmentsState,
+                        onActiveEnvironmentChange = { environmentState.environmentsState = environmentState.environmentsState.copy(activeEnvironmentId = it) },
+                        onManageEnvironmentsClick = { dialogState.showEnvironmentManager = true },
+                        onThemeToggle = { themeState.isDarkTheme = !themeState.isDarkTheme },
+                        onSettingsClick = { dialogState.showSettings = true },
                         mainWindowState = windowState,
                         onWindowCloseRequest = { persistWindowGeometry(windowState); onExitRequest() },
-                        onImportCollectionClick = { importCollection(vm) },
-                        onImportCurlClick = { importCurl(vm) },
-                        onPushDataClick = { pushData(vm) },
-                        onPullDataClick = { pullData(vm) },
+                        onImportCollectionClick = { importCollection(treeState, toastState, repository) },
+                        onImportCurlClick = { importCurl(treeState, editorState, responseState, toastState, repository) },
+                        onPushDataClick = { pushData(repository, toastState) },
+                        onPullDataClick = { pullData(treeState, environmentState, toastState, repository) },
                     )
-                    Row(modifier = Modifier.fillMaxWidth().weight(1f).onSizeChanged { vm.setContentRowWidthPx(it.width.toFloat().coerceAtLeast(1f)) }) {
-                        val middleFraction = if (vm.treeSidebarVisible) 1f - vm.treeSplitRatio else 1f
-                        if (vm.treeSidebarVisible) {
+                    Row(modifier = Modifier.fillMaxWidth().weight(1f).onSizeChanged { contentRowWidthPx = it.width.toFloat().coerceAtLeast(1f) }) {
+                        val middleFraction = if (treeState.treeSidebarVisible) 1f - treeState.treeSplitRatio else 1f
+                        if (treeState.treeSidebarVisible) {
                             CollectionTreeSidebar(
-                                modifier = Modifier.weight(vm.treeSplitRatio), tree = vm.tree, selectedNode = vm.treeSelection,
-                                treeScrollToRequestId = vm.treeScrollToRequestId, onTreeScrollToRequestHandled = { vm.setTreeScrollToRequestId(null) },
-                                editorBoundRequestId = vm.editorRequestId, expandedCollectionIds = vm.expandedCollectionIds, expandedFolderIds = vm.expandedFolderIds,
-                                runningRequestIds = vm.runningRequestIds,
-                                onToggleCollection = { vm.setExpandedCollectionIds(if (it in vm.expandedCollectionIds) vm.expandedCollectionIds - it else vm.expandedCollectionIds + it) },
-                                onToggleFolder = { vm.setExpandedFolderIds(if (it in vm.expandedFolderIds) vm.expandedFolderIds - it else vm.expandedFolderIds + it) },
-                                onSelectNode = { vm.onSelectTreeNode(it) },
-                                onAddCollection = { val id = vm.repository.createCollection("新集合"); vm.onRefreshTree(); vm.setExpandedCollectionIds(vm.expandedCollectionIds + id); vm.setTreeSelection(TreeSelection.Collection(id)) },
-                                onAddFolder = { vm.treeSelection?.let { vm.onAddFolderAt(it) } },
-                                onAddRequest = { vm.treeSelection?.let { vm.onAddRequestAt(it) } },
-                                onContextAddFolder = { vm.onAddFolderAt(it) },
-                                onContextAddRequest = { vm.onAddRequestAt(it) },
-                                onRename = { sel, newName -> when (sel) { is TreeSelection.Collection -> vm.repository.renameCollection(sel.id, newName); is TreeSelection.Folder -> vm.repository.renameFolder(sel.id, newName); is TreeSelection.Request -> vm.repository.renameRequest(sel.id, newName) }; vm.onRefreshTree() },
-                                onDelete = { deleteSelection(vm, it) },
-                                onCountFolderContents = { vm.repository.countFolderContents(it.id) },
-                                onSettings = { vm.setCollectionSettingsTarget(it); vm.setShowCollectionSettings(true) },
-                                folderAddEnabled = vm.repository.newFolderTarget(vm.treeSelection) != null,
-                                requestAddEnabled = vm.repository.newRequestTarget(vm.treeSelection) != null,
-                                onExportRequestAsCurl = { exportAsCurl(vm, it) },
-                                onExportPostmanCollection = { exportPostmanCollection(vm, it) },
-                                onDuplicateRequestBelow = { duplicateRequest(vm, it) },
-                                onApplyTreeDrop = { payload, target -> applyTreeDrop(vm, payload, target) },
+                                modifier = Modifier.weight(treeState.treeSplitRatio),
+                                tree = treeState.tree,
+                                selectedNode = treeState.treeSelection,
+                                treeScrollToRequestId = treeState.treeScrollToRequestId,
+                                onTreeScrollToRequestHandled = { treeState.treeScrollToRequestId = null },
+                                editorBoundRequestId = editorState.editorRequestId,
+                                expandedCollectionIds = treeState.expandedCollectionIds,
+                                expandedFolderIds = treeState.expandedFolderIds,
+                                runningRequestIds = responseState.runningRequestIds,
+                                onToggleCollection = { treeState.toggleCollection(it) },
+                                onToggleFolder = { treeState.toggleFolder(it) },
+                                onSelectNode = { selectTreeNode(it, treeState, editorState) },
+                                onAddCollection = {
+                                    val id = repository.createCollection("新集合")
+                                    treeState.refresh()
+                                    treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
+                                    treeState.treeSelection = TreeSelection.Collection(id)
+                                },
+                                onAddFolder = { treeState.treeSelection?.let { treeState.addFolderAt(it) } },
+                                onAddRequest = { treeState.treeSelection?.let { addRequestAt(it, treeState, editorState) } },
+                                onContextAddFolder = { treeState.addFolderAt(it) },
+                                onContextAddRequest = { addRequestAt(it, treeState, editorState) },
+                                onRename = { sel, newName ->
+                                    when (sel) {
+                                        is TreeSelection.Collection -> repository.renameCollection(sel.id, newName)
+                                        is TreeSelection.Folder -> repository.renameFolder(sel.id, newName)
+                                        is TreeSelection.Request -> repository.renameRequest(sel.id, newName)
+                                    }
+                                    treeState.refresh()
+                                },
+                                onDelete = { deleteSelection(treeState, editorState, repository, it) },
+                                onCountFolderContents = { repository.countFolderContents(it.id) },
+                                onSettings = { dialogState.collectionSettingsTarget = it; dialogState.showCollectionSettings = true },
+                                folderAddEnabled = repository.newFolderTarget(treeState.treeSelection) != null,
+                                requestAddEnabled = repository.newRequestTarget(treeState.treeSelection) != null,
+                                onExportRequestAsCurl = { exportAsCurl(repository, environmentState, toastState, it) },
+                                onExportPostmanCollection = { exportPostmanCollection(repository, toastState, responseState, it) },
+                                onDuplicateRequestBelow = { duplicateRequest(treeState, editorState, repository, it) },
+                                onApplyTreeDrop = { payload, target -> applyTreeDrop(treeState, repository, payload, target) },
                             )
                             var treeDragStartRatio by remember { mutableStateOf(0f) }
                             var treeDragStartWidth by remember { mutableStateOf(1f) }
-                            SplitHandle(vm.contentRowWidthPx,
-                                onDragStart = { treeDragStartRatio = vm.treeSplitRatio; treeDragStartWidth = vm.contentRowWidthPx },
-                                onDrag = { totalDelta -> vm.setTreeSplitRatio(treeDragStartRatio + totalDelta / treeDragStartWidth) },
+                            SplitHandle(contentRowWidthPx,
+                                onDragStart = { treeDragStartRatio = treeState.treeSplitRatio; treeDragStartWidth = contentRowWidthPx },
+                                onDrag = { totalDelta -> treeState.treeSplitRatio = (treeDragStartRatio + totalDelta / treeDragStartWidth).coerceIn(0.02f, 0.98f) },
                                 onDragEnd = {},
                             )
                         }
                         var splitDragStartRatio by remember { mutableStateOf(0f) }
                         var splitDragStartWidth by remember { mutableStateOf(1f) }
                         var splitDragStartMf by remember { mutableStateOf(1f) }
-                        Column(modifier = Modifier.weight(middleFraction * vm.splitRatio)) {
-                            if (vm.openTabIds.isNotEmpty()) {
+                        Column(modifier = Modifier.weight(middleFraction * splitRatio)) {
+                            if (editorState.openTabIds.isNotEmpty()) {
                                 RequestTabBar(
-                                    openTabIds = vm.openTabIds,
-                                    activeTabId = vm.activeTabId,
-                                    onTabSelected = vm.onTabSelected,
-                                    onTabClosed = vm.onTabCloseRequest,
-                                    tree = vm.tree,
+                                    openTabIds = editorState.openTabIds,
+                                    activeTabId = editorState.activeTabId,
+                                    onTabSelected = { editorState.selectTab(it) },
+                                    onTabClosed = { editorState.closeTab(it) },
+                                    tree = treeState.tree,
                                 )
                             }
                             RequestSidePanel(
                                 modifier = Modifier.weight(1f),
-                                exchangeMetrics = vm.exchangeMetrics,
-                                isDarkTheme = vm.isDarkTheme,
+                                exchangeMetrics = exchangeMetrics,
+                                isDarkTheme = themeState.isDarkTheme,
                                 props = RequestEditorProps(
-                                    editorRequestId = vm.editorRequestId,
-                                    isLoading = vm.isLoading,
-                                    method = vm.method,
-                                    methodMenuExpanded = vm.methodMenuExpanded,
-                                    onMethodMenuExpandedChange = { vm.setMethodMenuExpanded(it) },
-                                    onMethodSelected = { vm.setMethod(it) },
-                                    url = vm.url,
-                                    onUrlChange = { vm.setUrl(it) },
-                                    onSendOrCancel = { if (!vm.isLoading) vm.onStartRequest() else vm.onCancelRequest() },
-                                    leftTabIndex = vm.leftTabIndex,
-                                    onLeftTabIndexChange = { vm.setLeftTabIndex(it.coerceIn(0, 3)) },
-                                    bodyText = vm.bodyText,
-                                    onBodyTextChange = { vm.setBodyText(it) },
-                                    headersText = vm.headersText,
-                                    onHeadersTextChange = { vm.setHeadersText(it) },
-                                    paramsText = vm.paramsText,
-                                    onParamsTextChange = { vm.setParamsText(it) },
-                                    auth = vm.auth,
-                                    onAuthChange = { vm.setAuth(it) },
-                                    envVars = vm.environmentsState.collectAllVariables(),
+                                    editorRequestId = editorState.editorRequestId,
+                                    isLoading = currentSession?.isLoading ?: false,
+                                    method = editorState.method,
+                                    methodMenuExpanded = editorState.methodMenuExpanded,
+                                    onMethodMenuExpandedChange = { editorState.methodMenuExpanded = it },
+                                    onMethodSelected = { editorState.method = it },
+                                    url = editorState.url,
+                                    onUrlChange = { editorState.url = it },
+                                    onSendOrCancel = {
+                                        if (currentSession?.isLoading != true) {
+                                            startRequest(editorState, responseState, environmentState, repository)
+                                        } else {
+                                            cancelActiveRequest(editorState, responseState, environmentState, repository)
+                                        }
+                                    },
+                                    leftTabIndex = editorState.leftTabIndex,
+                                    onLeftTabIndexChange = { editorState.leftTabIndex = it.coerceIn(0, 3) },
+                                    bodyText = editorState.bodyText,
+                                    onBodyTextChange = { editorState.bodyText = it },
+                                    headersText = editorState.headersText,
+                                    onHeadersTextChange = { editorState.headersText = it },
+                                    paramsText = editorState.paramsText,
+                                    onParamsTextChange = { editorState.paramsText = it },
+                                    auth = editorState.auth,
+                                    onAuthChange = { editorState.auth = it },
+                                    envVars = environmentState.environmentsState.collectAllVariables(),
                                 ),
                             )
                         }
-                        SplitHandle(vm.contentRowWidthPx * middleFraction,
+                        SplitHandle(contentRowWidthPx * middleFraction,
                             onDragStart = {
                                 isDragging = true; ghostDelta = 0f
-                                splitDragStartRatio = vm.splitRatio; splitDragStartWidth = vm.contentRowWidthPx; splitDragStartMf = middleFraction
+                                splitDragStartRatio = splitRatio; splitDragStartWidth = contentRowWidthPx; splitDragStartMf = middleFraction
                             },
                             onDrag = { totalDelta -> ghostDelta = totalDelta },
                             onDragEnd = {
                                 val denom = splitDragStartWidth * splitDragStartMf
-                                vm.setSplitRatio((splitDragStartRatio + ghostDelta / denom).coerceIn(0.02f, 0.98f))
+                                splitRatio = (splitDragStartRatio + ghostDelta / denom).coerceIn(0.02f, 0.98f)
                                 isDragging = false; ghostDelta = 0f
                             },
                             onPositioned = { coords -> splitHandlePos = coords.boundsInRoot().topLeft; splitHandleH = coords.size.height },
                         )
                         ResponsePanel(
-                            modifier = Modifier.weight(middleFraction * (1f - vm.splitRatio)), exchangeMetrics = vm.exchangeMetrics,
-                            statusCodeText = vm.statusCodeText, responseTimeText = vm.responseTimeText, responseSizeText = vm.responseSizeText,
-                            responseSseEventCount = vm.responseSseEventCount,
-                            responseLines = vm.responseLines, responsePartialLine = vm.responsePartialLine, responseHeaderLines = vm.responseHeaderLines,
-                            requestPlainText = vm.exchangeRequestPlainText, rightTabIndex = vm.rightTabIndex, onRightTabIndexChange = { vm.setRightTabIndex(it.coerceIn(0, 2)) },
-                            isSseResponse = vm.isSseResponse, isResponseLoading = vm.isLoading,
-                            responseListState = vm.responseListState, responseHeadersListState = vm.responseHeadersListState,
-                            copyResponseBodyEnabled = vm.editorRequestId != null && responseBodyTextForClipboard(vm.responseLines, vm.responsePartialLine).isNotBlank(),
-                            onCopyResponseBody = { val text = responseBodyTextForClipboard(vm.responseLines, vm.responsePartialLine); if (text.isNotBlank()) writeClipboardText(text) },
-                            clearResponseLogsEnabled = vm.editorRequestId != null && !vm.isLoading,
-                            onClearResponseLogs = { val id = vm.editorRequestId ?: return@ResponsePanel; RequestResponseStore.clearResponseAndBenchLogs(id); vm.responseLines.clear(); vm.responseLines.add("响应结果会显示在这里"); vm.responseHeaderLines.clear(); vm.responseHeaderLines.add("(暂无响应头)"); vm.setResponsePartialLine(null); vm.setStatusCodeText(""); vm.setResponseTimeText(""); vm.setResponseSizeText(""); vm.setResponseSseEventCount(""); vm.setIsSseResponse(false); vm.setExchangeRequestPlainText("尚无已发送请求记录；发送后将显示实际发出的请求头与正文。") },
-                            jsonSyntaxHighlightEnabled = vm.jsonSyntaxHighlightEnabled, onJsonSyntaxHighlightEnabledChange = { vm.setJsonSyntaxHighlightEnabled(it) },
-                            historyEntries = vm.historyEntries, selectedHistoryEpochMs = vm.selectedHistoryEpochMs,
-                            onHistorySelected = { loadHistory(vm, it) },
+                            modifier = Modifier.weight(middleFraction * (1f - splitRatio)),
+                            exchangeMetrics = exchangeMetrics,
+                            statusCodeText = currentSession?.statusCodeText ?: "",
+                            responseTimeText = currentSession?.responseTimeText ?: "",
+                            responseSizeText = currentSession?.responseSizeText ?: "",
+                            responseSseEventCount = currentSession?.responseSseEventCount ?: "",
+                            responseLines = currentSession?.responseLines ?: responseState.placeholderResponseLines,
+                            responsePartialLine = currentSession?.responsePartialLine,
+                            responseHeaderLines = currentSession?.responseHeaderLines ?: responseState.placeholderResponseHeaders,
+                            requestPlainText = currentSession?.exchangeRequestPlainText ?: "请先选择或创建一个请求",
+                            rightTabIndex = currentSession?.rightTabIndex ?: 0,
+                            onRightTabIndexChange = { currentSession?.rightTabIndex = it.coerceIn(0, 2) },
+                            isSseResponse = currentSession?.isSseResponse ?: false,
+                            isResponseLoading = currentSession?.isLoading ?: false,
+                            responseListState = currentSession?.responseListState ?: responseState.placeholderListState,
+                            responseHeadersListState = currentSession?.responseHeadersListState ?: responseState.placeholderListState,
+                            copyResponseBodyEnabled = editorState.editorRequestId != null && responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine).isNotBlank(),
+                            onCopyResponseBody = { val text = responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine); if (text.isNotBlank()) writeClipboardText(text) },
+                            clearResponseLogsEnabled = editorState.editorRequestId != null && currentSession?.isLoading != true,
+                            onClearResponseLogs = {
+                                val id = editorState.editorRequestId ?: return@ResponsePanel
+                                val s = currentSession ?: return@ResponsePanel
+                                RequestResponseStore.clearResponseAndBenchLogs(id)
+                                s.responseLines.clear(); s.responseLines.add("响应结果会显示在这里")
+                                s.responseHeaderLines.clear(); s.responseHeaderLines.add("(暂无响应头)")
+                                s.responsePartialLine = null
+                                s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""
+                                s.isSseResponse = false
+                                s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
+                            },
+                            jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
+                            onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
+                            historyEntries = currentSession?.historyEntries ?: emptyList(),
+                            selectedHistoryEpochMs = currentSession?.selectedHistoryEpochMs,
+                            onHistorySelected = { loadHistory(editorState, responseState, it) },
                         )
                     }
                 }
@@ -370,34 +419,123 @@ fun App(onExitRequest: () -> Unit) {
                         Box(Modifier.width(2.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.25f)))
                     }
                 }
-                if (vm.toastMessage != null) {
-                    ToastMessage(message = vm.toastMessage, onDismiss = { vm.clearToast() })
+                val msg = toastState.toastMessage
+                if (msg != null) {
+                    ToastMessage(message = msg, onDismiss = { toastState.clear() })
                 }
-                if (vm.recentSwitcherActive && vm.recentSwitcherIds.isNotEmpty()) {
-                    RecentRequestSwitcherOverlay(requestIds = vm.recentSwitcherIds, highlightIndex = vm.recentSwitcherIndex, tree = vm.tree, repository = vm.repository)
+                if (recentSwitcherState.active && recentSwitcherState.ids.isNotEmpty()) {
+                    RecentRequestSwitcherOverlay(requestIds = recentSwitcherState.ids, highlightIndex = recentSwitcherState.index, tree = treeState.tree, repository = repository)
                 }
                 Dialogs(
-                    showSettings = vm.showSettings,
-                    isDarkTheme = vm.isDarkTheme,
-                    appSettings = vm.appSettings,
-                    exchangeMetrics = vm.exchangeMetrics,
-                    onCloseSettings = { vm.setShowSettings(false) },
-                    onSavedSettings = { vm.setAppSettings(it) },
-                    showEnvironmentManager = vm.showEnvironmentManager,
-                    environmentsState = vm.environmentsState,
-                    onCloseEnvironmentManager = { vm.setShowEnvironmentManager(false) },
-                    onSavedEnvironments = { vm.onCommitEnvironments(it) },
-                    showGlobalSearch = vm.showGlobalSearch,
-                    tree = vm.tree,
-                    repository = vm.repository,
-                    onCloseGlobalSearch = { vm.setShowGlobalSearch(false) },
-                    onPickRequest = { id -> expandSetsForRequest(vm.tree, id)?.let { (cols, folders) -> vm.setExpandedCollectionIds(vm.expandedCollectionIds + cols); vm.setExpandedFolderIds(vm.expandedFolderIds + folders) }; vm.onSelectTreeNode(TreeSelection.Request(id)); vm.setTreeScrollToRequestId(id) },
-                    showCollectionSettings = vm.showCollectionSettings,
-                    collectionSettingsTarget = vm.collectionSettingsTarget,
-                    onCloseCollectionSettings = { vm.setShowCollectionSettings(false) },
-                    onRefreshTree = { vm.onRefreshTree() },
+                    showSettings = dialogState.showSettings,
+                    isDarkTheme = themeState.isDarkTheme,
+                    appSettings = appSettingsState.appSettings,
+                    exchangeMetrics = exchangeMetrics,
+                    onCloseSettings = { dialogState.showSettings = false },
+                    onSavedSettings = { appSettingsState.appSettings = it },
+                    showEnvironmentManager = dialogState.showEnvironmentManager,
+                    environmentsState = environmentState.environmentsState,
+                    onCloseEnvironmentManager = { dialogState.showEnvironmentManager = false },
+                    onSavedEnvironments = { environmentState.commit(it) },
+                    showGlobalSearch = dialogState.showGlobalSearch,
+                    tree = treeState.tree,
+                    repository = repository,
+                    onCloseGlobalSearch = { dialogState.showGlobalSearch = false },
+                    onPickRequest = { id ->
+                        expandSetsForRequest(treeState.tree, id)?.let { (cols, folders) ->
+                            treeState.expandedCollectionIds = treeState.expandedCollectionIds + cols
+                            treeState.expandedFolderIds = treeState.expandedFolderIds + folders
+                        }
+                        selectTreeNode(TreeSelection.Request(id), treeState, editorState)
+                        treeState.treeScrollToRequestId = id
+                    },
+                    showCollectionSettings = dialogState.showCollectionSettings,
+                    collectionSettingsTarget = dialogState.collectionSettingsTarget,
+                    onCloseCollectionSettings = { dialogState.showCollectionSettings = false },
+                    onRefreshTree = { treeState.refresh() },
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun RequestEditorEffects(
+    editorState: RequestEditorState,
+    treeState: TreeState,
+    repository: CollectionRepository,
+) {
+    LaunchedEffect(editorState.method, editorState.url, editorState.headersText, editorState.paramsText, editorState.bodyText, editorState.auth, editorState.editorRequestId) {
+        val id = editorState.editorRequestId ?: return@LaunchedEffect
+        delay(450)
+        repository.saveRequestEditorFields(id, editorState.method, editorState.url, editorState.headersText, editorState.paramsText, editorState.bodyText, editorState.auth)
+        treeState.refresh()
+    }
+}
+
+@Composable
+private fun LastRequestEffects(editorState: RequestEditorState) {
+    LaunchedEffect(editorState.editorRequestId) {
+        val id = editorState.editorRequestId ?: return@LaunchedEffect
+        LastRequestPrefs.save(id)
+    }
+}
+
+@Composable
+private fun TreeEffects(
+    treeState: TreeState,
+    editorState: RequestEditorState,
+    repository: CollectionRepository,
+    expandLoaded: TreeExpandPrefs.Loaded,
+) {
+    var didApplyDefaultTreeExpand by remember { mutableStateOf(false) }
+    var didPickInitialRequest by remember { mutableStateOf(false) }
+    var persistTreeExpand by remember { mutableStateOf(expandLoaded.fromSavedFile) }
+
+    LaunchedEffect(treeState.tree) {
+        if (treeState.tree.isEmpty()) return@LaunchedEffect
+        if (!didApplyDefaultTreeExpand) {
+            didApplyDefaultTreeExpand = true
+            if (!expandLoaded.fromSavedFile && treeState.expandedCollectionIds.isEmpty() && treeState.expandedFolderIds.isEmpty()) {
+                treeState.expandedCollectionIds = treeState.tree.map { it.id }.toSet()
+                treeState.expandedFolderIds = collectAllFolderIds(treeState.tree)
+            }
+        }
+        persistTreeExpand = true
+        if (!didPickInitialRequest) {
+            didPickInitialRequest = true
+            val savedId = LastRequestPrefs.load()
+            if (savedId.isNotEmpty() && repository.getRequest(savedId) != null) {
+                expandSetsForRequest(treeState.tree, savedId)?.let { (cols, folders) ->
+                    treeState.expandedCollectionIds = treeState.expandedCollectionIds + cols
+                    treeState.expandedFolderIds = treeState.expandedFolderIds + folders
+                }
+                editorState.applyRequestToEditor(savedId)
+                treeState.treeSelection = TreeSelection.Request(savedId)
+            } else {
+                firstRequestSelection(treeState.tree)?.let { sel ->
+                    editorState.applyRequestToEditor(sel.id)
+                    treeState.treeSelection = sel
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(treeState.expandedCollectionIds, treeState.expandedFolderIds, persistTreeExpand) {
+        if (!persistTreeExpand) return@LaunchedEffect
+        TreeExpandPrefs.save(treeState.expandedCollectionIds, treeState.expandedFolderIds)
+    }
+}
+
+@Composable
+private fun AppDisposableEffect(
+    editorState: RequestEditorState,
+    repository: CollectionRepository,
+) {
+    DisposableEffect(Unit) {
+        onDispose {
+            editorState.saveEditorIfBound()
+            repository.close()
         }
     }
 }

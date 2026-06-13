@@ -25,8 +25,8 @@ fun setSingleResponseMessage(responseLines: MutableList<String>, message: String
     responseLines += message
 }
 
-fun showToast(vm: AppViewModel, message: String) {
-    vm.showToast(message)
+fun showToast(toastState: ToastState, message: String) {
+    toastState.show(message)
 }
 
 fun formatDuration(ms: Long): String {
