@@ -25,6 +25,7 @@ import tree.UiRequestSummary
 
 class CollectionRepository(dbPath: Path) : AutoCloseable {
 
+    private val lock = Any()
     private val conn: Connection =
         DriverManager.getConnection("jdbc:sqlite:${dbPath.toAbsolutePath()}")
 
@@ -32,16 +33,19 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         conn.createStatement().use { st ->
             st.execute("PRAGMA foreign_keys = ON")
             st.execute("PRAGMA journal_mode = WAL")
+            st.execute("PRAGMA busy_timeout = 5000")
+            st.execute("PRAGMA synchronous = NORMAL")
+            st.execute("PRAGMA cache_size = -8000")
         }
         CollectionDatabase.migrate(conn)
         ensureDefaultData()
     }
 
-    override fun close() {
+    override fun close() = synchronized(lock) {
         conn.close()
     }
 
-    fun loadTree(): List<UiCollection> {
+    fun loadTree(): List<UiCollection> = synchronized(lock) {
         val collections = mutableListOf<Triple<String, String, Int>>()
         conn.prepareStatement(
             "SELECT id, name, sort_order FROM collections ORDER BY sort_order ASC, name ASC"
@@ -62,7 +66,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun getRequest(id: String): StoredHttpRequest? {
+    fun getRequest(id: String): StoredHttpRequest? = synchronized(lock) {
         conn.prepareStatement(
             """
             SELECT id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, meta_json
@@ -90,7 +94,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun loadAllRequestsForGlobalSearch(): List<GlobalSearchRequestRow> {
+    fun loadAllRequestsForGlobalSearch(): List<GlobalSearchRequestRow> = synchronized(lock) {
         val out = mutableListOf<GlobalSearchRequestRow>()
         conn.prepareStatement(
             """
@@ -125,7 +129,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         paramsText: String,
         bodyText: String,
         auth: PostmanAuth?,
-    ) {
+    ) = synchronized(lock) {
         val now = System.currentTimeMillis()
         val oldMetaJson = getRequestMetaJson(id)
         val newMetaJson = mergeAuthIntoMetaJson(oldMetaJson, auth)
@@ -183,7 +187,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun createCollection(name: String): String {
+    fun createCollection(name: String): String = synchronized(lock) {
         val id = newId()
         val now = System.currentTimeMillis()
         val sort = nextCollectionSortOrder()
@@ -203,7 +207,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         return id
     }
 
-    fun createFolder(collectionId: String, parentFolderId: String?, name: String): String {
+    fun createFolder(collectionId: String, parentFolderId: String?, name: String): String = synchronized(lock) {
         val id = newId()
         val now = System.currentTimeMillis()
         val sort = nextFolderSortOrder(collectionId, parentFolderId)
@@ -226,7 +230,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         return id
     }
 
-    fun createRequest(collectionId: String, folderId: String?, name: String): String {
+    fun createRequest(collectionId: String, folderId: String?, name: String): String = synchronized(lock) {
         val id = newId()
         val now = System.currentTimeMillis()
         val sort = nextRequestSortOrder(collectionId, folderId)
@@ -258,7 +262,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
      * 在同一集合、同一文件夹（含根）内，在原请求下方插入副本；
      * 名称为「原名 + " Copy"」，并复制 method/url/headers/body/meta。
      */
-    fun duplicateRequestBelow(sourceId: String): String? {
+    fun duplicateRequestBelow(sourceId: String): String? = synchronized(lock) {
         val row = conn.prepareStatement(
             """
             SELECT collection_id, folder_id, name, method, url, headers_text, params_text, body_text, meta_json, sort_order
@@ -351,7 +355,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
      * 在同一集合、同一文件夹（含根）内，在指定请求正下方插入一条新请求；
      * 默认字段与 [createRequest] 一致（GET、示例 URL、默认 headers/body），名称为「新请求」。
      */
-    fun createRequestBelow(sourceId: String): String? {
+    fun createRequestBelow(sourceId: String): String? = synchronized(lock) {
         val row = conn.prepareStatement(
             """
             SELECT collection_id, folder_id, sort_order
@@ -430,7 +434,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun renameCollection(id: String, name: String) {
+    fun renameCollection(id: String, name: String) = synchronized(lock) {
         val now = System.currentTimeMillis()
         conn.prepareStatement("UPDATE collections SET name = ?, updated_at = ? WHERE id = ?").use { ps ->
             ps.setString(1, name)
@@ -440,7 +444,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun renameFolder(id: String, name: String) {
+    fun renameFolder(id: String, name: String) = synchronized(lock) {
         val now = System.currentTimeMillis()
         conn.prepareStatement("UPDATE folders SET name = ?, updated_at = ? WHERE id = ?").use { ps ->
             ps.setString(1, name)
@@ -450,7 +454,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun renameRequest(id: String, name: String) {
+    fun renameRequest(id: String, name: String) = synchronized(lock) {
         val now = System.currentTimeMillis()
         conn.prepareStatement("UPDATE requests SET name = ?, updated_at = ? WHERE id = ?").use { ps ->
             ps.setString(1, name)
@@ -460,21 +464,21 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun deleteCollection(id: String) {
+    fun deleteCollection(id: String) = synchronized(lock) {
         conn.prepareStatement("DELETE FROM collections WHERE id = ?").use { ps ->
             ps.setString(1, id)
             ps.executeUpdate()
         }
     }
 
-    fun deleteFolder(id: String) {
+    fun deleteFolder(id: String) = synchronized(lock) {
         conn.prepareStatement("DELETE FROM folders WHERE id = ?").use { ps ->
             ps.setString(1, id)
             ps.executeUpdate()
         }
     }
 
-    fun deleteRequest(id: String) {
+    fun deleteRequest(id: String) = synchronized(lock) {
         conn.prepareStatement("DELETE FROM requests WHERE id = ?").use { ps ->
             ps.setString(1, id)
             ps.executeUpdate()
@@ -485,7 +489,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
      * 递归统计文件夹下的子文件夹数和请求数（含自身直系请求）。
      * @return Pair(文件夹数, 请求数)
      */
-    fun countFolderContents(folderId: String): Pair<Int, Int> {
+    fun countFolderContents(folderId: String): Pair<Int, Int> = synchronized(lock) {
         var folderCount = 0
         var requestCount = 0
         conn.prepareStatement("SELECT id FROM folders WHERE parent_folder_id = ?").use { ps ->
@@ -512,7 +516,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
      * 在同一集合内移动文件夹：调整 [parent_folder_id] 与同级 [sort_order]。
      * 不可将文件夹拖入自身或其子孙下。
      */
-    fun moveFolder(folderId: String, newParentFolderId: String?, insertIndex: Int): Boolean {
+    fun moveFolder(folderId: String, newParentFolderId: String?, insertIndex: Int): Boolean = synchronized(lock) {
         val info = getFolderMoveInfo(folderId) ?: return false
         if (newParentFolderId != null) {
             if (newParentFolderId == folderId) return false
@@ -553,7 +557,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /** 在同一集合内移动请求（根下 folder_id IS NULL 或某文件夹下）。 */
-    fun moveRequest(requestId: String, newFolderId: String?, insertIndex: Int): Boolean {
+    fun moveRequest(requestId: String, newFolderId: String?, insertIndex: Int): Boolean = synchronized(lock) {
         val info = getRequestMoveInfo(requestId) ?: return false
         if (newFolderId != null && getFolderCollectionId(newFolderId) != info.collectionId) return false
         val oldFolder = info.folderId
@@ -589,8 +593,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun applyTreeDrop(payload: TreeDragPayload, target: TreeDropTarget): Boolean {
-        return when (payload) {
+    fun applyTreeDrop(payload: TreeDragPayload, target: TreeDropTarget): Boolean = synchronized(lock) {
+        when (payload) {
             is TreeDragPayload.Folder -> when (target) {
                 is TreeDropTarget.FolderSlot ->
                     moveFolder(payload.id, target.parentFolderId, target.insertIndex)
@@ -750,8 +754,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun resolveFolderContext(selection: TreeSelection): Pair<String, String?>? {
-        return when (selection) {
+    fun resolveFolderContext(selection: TreeSelection): Pair<String, String?>? = synchronized(lock) {
+        when (selection) {
             is TreeSelection.Collection -> selection.id to null
             is TreeSelection.Folder -> folderCollectionAndParent(selection.id)
             is TreeSelection.Request -> requestCollectionAndFolder(selection.id)
@@ -759,16 +763,16 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /** 新建文件夹：(collectionId, parentFolderId)，parent 为 null 表示集合根下。选中文件夹时在选中项下建子文件夹。 */
-    fun newFolderTarget(selection: TreeSelection?): Pair<String, String?>? {
-        if (selection == null) return null
-        return when (selection) {
+    fun newFolderTarget(selection: TreeSelection?): Pair<String, String?>? = synchronized(lock) {
+        if (selection == null) return@synchronized null
+        when (selection) {
             is TreeSelection.Collection -> selection.id to null
             is TreeSelection.Folder -> {
-                val cid = getFolderCollectionId(selection.id) ?: return null
+                val cid = getFolderCollectionId(selection.id) ?: return@synchronized null
                 cid to selection.id
             }
             is TreeSelection.Request -> {
-                val (cid, reqFolderId) = requestCollectionAndFolder(selection.id) ?: return null
+                val (cid, reqFolderId) = requestCollectionAndFolder(selection.id) ?: return@synchronized null
                 if (reqFolderId == null) cid to null
                 else {
                     val parentOfReqFolder = getFolderParentFolderId(reqFolderId)
@@ -779,24 +783,24 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /** 新建请求：与选中请求同目录；选中集合/文件夹时在其下创建。 */
-    fun newRequestTarget(selection: TreeSelection?): Pair<String, String?>? {
-        if (selection == null) return null
-        return when (selection) {
+    fun newRequestTarget(selection: TreeSelection?): Pair<String, String?>? = synchronized(lock) {
+        if (selection == null) return@synchronized null
+        when (selection) {
             is TreeSelection.Collection -> selection.id to null
             is TreeSelection.Folder -> {
-                val cid = getFolderCollectionId(selection.id) ?: return null
+                val cid = getFolderCollectionId(selection.id) ?: return@synchronized null
                 cid to selection.id
             }
             is TreeSelection.Request -> requestCollectionAndFolder(selection.id)
         }
     }
 
-    fun getFolderCollectionId(folderId: String): String? {
+    fun getFolderCollectionId(folderId: String): String? = synchronized(lock) {
         conn.prepareStatement("SELECT collection_id FROM folders WHERE id = ?").use { ps ->
             ps.setString(1, folderId)
             ps.executeQuery().use { rs ->
-                if (!rs.next()) return null
-                return rs.getString("collection_id")
+                if (!rs.next()) return@synchronized null
+                return@synchronized rs.getString("collection_id")
             }
         }
     }
@@ -826,9 +830,9 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /** 导出为与 storage 无关的结构，供 Postman / data 目录等序列化。 */
-    fun exportPortableCollection(collectionId: String): PortableCollection? {
-        val row = getCollectionRow(collectionId) ?: return null
-        return PortableCollection(
+    fun exportPortableCollection(collectionId: String): PortableCollection? = synchronized(lock) {
+        val row = getCollectionRow(collectionId) ?: return@synchronized null
+        PortableCollection(
             name = row.name,
             collectionMetaJson = row.metaJson,
             auth = extractAuthFromMetaJson(row.metaJson),
@@ -839,28 +843,28 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /** 所有集合 id（与 [loadTree] 顺序一致）。 */
-    fun listCollectionIds(): List<String> {
+    fun listCollectionIds(): List<String> = synchronized(lock) {
         val out = mutableListOf<String>()
         conn.prepareStatement("SELECT id FROM collections ORDER BY sort_order ASC, name ASC").use { ps ->
             ps.executeQuery().use { rs ->
                 while (rs.next()) out += rs.getString("id")
             }
         }
-        return out
+        out
     }
 
-    fun collectionExists(collectionId: String): Boolean {
+    fun collectionExists(collectionId: String): Boolean = synchronized(lock) {
         conn.prepareStatement("SELECT 1 FROM collections WHERE id = ?").use { ps ->
             ps.setString(1, collectionId)
-            ps.executeQuery().use { return it.next() }
+            ps.executeQuery().use { it.next() }
         }
     }
 
     /**
      * 将 [portable] 按 id 合并进已有集合 [targetCollectionId]：仅新增与更新，不删除 DB 中已有行。
      */
-    fun mergePortableIntoCollection(targetCollectionId: String, portable: PortableCollection) {
-        if (!collectionExists(targetCollectionId)) return
+    fun mergePortableIntoCollection(targetCollectionId: String, portable: PortableCollection) = synchronized(lock) {
+        if (!collectionExists(targetCollectionId)) return@synchronized
         val now = System.currentTimeMillis()
         val oldAutoCommit = conn.autoCommit
         conn.autoCommit = false
@@ -889,7 +893,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     /**
      * 以固定 [collectionId] 新建集合并落库（与 [importAsNewCollection] 类似，用于从 data 目录拉取新文件）。
      */
-    fun importAsNewCollectionWithFixedId(collectionId: String, portable: PortableCollection) {
+    fun importAsNewCollectionWithFixedId(collectionId: String, portable: PortableCollection) = synchronized(lock) {
         require(collectionId.isNotBlank())
         if (collectionExists(collectionId)) {
             throw IllegalStateException("集合已存在: $collectionId")
@@ -929,7 +933,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     }
 
     /** 用于导入：新建一个集合并写入整棵树（事务内）；不覆盖已有集合。返回新集合 id。 */
-    fun importAsNewCollection(portable: PortableCollection, collectionName: String? = null): String {
+    fun importAsNewCollection(portable: PortableCollection, collectionName: String? = null): String = synchronized(lock) {
         conn.autoCommit = false
         try {
             val collId = newId()
@@ -955,7 +959,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 insertPortableRequest(collId, null, req, now)
             }
             conn.commit()
-            return collId
+            collId
         } catch (e: Exception) {
             conn.rollback()
             throw e
@@ -1130,35 +1134,35 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun resolveEffectiveAuth(requestId: String): PostmanAuth? {
+    fun resolveEffectiveAuth(requestId: String): PostmanAuth? = synchronized(lock) {
         // 1. Check request itself
-        val req = getRequest(requestId) ?: return null
+        val req = getRequest(requestId) ?: return@synchronized null
         val reqAuth = req.auth
-        if (reqAuth != null && reqAuth.type != "inherit") return reqAuth
+        if (reqAuth != null && reqAuth.type != "inherit") return@synchronized reqAuth
 
         // 2. Check folder (if any)
         var currentFolderId = req.folderId
         while (currentFolderId != null) {
             val folderAuth = getFolderAuth(currentFolderId)
-            if (folderAuth != null && folderAuth.type != "inherit") return folderAuth
+            if (folderAuth != null && folderAuth.type != "inherit") return@synchronized folderAuth
             currentFolderId = getParentFolderId(currentFolderId)
         }
 
         // 3. Check collection
-        return getCollectionAuth(req.collectionId)
+        getCollectionAuth(req.collectionId)
     }
 
-    fun getCollectionAuth(collectionId: String): PostmanAuth? {
+    fun getCollectionAuth(collectionId: String): PostmanAuth? = synchronized(lock) {
         conn.prepareStatement("SELECT meta_json FROM collections WHERE id = ?").use { ps ->
             ps.setString(1, collectionId)
             ps.executeQuery().use { rs ->
-                if (rs.next()) return extractAuthFromMetaJson(rs.getString("meta_json") ?: "{}")
+                if (rs.next()) return@synchronized extractAuthFromMetaJson(rs.getString("meta_json") ?: "{}")
             }
         }
-        return null
+        null
     }
 
-    fun updateCollectionAuth(collectionId: String, auth: PostmanAuth?) {
+    fun updateCollectionAuth(collectionId: String, auth: PostmanAuth?) = synchronized(lock) {
         val oldMeta = conn.prepareStatement("SELECT meta_json FROM collections WHERE id = ?").use { ps ->
             ps.setString(1, collectionId)
             ps.executeQuery().use { rs ->
@@ -1174,17 +1178,17 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         }
     }
 
-    fun getFolderAuth(folderId: String): PostmanAuth? {
+    fun getFolderAuth(folderId: String): PostmanAuth? = synchronized(lock) {
         conn.prepareStatement("SELECT meta_json FROM folders WHERE id = ?").use { ps ->
             ps.setString(1, folderId)
             ps.executeQuery().use { rs ->
-                if (rs.next()) return extractAuthFromMetaJson(rs.getString("meta_json") ?: "{}")
+                if (rs.next()) return@synchronized extractAuthFromMetaJson(rs.getString("meta_json") ?: "{}")
             }
         }
-        return null
+        null
     }
 
-    fun updateFolderAuth(folderId: String, auth: PostmanAuth?) {
+    fun updateFolderAuth(folderId: String, auth: PostmanAuth?) = synchronized(lock) {
         val oldMeta = conn.prepareStatement("SELECT meta_json FROM folders WHERE id = ?").use { ps ->
             ps.setString(1, folderId)
             ps.executeQuery().use { rs ->

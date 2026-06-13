@@ -67,9 +67,9 @@ request目录下的bench目录 存放的是: 压测配置json(参数: 并发数,
 > 架构与工程
 - **缺少自动化测试**：项目完全没有测试（src/test/ 不存在），建议引入 kotlin.test / JUnit5
 为核心逻辑（CollectionRepository、EnvironmentSubstitute、CurlParser 等）编写单元测试
-- **AppViewModel 过于臃肿**：单一 Composable 持有全部应用状态（tab、session、环境、设置等），建议拆分为多个小
+- [X] **AppViewModel 过于臃肿**：单一 Composable 持有全部应用状态（tab、session、环境、设置等），建议拆分为多个小
 ViewModel（TabViewModel、SessionViewModel、EnvironmentViewModel）
-- **无依赖注入**：手动管理所有依赖，建议引入简单 DI（手动构造或 koin）降低耦合
+- [X] **无依赖注入**：手动管理所有依赖，建议引入简单 DI（手动构造或 koin）降低耦合
 - **无日志框架集成**：TODO.md 提到 `kotlin-logging + Logback` 但 build.gradle.kts 中未配置
 - **SQLite 无连接池/WAL 模式**：单连接直连，大数据量下性能瓶颈，建议开启 WAL 模式并复用连接
 
