@@ -42,7 +42,7 @@ import androidx.compose.ui.window.rememberDialogState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
@@ -53,6 +53,7 @@ import androidx.compose.material.IconButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.SolidColor
@@ -281,46 +282,60 @@ private fun EnvironmentManagerDialogBody(
                                     draft = persistCurrentEnvIntoDraft()
                                     selectedId = env.id
                                 })
-                                .pointerInput(env.id) {
-                                    detectDragGesturesAfterLongPress(
-                                        onDragStart = {
-                                            draggedIdx = draft.environments.indexOfFirst { it.id == env.id }
-                                            dragTotalOffset = 0f
-                                        },
-                                        onDrag = { _, dragAmount ->
-                                            dragTotalOffset += dragAmount.y
-                                            val ci = draggedIdx ?: return@detectDragGesturesAfterLongPress
-                                            if (dragTotalOffset > itemHeightPx && ci > 0) {
-                                                val list = draft.environments.toMutableList()
-                                                val tmp = list[ci]
-                                                list[ci] = list[ci - 1]
-                                                list[ci - 1] = tmp
-                                                draft = draft.copy(environments = list)
-                                                draggedIdx = ci - 1
-                                                dragTotalOffset -= itemHeightPx
-                                            } else if (dragTotalOffset < -itemHeightPx && ci < draft.environments.lastIndex) {
-                                                val list = draft.environments.toMutableList()
-                                                val tmp = list[ci]
-                                                list[ci] = list[ci + 1]
-                                                list[ci + 1] = tmp
-                                                draft = draft.copy(environments = list)
-                                                draggedIdx = ci + 1
-                                                dragTotalOffset += itemHeightPx
-                                            }
-                                        },
-                                        onDragEnd = {
-                                            draggedIdx = null
-                                            dragTotalOffset = 0f
-                                        },
-                                        onDragCancel = {
-                                            draggedIdx = null
-                                            dragTotalOffset = 0f
-                                        },
-                                    )
-                                }
-                                .padding(horizontal = 12.dp),
+                                .padding(start = 2.dp, end = 12.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
+                            Box(
+                                modifier = Modifier
+                                    .width(24.dp)
+                                    .fillMaxHeight()
+                                    .pointerInput(env.id) {
+                                        detectDragGestures(
+                                            onDragStart = {
+                                                draggedIdx = draft.environments.indexOfFirst { it.id == env.id }
+                                                dragTotalOffset = 0f
+                                            },
+                                            onDrag = { change, dragAmount ->
+                                                change.consume()
+                                                dragTotalOffset += dragAmount.y
+                                                val ci = draggedIdx ?: return@detectDragGestures
+                                                if (dragTotalOffset > itemHeightPx && ci < draft.environments.lastIndex) {
+                                                    val list = draft.environments.toMutableList()
+                                                    val tmp = list[ci]
+                                                    list[ci] = list[ci + 1]
+                                                    list[ci + 1] = tmp
+                                                    draft = draft.copy(environments = list)
+                                                    draggedIdx = ci + 1
+                                                    dragTotalOffset -= itemHeightPx
+                                                } else if (dragTotalOffset < -itemHeightPx && ci > 0) {
+                                                    val list = draft.environments.toMutableList()
+                                                    val tmp = list[ci]
+                                                    list[ci] = list[ci - 1]
+                                                    list[ci - 1] = tmp
+                                                    draft = draft.copy(environments = list)
+                                                    draggedIdx = ci - 1
+                                                    dragTotalOffset += itemHeightPx
+                                                }
+                                            },
+                                            onDragEnd = {
+                                                draggedIdx = null
+                                                dragTotalOffset = 0f
+                                            },
+                                            onDragCancel = {
+                                                draggedIdx = null
+                                                dragTotalOffset = 0f
+                                            },
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Icon(
+                                    Icons.Filled.Menu,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colors.onSurface.copy(alpha = 0.28f),
+                                )
+                            }
                             val nameColor =
                                 if (isSelected) MaterialTheme.colors.primary
                                 else MaterialTheme.colors.onSurface
