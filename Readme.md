@@ -9,7 +9,7 @@ JDK 21 + Gradle 8.11 + Kotlin 2.3.20 + compose 1.11.1
 
 Data Dir: ~/.local/share/api-x
 
-[Compatibility and versions﻿](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
+[Compatibility and versions](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
 
 ## Features
 
