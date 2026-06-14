@@ -40,15 +40,14 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.CreateNewFolder
+import app.ui.CustomIcons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.PostAdd
+
+
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.automirrored.filled.LibraryBooks
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -234,7 +233,7 @@ fun CollectionTreeSidebar(
                 modifier = Modifier.size(30.dp)
             ) {
                 Icon(
-                    Icons.Filled.CreateNewFolder,
+                    CustomIcons.CreateNewFolder,
                     contentDescription = "新建文件夹",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colors.onSurface.copy(
@@ -248,7 +247,7 @@ fun CollectionTreeSidebar(
                 modifier = Modifier.size(30.dp)
             ) {
                 Icon(
-                    Icons.Filled.PostAdd,
+                    CustomIcons.PostAdd,
                     contentDescription = "新建请求",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colors.onSurface.copy(
@@ -521,7 +520,7 @@ private fun CollectionTreeBlock(
                 depth = depth,
                 icon = {
                     Icon(
-                        Icons.AutoMirrored.Filled.LibraryBooks,
+                        CustomIcons.LibraryBooks,
                         contentDescription = null,
                         modifier = Modifier.size(19.dp),
                         tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
@@ -681,7 +680,7 @@ private fun FolderTreeBlock(
             depth = depth,
             icon = {
                 Icon(
-                    if (expanded) Icons.Filled.FolderOpen else Icons.Filled.Folder,
+                    if (expanded) CustomIcons.FolderOpen else CustomIcons.Folder,
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
                     tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)

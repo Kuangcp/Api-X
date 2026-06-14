@@ -33,8 +33,7 @@ import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AccessTime
-import androidx.compose.material.icons.filled.ContentCopy
+import app.ui.CustomIcons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -334,7 +333,7 @@ fun ResponsePanel(
                 modifier = iconBtnMod,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.ContentCopy,
+                    imageVector = CustomIcons.ContentCopy,
                     contentDescription = "复制响应正文到剪贴板",
                     modifier = iconMod,
                     tint = iconTint,
@@ -360,7 +359,7 @@ fun ResponsePanel(
                     modifier = iconBtnMod,
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.AccessTime,
+                        imageVector =                     CustomIcons.AccessTime,
                         contentDescription = "选择历史响应",
                         modifier = iconMod,
                         tint = if (historyEntries.isNotEmpty()) iconTint else iconTint.copy(alpha = 0.3f),

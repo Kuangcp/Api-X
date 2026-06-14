@@ -30,17 +30,10 @@ import androidx.compose.material.ripple
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ContentPaste
-import androidx.compose.material.icons.filled.CropSquare
-import androidx.compose.material.icons.filled.CloudDownload
-import androidx.compose.material.icons.filled.CloudUpload
-import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.FilterNone
+
+import app.ui.CustomIcons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.LibraryAdd
-import androidx.compose.material.icons.filled.LightMode
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -179,7 +172,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.LibraryAdd,
+                            imageVector =                             CustomIcons.LibraryAdd,
                             contentDescription = "导入 Postman Collection…",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -191,7 +184,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.ContentPaste,
+                            imageVector = CustomIcons.ContentPaste,
                             contentDescription = "从剪贴板导入 cURL",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -203,7 +196,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.CloudUpload,
+                            imageVector =                         CustomIcons.CloudUpload,
                             contentDescription = "同步到 data 目录（供 Git 管理）",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -215,7 +208,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector = Icons.Filled.CloudDownload,
+                            imageVector =                             CustomIcons.CloudDownload,
                             contentDescription = "从 data 目录合并到本地",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -240,7 +233,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector = if (isDarkTheme) Icons.Filled.LightMode else Icons.Filled.DarkMode,
+                            imageVector = if (isDarkTheme)                             CustomIcons.LightMode else CustomIcons.DarkMode,
                             contentDescription = if (isDarkTheme) "切换浅色主题" else "切换深色主题",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -349,7 +342,7 @@ fun WindowScope.RequestTopBar(
                 modifier = topBarIconButtonModifier,
             ) {
                 Icon(
-                    imageVector = Icons.Filled.Remove,
+                    imageVector = CustomIcons.Remove,
                     contentDescription = "最小化",
                     modifier = topBarIconModifier,
                     tint = topBarIconTint,
@@ -367,7 +360,7 @@ fun WindowScope.RequestTopBar(
                 modifier = topBarIconButtonModifier,
             ) {
                 Icon(
-                    imageVector = if (isWindowMaximized) Icons.Filled.FilterNone else Icons.Filled.CropSquare,
+                    imageVector = if (isWindowMaximized) CustomIcons.FilterNone else CustomIcons.CropSquare,
                     contentDescription = if (isWindowMaximized) "还原" else "最大化",
                     modifier = topBarIconModifier,
                     tint = topBarIconTint,

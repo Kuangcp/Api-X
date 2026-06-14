@@ -29,7 +29,7 @@ import androidx.compose.material.Text
 import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
-import androidx.compose.material.icons.filled.AutoAwesome
+import app.ui.CustomIcons
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -146,7 +146,7 @@ private fun BodyContentKindSelector(
                 enabled = enabled && bodyText.isNotBlank(),
             ) {
                 Icon(
-                    Icons.Filled.AutoAwesome,
+                    CustomIcons.AutoAwesome,
                     contentDescription = "格式化 JSON",
                     tint = MaterialTheme.colors.onSurface.copy(alpha = if (enabled) 0.7f else ContentAlpha.disabled),
                 )

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.github.kuangcp"
-version = "1.3.0"
+version = "1.3.1"
 
 val appIconPng = layout.projectDirectory.file("api.png").asFile
 
@@ -33,7 +33,7 @@ dependencies {
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
     implementation("org.jetbrains.compose.components:components-resources:${property("compose.version")}")
-    implementation("org.jetbrains.compose.material:material-icons-extended:1.7.3")
+    implementation("org.jetbrains.compose.material:material-icons-core:1.7.3")
     implementation("org.xerial:sqlite-jdbc:3.47.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
