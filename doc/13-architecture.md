@@ -178,7 +178,7 @@ dependencies {
 }
 ```
 
-> 版本号统一在 `gradle.properties` 管理：`kotlin.version=2.3.20`、`compose.version=1.10.3`
+> 版本号统一在 `gradle.properties` 管理：`kotlin.version=2.4.0`、`compose.version=1.10.3`
 
 ### 常用库
 

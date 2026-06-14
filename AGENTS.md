@@ -1,5 +1,5 @@
 # 框架背景
-JDK25 JBR + Compose1.11.1 + Kotlin 2.3.20
+JDK25 JBR + Compose1.11.1 + Kotlin 2.4.0
 
 # 构建规则
 - 必须使用 gradle 不能使用gradlew.

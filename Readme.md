@@ -2,7 +2,7 @@
 
 [中文说明](Readme-CN.md)
 
-JDK 25 JBR + Gradle 9.4.1 + Kotlin 2.3.20 + compose 1.11.1
+JDK 25 JBR + Gradle 9.4.1 + Kotlin 2.4.0 + compose 1.11.1
 
 - `gradle run` — run in development / debug
 - `gradle createDistributable` — build a distributable package

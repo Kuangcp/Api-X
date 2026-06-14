@@ -35,7 +35,7 @@ dependencies {
 
 > 项目中的配置 (`build.gradle.kts:1-40`): 版本号统一在 `gradle.properties` 管理：
 ```properties
-kotlin.version=2.3.20
+kotlin.version=2.4.0
 compose.version=1.10.3
 ```
 
@@ -226,7 +226,7 @@ android.useAndroidX=true
 ```properties
 org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
 kotlin.code.style=official
-kotlin.version=2.3.20
+kotlin.version=2.4.0
 compose.version=1.10.3
 ```
 

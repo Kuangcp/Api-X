@@ -31,7 +31,7 @@ dependencies {
 
 版本号在 `gradle.properties` 统一管理：
 ```properties
-kotlin.version=2.3.20
+kotlin.version=2.4.0
 compose.version=1.10.3
 ```
 

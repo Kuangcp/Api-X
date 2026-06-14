@@ -89,6 +89,7 @@ import app.settings.AppSettingsStore
 import app.settings.AppSettingsBridge
 import app.dialog.RecentRequestSwitcherOverlay
 import app.ui.Dialogs
+import app.ui.ErrorBoundary
 import app.ui.appMaterialColors
 import app.ui.typographyFromSettings
 import java.awt.AWTEvent
@@ -257,11 +258,11 @@ fun App(onExitRequest: () -> Unit) {
     ) {
         MaterialTheme(colors = appMaterialColors(themeState.isDarkTheme, appSettingsState.appSettings.backgroundHex), typography = typographyFromSettings(appSettingsState.appSettings)) {
             Box(modifier = Modifier.fillMaxSize()) {
-                var isDragging by remember { mutableStateOf(false) }
-                var ghostDelta by remember { mutableStateOf(0f) }
-                var splitHandlePos by remember { mutableStateOf(Offset.Zero) }
-                var splitHandleH by remember { mutableStateOf(0) }
-                Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    var isDragging by remember { mutableStateOf(false) }
+                    var ghostDelta by remember { mutableStateOf(0f) }
+                    var splitHandlePos by remember { mutableStateOf(Offset.Zero) }
+                    var splitHandleH by remember { mutableStateOf(0) }
+                    Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     RequestTopBar(
                         isLoading = currentSession?.isLoading ?: false,
                         isDarkTheme = themeState.isDarkTheme,
@@ -634,7 +635,14 @@ private fun ToastMessage(message: String, onDismiss: () -> Unit) {
     }
 }
 
-fun main() = application { App(onExitRequest = { exitApplication() }) }
+fun main() {
+    GlobalExceptionHandler.install()
+    application {
+        ErrorBoundary {
+            App(onExitRequest = { exitApplication() })
+        }
+    }
+}
 
 data class AppDependencies(
     val treeState: TreeState,
