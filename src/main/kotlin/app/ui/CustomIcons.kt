@@ -41,40 +41,74 @@ private fun ImageVector.Builder.addPathSegments(
             when (node) {
                 is androidx.compose.ui.graphics.vector.PathNode.MoveTo ->
                     moveTo(node.x, node.y)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeMoveTo ->
                     moveToRelative(node.dx, node.dy)
+
                 is androidx.compose.ui.graphics.vector.PathNode.LineTo ->
                     lineTo(node.x, node.y)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeLineTo ->
                     lineToRelative(node.dx, node.dy)
+
                 is androidx.compose.ui.graphics.vector.PathNode.HorizontalTo ->
                     horizontalLineTo(node.x)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeHorizontalTo ->
                     horizontalLineToRelative(node.dx)
+
                 is androidx.compose.ui.graphics.vector.PathNode.VerticalTo ->
                     verticalLineTo(node.y)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeVerticalTo ->
                     verticalLineToRelative(node.dy)
+
                 is androidx.compose.ui.graphics.vector.PathNode.CurveTo ->
                     curveTo(node.x1, node.y1, node.x2, node.y2, node.x3, node.y3)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeCurveTo ->
                     curveToRelative(node.dx1, node.dy1, node.dx2, node.dy2, node.dx3, node.dy3)
+
                 is androidx.compose.ui.graphics.vector.PathNode.ReflectiveCurveTo ->
                     reflectiveCurveTo(node.x1, node.y1, node.x2, node.y2)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeReflectiveCurveTo ->
                     reflectiveCurveToRelative(node.dx1, node.dy1, node.dx2, node.dy2)
+
                 is androidx.compose.ui.graphics.vector.PathNode.QuadTo ->
                     quadTo(node.x1, node.y1, node.x2, node.y2)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeQuadTo ->
                     quadToRelative(node.dx1, node.dy1, node.dx2, node.dy2)
+
                 is androidx.compose.ui.graphics.vector.PathNode.ReflectiveQuadTo ->
                     reflectiveQuadTo(node.x, node.y)
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeReflectiveQuadTo ->
                     reflectiveQuadToRelative(node.dx, node.dy)
+
                 is androidx.compose.ui.graphics.vector.PathNode.ArcTo ->
-                    arcTo(node.horizontalEllipseRadius, node.verticalEllipseRadius, node.theta, node.isMoreThanHalf, node.isPositiveArc, node.arcStartX, node.arcStartY)
+                    arcTo(
+                        node.horizontalEllipseRadius,
+                        node.verticalEllipseRadius,
+                        node.theta,
+                        node.isMoreThanHalf,
+                        node.isPositiveArc,
+                        node.arcStartX,
+                        node.arcStartY
+                    )
+
                 is androidx.compose.ui.graphics.vector.PathNode.RelativeArcTo ->
-                    arcToRelative(node.horizontalEllipseRadius, node.verticalEllipseRadius, node.theta, node.isMoreThanHalf, node.isPositiveArc, node.arcStartDx, node.arcStartDy)
+                    arcToRelative(
+                        node.horizontalEllipseRadius,
+                        node.verticalEllipseRadius,
+                        node.theta,
+                        node.isMoreThanHalf,
+                        node.isPositiveArc,
+                        node.arcStartDx,
+                        node.arcStartDy
+                    )
+
                 is androidx.compose.ui.graphics.vector.PathNode.Close ->
                     close()
             }
@@ -277,37 +311,64 @@ object CustomIcons {
         }.build()
     }
 
-    /** 替代 Icons.Filled.CropSquare — 方框图标 */
-    val CropSquare: ImageVector by lazy {
+    val FileNew: ImageVector by lazy {
         ImageVector.Builder(
-            name = "CropSquare",
+            name = "FileNew",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f
         ).apply {
             addPathSegments(
-                pathData = "M3 3v18h18V3H3zm8 16H5v-6h6v6zm0-8H5V5h6v6zm8 8h-6v-6h6v6zm0-8h-6V5h6v6z",
-                fill = Color.Black,
+                // 1. 绘制文件主体轮廓（包含右上角折边，并在右下角为加号留出空间）
+                pathData = "M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H13v-2H6V4h7v5h5v2h2V8l-6-6zm1 5V4.15L17.85 7H15z" +
+                        // 2. 绘制右下角的加号 (+)
+                        "M18 13h-2v3h-3v2h3v3h2v-3h3v-2h-3v-3z",
+                fill = Color.Black
             )
         }.build()
     }
 
-    /** 替代 Icons.Filled.FilterNone — 重叠方框图标 */
-    val FilterNone: ImageVector by lazy {
+    /**
+     * 状态 1：普通状态（点击去最大化）
+     * 视觉效果：一个干净的正方形
+     */
+    val WindowMaximize: ImageVector by lazy {
         ImageVector.Builder(
-            name = "FilterNone",
+            name = "WindowMaximize",
             defaultWidth = 24.dp,
             defaultHeight = 24.dp,
             viewportWidth = 24f,
             viewportHeight = 24f
         ).apply {
             addPathSegments(
-                pathData = "M3 5v14h18V5H3zm4 2v10H5V7h2zm12 10h-2V7h2v10z",
-                fill = Color.Black,
+                // 绘制一个 14x14 居中的空心正方形，线宽 2
+                pathData = "M5 5h14v14H5V5zm2 2v10h10V7H7z",
+                fill = Color.Black
             )
         }.build()
     }
+
+    /**
+     * 状态 2：已最大化状态（点击向下还原）
+     * 视觉效果：两个斜向重叠的方框
+     */
+    val WindowRestore: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "WindowRestore",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            addPathSegments(
+                // 后面重叠的 L 型线条 + 前面完整的正方形，线宽 2，完美斜向层叠
+                pathData = "M9 5h10v10h-2V7H9V5zm-4 4h10v10H5V9zm2 2v6h6v-6H7z",
+                fill = Color.Black
+            )
+        }.build()
+    }
+
 
     /** 替代 Icons.Filled.Remove — 减号图标 */
     val Remove: ImageVector by lazy {

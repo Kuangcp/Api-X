@@ -247,7 +247,7 @@ fun CollectionTreeSidebar(
                 modifier = Modifier.size(30.dp)
             ) {
                 Icon(
-                    CustomIcons.PostAdd,
+                    CustomIcons.FileNew,
                     contentDescription = "新建请求",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colors.onSurface.copy(

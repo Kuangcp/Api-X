@@ -48,6 +48,7 @@ import androidx.compose.ui.window.WindowScope
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowState
 import app.settings.EnvironmentsState
+
 /**
  * 顶栏环境下拉菜单项内边距。
  * 注意：[DropdownMenuItem] 内部固定 `minHeight`（约 48.dp），仅改 `contentPadding` 无法压低行高；
@@ -125,7 +126,7 @@ fun WindowScope.RequestTopBar(
     }
 
     val isWindowMaximized = mainWindowState.placement == WindowPlacement.Maximized ||
-        mainWindowState.placement == WindowPlacement.Fullscreen
+            mainWindowState.placement == WindowPlacement.Fullscreen
 
     /** 与窗口控制按钮同一行、同一高度带，避免左侧控件与右侧「最小化/最大化/关闭」视觉错位 */
     val topBarHeight = 36.dp
@@ -172,7 +173,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector =                             CustomIcons.LibraryAdd,
+                            imageVector = CustomIcons.FolderOpen,
                             contentDescription = "导入 Postman Collection…",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -196,7 +197,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector =                         CustomIcons.CloudUpload,
+                            imageVector = CustomIcons.CloudUpload,
                             contentDescription = "同步到 data 目录（供 Git 管理）",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -208,7 +209,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector =                             CustomIcons.CloudDownload,
+                            imageVector = CustomIcons.CloudDownload,
                             contentDescription = "从 data 目录合并到本地",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -233,7 +234,7 @@ fun WindowScope.RequestTopBar(
                         modifier = topBarIconButtonModifier
                     ) {
                         Icon(
-                            imageVector = if (isDarkTheme)                             CustomIcons.LightMode else CustomIcons.DarkMode,
+                            imageVector = if (isDarkTheme) CustomIcons.LightMode else CustomIcons.DarkMode,
                             contentDescription = if (isDarkTheme) "切换浅色主题" else "切换深色主题",
                             modifier = topBarIconModifier,
                             tint = topBarIconTint
@@ -360,7 +361,7 @@ fun WindowScope.RequestTopBar(
                 modifier = topBarIconButtonModifier,
             ) {
                 Icon(
-                    imageVector = if (isWindowMaximized) CustomIcons.FilterNone else CustomIcons.CropSquare,
+                    imageVector = if (isWindowMaximized) CustomIcons.WindowMaximize else CustomIcons.WindowRestore,
                     contentDescription = if (isWindowMaximized) "还原" else "最大化",
                     modifier = topBarIconModifier,
                     tint = topBarIconTint,
