@@ -160,18 +160,6 @@ fun WindowScope.RequestTopBar(
                         )
                     }
                     IconButton(
-                        onClick = onImportCurlClick,
-                        enabled = !isLoading,
-                        modifier = topBarIconButtonModifier
-                    ) {
-                        Icon(
-                            imageVector = CustomIcons.ContentPaste,
-                            contentDescription = "从剪贴板导入 cURL",
-                            modifier = topBarIconModifier,
-                            tint = topBarIconTint
-                        )
-                    }
-                    IconButton(
                         onClick = onPushDataClick,
                         enabled = !isLoading,
                         modifier = topBarIconButtonModifier
@@ -196,6 +184,18 @@ fun WindowScope.RequestTopBar(
                         )
                     }
                     Spacer(modifier = Modifier.weight(1f))
+                    IconButton(
+                        onClick = onImportCurlClick,
+                        enabled = !isLoading,
+                        modifier = topBarIconButtonModifier
+                    ) {
+                        Icon(
+                            imageVector = CustomIcons.ContentPaste,
+                            contentDescription = "从剪贴板导入 cURL",
+                            modifier = topBarIconModifier,
+                            tint = topBarIconTint
+                        )
+                    }
                     IconButton(
                         onClick = onSettingsClick,
                         enabled = !isLoading,
