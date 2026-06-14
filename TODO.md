@@ -96,6 +96,6 @@ ViewModel（TabViewModel、SessionViewModel、EnvironmentViewModel）
 - **无输入校验**：URL、Header、Body 等输入在发送前无格式校验，无效请求直接发送
 
 > 可靠性
-- **无崩溃恢复机制**：Composable 异常无 ErrorBoundary，整个应用崩溃
+- [X] **无崩溃恢复机制**：Composable 异常无 ErrorBoundary，整个应用崩溃
 - **SQLite 迁移无框架**：当前版本号+手动 SQL 方式，无 Flyway/Liquibase 等迁移框架，协作时易出错
 - 忽略 **无请求超时兜底**：HttpClient 未显式设置 connectTimeout / requestTimeout，极端网络下可能永久阻塞

@@ -16,68 +16,79 @@ fun requestToGoTestMethod(method: String, url: String, headersText: String, body
         "\tvar body string"
     }
 
-    return buildString {
-        appendLine("package main")
-        appendLine()
-        appendLine("import (")
-        appendLine("\t\"fmt\"")
-        appendLine("\t\"io\"")
-        appendLine("\t\"net/http\"")
-        appendLine("\t\"strings\"")
-        appendLine("\t\"testing\"")
-        appendLine(")")
-        appendLine()
-        appendLine("func TestApiRequest(t *testing.T) {")
-        appendLine("\turl := ${goStringLiteral(u)}")
-        appendLine()
-        appendLine("\theaders := map[string]string{")
-        append(headerMapEntries)
-        appendLine()
-        appendLine("\t}")
-        appendLine()
-        appendLine(bodyLine)
-        appendLine()
-        appendLine("\tvar bodyReader io.Reader")
-        appendLine("\tif body != \"\" {")
-        appendLine("\t\tbodyReader = strings.NewReader(body)")
-        appendLine("\t}")
-        appendLine()
-        appendLine("\treq, err := http.NewRequest(${goStringLiteral(m)}, url, bodyReader)")
-        appendLine("\tif err != nil {")
-        appendLine("\t\tt.Fatal(err)")
-        appendLine("\t}")
-        appendLine("\tfor k, v := range headers {")
-        appendLine("\t\treq.Header.Set(k, v)")
-        appendLine("\t}")
-        appendLine()
-        appendLine("\tclient := &http.Client{}")
-        appendLine("\tresp, err := client.Do(req)")
-        appendLine("\tif err != nil {")
-        appendLine("\t\tt.Fatal(err)")
-        appendLine("\t}")
-        appendLine("\tdefer resp.Body.Close()")
-        appendLine()
-        appendLine("\tfmt.Println(\"Status:\", resp.Status)")
-        appendLine("\tfor k, v := range resp.Header {")
-        appendLine("\t\tfmt.Printf(\"%s: %s\\n\", k, strings.Join(v, \", \"))")
-        appendLine("\t}")
-        appendLine()
-        appendLine("\trespBody, err := io.ReadAll(resp.Body)")
-        appendLine("\tif err != nil {")
-        appendLine("\t\tt.Fatal(err)")
-        appendLine("\t}")
-        appendLine("\tfmt.Println()")
-        appendLine("\tfmt.Println(string(respBody))")
-        appendLine("}")
-    }
+    return """
+package main
+
+import (
+	"bytes"
+	"compress/gzip"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+	"testing"
+)
+
+func TestApiRequest(t *testing.T) {
+	url := ${goStringLiteral(u)}
+
+	headers := map[string]string{
+$headerMapEntries
+	}
+
+$bodyLine
+
+	var bodyReader io.Reader
+	if body != "" {
+		bodyReader = strings.NewReader(body)
+	}
+
+	req, err := http.NewRequest(${goStringLiteral(m)}, url, bodyReader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	fmt.Println("Status:", resp.Status)
+	for k, v := range resp.Header {
+		fmt.Printf("%s: %s\n", k, strings.Join(v, ", "))
+	}
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if resp.Header.Get("Content-Encoding") == "gzip" ||
+		len(respBody) >= 2 && respBody[0] == 0x1f && respBody[1] == 0x8b {
+		reader, err := gzip.NewReader(bytes.NewReader(respBody))
+		if err == nil {
+			defer reader.Close()
+			respBody, err = io.ReadAll(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	fmt.Println()
+	fmt.Println(string(respBody))
+}
+""".trimIndent()
 }
 
 private fun goStringLiteral(s: String): String {
-    val escaped = s
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
-        .replace("\r", "\\r")
+    val escaped = s.replace("\\", "\\\\").replace("\"", "\\\"")
+        .replace("\n", "\\n").replace("\r", "\\r")
         .replace("\t", "\\t")
     return "\"$escaped\""
 }

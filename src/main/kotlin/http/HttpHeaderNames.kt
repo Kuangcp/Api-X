@@ -188,10 +188,9 @@ val KNOWN_HTTP_HEADERS: List<String> = listOf(
 fun filterHeaders(query: String): List<String> {
     if (query.isBlank()) return emptyList()
     val q = query.lowercase()
-    return KNOWN_HTTP_HEADERS
-        .map { header -> header to (if (header.lowercase() == q) 0 else if (header.lowercase().startsWith(q)) 1 else if (header.lowercase().contains(q)) 2 else 3) }
-        .filter { it.second < 3 }
-        .sortedBy { it.second }
-        .take(8)
-        .map { it.first }
+    return KNOWN_HTTP_HEADERS.asSequence().map { header ->
+        header to (if (header.lowercase() == q) 0 else if (header.lowercase()
+                .startsWith(q)
+        ) 1 else if (header.lowercase().contains(q)) 2 else 3)
+    }.filter { it.second < 3 }.sortedBy { it.second }.take(8).map { it.first }.toList()
 }
