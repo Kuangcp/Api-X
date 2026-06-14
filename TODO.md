@@ -2,12 +2,12 @@
 # TODO
 
 > 性能专项
-- 右侧相应区域的语法高亮问题
+- [X] 右侧相应区域的语法高亮问题
 - sse响应的性能问题
 
 > Request
 request body 功能丰富
-request body json高亮 格式化
+- [X] request body json高亮 格式化
 
 - [X] 当一个Request A 在请求中时, 如果点左侧树切换到其他 Request 例如B , 需要A和B 状态独立互不不影响, 也就是说 需要支持多个Request同时执行, 状态和数据需要隔离. 在A和B切换时能看到实时的A和B对应的状态和流输出等, 同样的切换到C 又可以启动C, 当Request在运行中时, 左侧的树Request节点左侧需要加一个loading的动画来标记这个Request是在运行的, 然后执行结束后去掉这个loaing的动态icon. 
 
@@ -19,7 +19,7 @@ request body json高亮 格式化
 
 - [X] Request 加Params Tab 功能和交互和Header是一样的, 但是区别是这里填的内容是 拼接在 URL后的, 例如这里配置了 k1:value1 k2:value2 两行, 在url就是 url?k1=value1&k2=value2
 
-1. 多标签页（Multi-Tab）
+- [X] 1. 多标签页（Multi-Tab）
 现有问题是每次只能编辑一个请求，切换时当前编辑状态会丢失。增加 Tab 栏可以同时打开多个请求，类似 Postman / Insomnia 的工作方式。
 Tab 可关闭、拖拽排序
 每个 Tab 独立维护未保存的编辑状态
@@ -46,7 +46,7 @@ Tab 可关闭、拖拽排序
 
 - [X] 响应区域 默认展示Raw格式, 考虑性能问题, 需要手动切换到 格式化高亮形式
 - [X] 需要加一个 Request 的tab 展示实际发送请求的request内容, 因为左侧现在有变量和勾选的机制, 不知道实际的请求情况
-- 需要支持搜索定位 
+- [X] 需要支持搜索定位
 
 
 > benchmark 功能
