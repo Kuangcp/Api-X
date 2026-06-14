@@ -48,6 +48,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
@@ -57,12 +58,13 @@ import db.HistoryEntry
 import http.ExchangeFontMetrics
 import http.HttpExchangeErrorStatusMark
 import http.contentTypeHeaderIndicatesJson
-import http.formatAndHighlightJsonOrNull
+import http.highlightJsonLinesOrNull
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.TextFieldDefaults
 import androidx.compose.material.icons.filled.Close
@@ -89,6 +91,12 @@ private fun splitResponseHeaderLine(line: String): Pair<String, String> {
     return name to value
 }
 
+private sealed class JsonHighlightState {
+    data object Idle : JsonHighlightState()
+    data object Computing : JsonHighlightState()
+    data class Ready(val lines: List<AnnotatedString>, val rawBody: String) : JsonHighlightState()
+}
+
 @Composable
 fun ResponsePanel(
     modifier: Modifier = Modifier,
@@ -107,6 +115,8 @@ fun ResponsePanel(
     isSseResponse: Boolean,
     /** 为 true 时不做 JSON 高亮（流式未完成或正加载）。 */
     isResponseLoading: Boolean = false,
+    /** 为 true 时显示缓存加载中的遮罩 */
+    isCacheLoading: Boolean = false,
     responseListState: LazyListState,
     responseHeadersListState: LazyListState,
     copyResponseBodyEnabled: Boolean,
@@ -128,32 +138,33 @@ fun ResponsePanel(
     val isJsonContentType = remember(headersSnapshot) {
         contentTypeHeaderIndicatesJson(headersSnapshot)
     }
-    val linesSnapshot = responseLines.toList()
-    val rawBodyCombined = remember(linesSnapshot, responsePartialLine) {
+    val linesSize = responseLines.size
+    val rawBodyCombined = remember(linesSize, responsePartialLine) {
         buildString {
-            append(linesSnapshot.joinToString("\n"))
+            if (responseLines.isNotEmpty()) {
+                responseLines.forEachIndexed { i, line ->
+                    if (i > 0) append('\n')
+                    append(line)
+                }
+            }
             responsePartialLine?.let { p ->
-                if (linesSnapshot.isNotEmpty()) append('\n')
+                if (responseLines.isNotEmpty()) append('\n')
                 append(p)
             }
         }
     }
     val darkTheme = !MaterialTheme.colors.isLight
-    val jsonAnnotatedBody = remember(
-        rawBodyCombined,
-        isJsonContentType,
-        isSseResponse,
-        isResponseLoading,
-        darkTheme,
-        jsonSyntaxHighlightEnabled,
-    ) {
-        if (!jsonSyntaxHighlightEnabled || !isJsonContentType || isSseResponse || isResponseLoading) {
-            null
-        } else {
-            formatAndHighlightJsonOrNull(rawBodyCombined, darkTheme)
+    var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
+    val shouldHighlight = jsonSyntaxHighlightEnabled && isJsonContentType && !isSseResponse && !isResponseLoading
+    LaunchedEffect(rawBodyCombined, shouldHighlight, darkTheme) {
+        if (!shouldHighlight) {
+            jsonHighlightState = JsonHighlightState.Idle
+            return@LaunchedEffect
         }
+        jsonHighlightState = JsonHighlightState.Computing
+        val result = highlightJsonLinesOrNull(rawBodyCombined, darkTheme)
+        jsonHighlightState = if (result != null) JsonHighlightState.Ready(result, rawBodyCombined) else JsonHighlightState.Idle
     }
-    val jsonBodyScrollState = rememberScrollState()
     val requestScrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
 
@@ -162,9 +173,9 @@ fun ResponsePanel(
     var currentMatchIndex by remember { mutableIntStateOf(0) }
     val searchFocusRequester = remember { FocusRequester() }
 
-    val matchingLineIndices = remember(linesSnapshot, searchQuery) {
+    val matchingLineIndices = remember(responseLines.size, searchQuery) {
         if (searchQuery.isBlank()) emptyList()
-        else linesSnapshot.mapIndexedNotNull { index, line ->
+        else responseLines.mapIndexedNotNull { index, line ->
             if (line.contains(searchQuery, ignoreCase = true)) index else null
         }
     }
@@ -176,8 +187,8 @@ fun ResponsePanel(
         currentMatchIndex = next
     }
 
-    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonAnnotatedBody, searchActive) {
-        if (!searchActive && isSseResponse && rightTabIndex == 0 && jsonAnnotatedBody == null) {
+    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive) {
+        if (!searchActive && isSseResponse && rightTabIndex == 0 && jsonHighlightState !is JsonHighlightState.Ready) {
             val total = responseLines.size + if (responsePartialLine != null) 1 else 0
             if (total > 0) {
                 responseListState.scrollToItem(total - 1)
@@ -607,31 +618,14 @@ fun ResponsePanel(
                                     }
                                 }
                             }
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                            ) {
-                                if (jsonAnnotatedBody != null) {
-                                    SelectionContainer {
-                                        Text(
-                                            text = jsonAnnotatedBody,
-                                            style = TextStyle(
-                                                fontFamily = FontFamily.Monospace,
-                                                fontSize = exchangeMetrics.body,
-                                                color = MaterialTheme.colors.onSurface,
-                                            ),
-                                            modifier = Modifier
-                                                .fillMaxSize()
-                                                .verticalScroll(jsonBodyScrollState)
-                                                .padding(end = 12.dp),
-                                        )
-                                    }
-                                    VerticalScrollbar(
-                                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                        adapter = rememberScrollbarAdapter(jsonBodyScrollState),
-                                    )
-                                } else {
+                            val isJsonReady = jsonHighlightState is JsonHighlightState.Ready
+                            val isJsonComputing = jsonHighlightState is JsonHighlightState.Computing
+                            val heavyBody = responseLines.size > 100
+                            if (isJsonReady) {
+                                val readyState = jsonHighlightState as JsonHighlightState.Ready
+                                Box(
+                                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                                ) {
                                     SelectionContainer {
                                         LazyColumn(
                                             modifier = Modifier
@@ -639,62 +633,15 @@ fun ResponsePanel(
                                                 .padding(end = 12.dp),
                                             state = responseListState,
                                         ) {
-                                            itemsIndexed(responseLines) { index, line ->
-                                                if (line.isBlank()) {
-                                                    Spacer(Modifier.fillMaxWidth().height(8.dp))
-                                                } else {
-                                                    val isDataLine = line.startsWith("data:")
-                                                    val displayLine =
-                                                        if (isDataLine) "data:  ${line.removePrefix("data:").trimStart()}" else line
-                                                    val isMatch = searchActive && searchQuery.isNotBlank() &&
-                                                        line.contains(searchQuery, ignoreCase = true)
-                                                    val isCurrentMatch = isMatch &&
-                                                        matchingLineIndices.getOrNull(currentMatchIndex) == index
-                                                    Text(
-                                                        buildAnnotatedString {
-                                                            if (isDataLine) {
-                                                                withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
-                                                                    append("data:  ")
-                                                                }
-                                                                withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
-                                                                    append(line.removePrefix("data:").trimStart())
-                                                                }
-                                                            } else {
-                                                                append(displayLine)
-                                                            }
-                                                        },
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .then(
-                                                                if (isCurrentMatch) {
-                                                                    Modifier.background(
-                                                                        MaterialTheme.colors.primary.copy(alpha = 0.25f)
-                                                                    )
-                                                                } else if (isMatch) {
-                                                                    Modifier.background(
-                                                                        MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
-                                                                    )
-                                                                } else Modifier
-                                                            ),
-                                                        style = TextStyle(
-                                                            fontSize = exchangeMetrics.body,
-                                                            lineHeight = exchangeMetrics.body * 1.35f,
-                                                            color = MaterialTheme.colors.onSurface,
-                                                        ),
-                                                    )
-                                                }
-                                            }
-                                            responsePartialLine?.let { partial ->
-                                                item("partial") {
-                                                    Text(
-                                                        partial,
-                                                        style = TextStyle(
-                                                            fontSize = exchangeMetrics.body,
-                                                            lineHeight = exchangeMetrics.body * 1.35f,
-                                                            color = MaterialTheme.colors.onSurface,
-                                                        ),
-                                                    )
-                                                }
+                                            itemsIndexed(readyState.lines) { _, line ->
+                                                Text(
+                                                    text = line,
+                                                    style = TextStyle(
+                                                        fontFamily = FontFamily.Monospace,
+                                                        fontSize = exchangeMetrics.body,
+                                                        color = MaterialTheme.colors.onSurface,
+                                                    ),
+                                                )
                                             }
                                         }
                                     }
@@ -703,6 +650,141 @@ fun ResponsePanel(
                                         adapter = rememberScrollbarAdapter(responseListState),
                                     )
                                 }
+                            } else if (isJsonComputing && heavyBody && !isSseResponse && !searchActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(28.dp),
+                                            color = MaterialTheme.colors.primary,
+                                        )
+                                        Spacer(Modifier.height(10.dp))
+                                        Text(
+                                            "正在解析 JSON…",
+                                            fontSize = exchangeMetrics.tab,
+                                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                        )
+                                    }
+                                }
+                            } else if (isCacheLoading) {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(32.dp),
+                                        color = MaterialTheme.colors.primary,
+                                    )
+                                }
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxWidth(),
+                                ) {
+                                    if (isSseResponse || searchActive) {
+                                        SelectionContainer {
+                                            LazyColumn(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .padding(end = 12.dp),
+                                                state = responseListState,
+                                            ) {
+                                                itemsIndexed(responseLines) { index, line ->
+                                                    if (line.isBlank()) {
+                                                        Spacer(Modifier.fillMaxWidth().height(8.dp))
+                                                    } else {
+                                                        val isDataLine = line.startsWith("data:")
+                                                        val displayLine =
+                                                            if (isDataLine) "data:  ${line.removePrefix("data:").trimStart()}" else line
+                                                        val isMatch = searchActive && searchQuery.isNotBlank() &&
+                                                            line.contains(searchQuery, ignoreCase = true)
+                                                        val isCurrentMatch = isMatch &&
+                                                            matchingLineIndices.getOrNull(currentMatchIndex) == index
+                                                        Text(
+                                                            buildAnnotatedString {
+                                                                if (isDataLine) {
+                                                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
+                                                                        append("data:  ")
+                                                                    }
+                                                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
+                                                                        append(line.removePrefix("data:").trimStart())
+                                                                    }
+                                                                } else {
+                                                                    append(displayLine)
+                                                                }
+                                                            },
+                                                            modifier = Modifier
+                                                                .fillMaxWidth()
+                                                                .then(
+                                                                    if (isCurrentMatch) {
+                                                                        Modifier.background(
+                                                                            MaterialTheme.colors.primary.copy(alpha = 0.25f)
+                                                                        )
+                                                                    } else if (isMatch) {
+                                                                        Modifier.background(
+                                                                            MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+                                                                        )
+                                                                    } else Modifier
+                                                                ),
+                                                            style = TextStyle(
+                                                                fontSize = exchangeMetrics.body,
+                                                                lineHeight = exchangeMetrics.body * 1.35f,
+                                                                color = MaterialTheme.colors.onSurface,
+                                                            ),
+                                                        )
+                                                    }
+                                                }
+                                                responsePartialLine?.let { partial ->
+                                                    item("partial") {
+                                                        Text(
+                                                            partial,
+                                                            style = TextStyle(
+                                                                fontSize = exchangeMetrics.body,
+                                                                lineHeight = exchangeMetrics.body * 1.35f,
+                                                                color = MaterialTheme.colors.onSurface,
+                                                            ),
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                        VerticalScrollbar(
+                                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                            adapter = rememberScrollbarAdapter(responseListState),
+                                        )
+                                    } else {
+                                        SelectionContainer {
+                                            LazyColumn(
+                                                modifier = Modifier
+                                                    .fillMaxSize()
+                                                    .padding(end = 12.dp),
+                                                state = responseListState,
+                                            ) {
+                                                itemsIndexed(responseLines) { _, line ->
+                                                    Text(
+                                                        text = line,
+                                                        style = TextStyle(
+                                                            fontFamily = FontFamily.Monospace,
+                                                            fontSize = exchangeMetrics.body,
+                                                            color = MaterialTheme.colors.onSurface,
+                                                        ),
+                                                    )
+                                                }
+                                            }
+                                        }
+                                        VerticalScrollbar(
+                                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                            adapter = rememberScrollbarAdapter(responseListState),
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -710,13 +792,7 @@ fun ResponsePanel(
                 IconButton(
                     onClick = {
                         when (rightTabIndex) {
-                            0 -> {
-                                if (jsonAnnotatedBody != null) {
-                                    scope.launch { jsonBodyScrollState.animateScrollTo(0) }
-                                } else {
-                                    scope.launch { responseListState.animateScrollToItem(0) }
-                                }
-                            }
+                            0 -> scope.launch { responseListState.animateScrollToItem(0) }
                             1 -> scope.launch { responseHeadersListState.animateScrollToItem(0) }
                             2 -> scope.launch { requestScrollState.animateScrollTo(0) }
                         }

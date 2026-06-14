@@ -90,6 +90,7 @@ fun startRequest(
     session.requestGen++
     val gen = session.requestGen
     session.isLoading = true
+    session.isCacheLoading = false
     responseState.addRunningRequest(boundRequestId)
     session.responseLines.clear()
     session.responsePartialLine = null

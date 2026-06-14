@@ -11,6 +11,7 @@ import http.RequestControl
 
 class RequestSession(val requestId: String) {
     var isLoading by mutableStateOf(false)
+    var isCacheLoading by mutableStateOf(false)
     var isSseResponse by mutableStateOf(false)
     var statusCodeText by mutableStateOf("")
     var responseTimeText by mutableStateOf("")

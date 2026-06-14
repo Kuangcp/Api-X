@@ -314,15 +314,34 @@ fun loadHistory(
     val requestId = editorState.editorRequestId ?: return
     val session = responseState.getOrCreateSession(requestId)
     session.selectedHistoryEpochMs = epochMs
-    val response = if (epochMs == null) RequestResponseStore.loadLatest(requestId) else RequestResponseStore.loadByTimestamp(requestId, epochMs)
-    if (response != null) {
-        session.responseLines.clear(); session.responseLines.addAll(response.responseBodyLines)
-        session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(response.responseHeaderLines)
-        session.responsePartialLine = null
-        session.statusCodeText = response.statusCodeText; session.responseTimeText = response.responseTimeText
-        session.responseSizeText = response.responseSizeText; session.isSseResponse = response.isSseResponse
-        session.responseSseEventCount = response.responseSseEventCount
-        session.rightTabIndex = response.rightTabIndex.coerceIn(0, 2)
-        session.exchangeRequestPlainText = response.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" }
+    session.isLoading = true
+    session.statusCodeText = ""
+    session.responseTimeText = ""
+    session.responseSizeText = ""
+    session.responseSseEventCount = ""
+    session.responseLines.clear()
+    session.responseLines.add("正在加载历史响应…")
+    thread {
+        val response = if (epochMs == null) RequestResponseStore.loadLatest(requestId) else RequestResponseStore.loadByTimestamp(requestId, epochMs)
+        EventQueue.invokeLater {
+            session.isLoading = false
+            if (response != null) {
+                session.responseLines.clear()
+                session.responseLines.addAll(response.responseBodyLines)
+                session.responseHeaderLines.clear()
+                session.responseHeaderLines.addAll(response.responseHeaderLines)
+                session.responsePartialLine = null
+                session.statusCodeText = response.statusCodeText
+                session.responseTimeText = response.responseTimeText
+                session.responseSizeText = response.responseSizeText
+                session.isSseResponse = response.isSseResponse
+                session.responseSseEventCount = response.responseSseEventCount
+                session.rightTabIndex = response.rightTabIndex.coerceIn(0, 2)
+                session.exchangeRequestPlainText = response.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" }
+            } else {
+                session.responseLines.clear()
+                session.responseLines.add("(加载失败)")
+            }
+        }
     }
 }

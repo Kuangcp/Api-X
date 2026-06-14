@@ -406,6 +406,7 @@ fun App(onExitRequest: () -> Unit) {
                             onRightTabIndexChange = { currentSession?.rightTabIndex = it.coerceIn(0, 2) },
                             isSseResponse = currentSession?.isSseResponse ?: false,
                             isResponseLoading = currentSession?.isLoading ?: false,
+                            isCacheLoading = currentSession?.isCacheLoading ?: false,
                             responseListState = currentSession?.responseListState ?: responseState.placeholderListState,
                             responseHeadersListState = currentSession?.responseHeadersListState ?: responseState.placeholderListState,
                             copyResponseBodyEnabled = editorState.editorRequestId != null && responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine).isNotBlank(),
