@@ -2,7 +2,7 @@
 
 [English](Readme.md)
 
-JDK 21
+JDK 25 JBR + Gradle 9.4.1 + Kotlin 2.3.20 + compose 1.11.1
 
 - `gradle run` 调试运行
 - `gradle createDistributable` 打包

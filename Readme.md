@@ -2,14 +2,15 @@
 
 [中文说明](Readme-CN.md)
 
-JDK 21 + Gradle 8.11 + Kotlin 2.3.20 + compose 1.11.1
+JDK 25 JBR + Gradle 9.4.1 + Kotlin 2.3.20 + compose 1.11.1
 
 - `gradle run` — run in development / debug
 - `gradle createDistributable` — build a distributable package
 
 Data Dir: ~/.local/share/api-x
 
-[Compatibility and versions](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
+> [Compatibility and versions](https://kotlinlang.org/docs/multiplatform/compose-compatibility-and-versioning.html)
+> [Native distributions](https://kotlinlang.org/docs/multiplatform/compose-native-distribution.html)  
 
 ## Features
 
