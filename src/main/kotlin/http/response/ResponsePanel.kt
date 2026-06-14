@@ -1,10 +1,10 @@
 package http.response
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,7 +15,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
-import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.Composable
@@ -101,7 +100,8 @@ fun ResponsePanel(
         }
         jsonHighlightState = JsonHighlightState.Computing
         val result = highlightJsonLinesOrNull(rawBodyCombined, darkTheme)
-        jsonHighlightState = if (result != null) JsonHighlightState.Ready(result, rawBodyCombined) else JsonHighlightState.Idle
+        jsonHighlightState =
+            if (result != null) JsonHighlightState.Ready(result, rawBodyCombined) else JsonHighlightState.Idle
     }
 
     var searchActive by remember { mutableStateOf(false) }
@@ -130,7 +130,9 @@ fun ResponsePanel(
     }
 
     // ── Auto-scroll effects ─────────────────────────────────
-    LaunchedEffect(responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive) {
+    LaunchedEffect(
+        responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive
+    ) {
         if (!searchActive && isSseResponse && rightTabIndex == 0 && jsonHighlightState !is JsonHighlightState.Ready) {
             val total = responseLines.size + if (responsePartialLine != null) 1 else 0
             if (total > 0) responseListState.scrollToItem(total - 1)
@@ -159,20 +161,13 @@ fun ResponsePanel(
 
     // ── UI ──────────────────────────────────────────────────
     Column(
-        modifier = modifier
-            .fillMaxHeight()
-            .fillMaxWidth()
-            .padding(start = 6.dp)
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown &&
-                    (event.isCtrlPressed || event.isMetaPressed) &&
-                    event.key == Key.F
-                ) {
-                    searchActive = !searchActive
-                    if (!searchActive) searchQuery = ""
-                    true
-                } else false
-            },
+        modifier = modifier.fillMaxHeight().fillMaxWidth().padding(start = 6.dp).onPreviewKeyEvent { event ->
+            if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.F) {
+                searchActive = !searchActive
+                if (!searchActive) searchQuery = ""
+                true
+            } else false
+        },
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         // Toolbar: status code, metrics, action buttons
@@ -202,12 +197,8 @@ fun ResponsePanel(
             )
 
             Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .padding(top = 4.dp)
-                    .background(MaterialTheme.colors.surface)
-                    .padding(12.dp),
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(top = 4.dp)
+                    .background(MaterialTheme.colors.surface).padding(12.dp),
             ) {
                 when (rightTabIndex) {
                     2 -> ResponseRequestView(exchangeMetrics, requestPlainText)
@@ -257,19 +248,16 @@ fun ResponsePanel(
                 }
 
                 // Scroll-to-top button
-                IconButton(
-                    onClick = {
-                        when (rightTabIndex) {
-                            0 -> scope.launch { responseListState.animateScrollToItem(0) }
-                            1 -> scope.launch { responseHeadersListState.animateScrollToItem(0) }
-                        }
-                    },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(4.dp)
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colors.primary.copy(alpha = 0.85f), CircleShape),
+                Box(
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp).size(24.dp)
+                        .clip(CircleShape).background(MaterialTheme.colors.primary.copy(alpha = 0.85f))
+                        .clickable {
+                            when (rightTabIndex) {
+                                0 -> scope.launch { responseListState.animateScrollToItem(0) }
+                                1 -> scope.launch { responseHeadersListState.animateScrollToItem(0) }
+                            }
+                        },
+                    contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Filled.KeyboardArrowUp,
