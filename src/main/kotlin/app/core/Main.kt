@@ -246,6 +246,7 @@ fun App(onExitRequest: () -> Unit) {
                 if (event.type == KeyEventType.KeyDown) {
                     when {
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { dialogState.showGlobalSearch = true; true }
+                        (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.B -> { treeState.treeSidebarVisible = !treeState.treeSidebarVisible; true }
                         event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, environmentState, repository); true }
                         event.key == Key.Escape -> { if (currentSession?.isLoading == true) { cancelActiveRequest(editorState, responseState, environmentState, repository); true } else false }
                         else -> false
@@ -264,8 +265,6 @@ fun App(onExitRequest: () -> Unit) {
                     RequestTopBar(
                         isLoading = currentSession?.isLoading ?: false,
                         isDarkTheme = themeState.isDarkTheme,
-                        treeSidebarVisible = treeState.treeSidebarVisible,
-                        onTreeSidebarToggle = { treeState.treeSidebarVisible = !treeState.treeSidebarVisible },
                         environmentsState = environmentState.environmentsState,
                         onActiveEnvironmentChange = { environmentState.environmentsState = environmentState.environmentsState.copy(activeEnvironmentId = it) },
                         onManageEnvironmentsClick = { dialogState.showEnvironmentManager = true },

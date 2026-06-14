@@ -32,8 +32,6 @@ import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Close
 
 import app.ui.CustomIcons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -92,13 +90,11 @@ private fun EnvironmentDropdownMenuItem(
     )
 }
 
-/** 顶栏：左侧切换请求树、导入、右侧设置/主题/环境（全宽；与下方左右分栏组成 T 形布局） */
+/** 顶栏：左侧导入、右侧设置/主题/环境（全宽；与下方左右分栏组成 T 形布局） */
 @Composable
 fun WindowScope.RequestTopBar(
     isLoading: Boolean,
     isDarkTheme: Boolean,
-    treeSidebarVisible: Boolean,
-    onTreeSidebarToggle: () -> Unit,
     environmentsState: EnvironmentsState,
     onActiveEnvironmentChange: (String?) -> Unit,
     onManageEnvironmentsClick: () -> Unit,
@@ -151,22 +147,6 @@ fun WindowScope.RequestTopBar(
                     horizontalArrangement = Arrangement.spacedBy(0.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    IconButton(
-                        onClick = onTreeSidebarToggle,
-                        enabled = !isLoading,
-                        modifier = topBarIconButtonModifier,
-                    ) {
-                        Icon(
-                            imageVector = if (treeSidebarVisible) {
-                                Icons.AutoMirrored.Filled.KeyboardArrowLeft
-                            } else {
-                                Icons.AutoMirrored.Filled.KeyboardArrowRight
-                            },
-                            contentDescription = if (treeSidebarVisible) "隐藏请求树" else "显示请求树",
-                            modifier = topBarIconModifier,
-                            tint = topBarIconTint,
-                        )
-                    }
                     IconButton(
                         onClick = onImportCollectionClick,
                         enabled = !isLoading,
