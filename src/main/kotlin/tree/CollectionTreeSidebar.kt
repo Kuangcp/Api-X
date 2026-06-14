@@ -90,6 +90,7 @@ private class DropZoneRegistry {
         if (active) zones[key] = bounds to target
         else zones.remove(key)
     }
+
     fun removeKey(key: String) {
         zones.remove(key)
     }
@@ -915,7 +916,7 @@ private fun RequestTreeRow(
             },
             expandIcon = { Spacer(Modifier.width(20.dp)) },
             label = req.name,
-            selected = isTreeSelected || (editingThis && !isTreeSelected),
+            selected = isTreeSelected || editingThis,
             onClick = { onSelectNode(TreeSelection.Request(req.id)) },
             onDoubleClick = {
                 onSelectNode(TreeSelection.Request(req.id))
