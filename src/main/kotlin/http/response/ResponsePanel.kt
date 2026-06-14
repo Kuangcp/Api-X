@@ -71,6 +71,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -81,6 +82,11 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.foundation.gestures.detectDragGestures
 
 /** 响应头展示用：按第一个 `:` 拆成 name / value（value 内可含冒号）。 */
 private fun splitResponseHeaderLine(line: String): Pair<String, String> {
@@ -89,6 +95,35 @@ private fun splitResponseHeaderLine(line: String): Pair<String, String> {
     val name = line.substring(0, idx).trim()
     val value = line.substring(idx + 1).trimStart()
     return name to value
+}
+
+/**
+ * 提取 SSE 事件中连续 data: 行的有效负载。
+ * SSE 规范：空行分隔事件，同一事件可含多个 data: 行，按 \n 拼接后解析。
+ */
+private fun extractSseEventData(lines: List<String>, clickedIndex: Int): String? {
+    val clickedLine = lines.getOrNull(clickedIndex) ?: return null
+    if (!clickedLine.startsWith("data:")) return null
+    // 向上找到第一个 data: 行（跨过空行则停止）
+    var start = clickedIndex
+    while (start - 1 >= 0) {
+        val prev = lines[start - 1]
+        if (prev.isBlank()) break
+        if (!prev.startsWith("data:")) break
+        start--
+    }
+    // 向下收集所有连续 data: 行
+    val parts = mutableListOf<String>()
+    var i = start
+    while (i < lines.size) {
+        val line = lines[i]
+        if (line.isBlank()) break
+        if (!line.startsWith("data:")) break
+        parts.add(line.removePrefix("data:").trimStart())
+        i++
+    }
+    if (parts.isEmpty()) return null
+    return parts.joinToString("\n")
 }
 
 private sealed class JsonHighlightState {
@@ -173,6 +208,11 @@ fun ResponsePanel(
     var currentMatchIndex by remember { mutableIntStateOf(0) }
     val searchFocusRequester = remember { FocusRequester() }
 
+    var selectedSseEventIndex by remember { mutableIntStateOf(-1) }
+    var sseEventPanelHeight by remember { mutableFloatStateOf(0f) }
+    val sseDetailListState = remember { LazyListState() }
+    var sseContentHeightPx by remember { mutableFloatStateOf(0f) }
+
     val matchingLineIndices = remember(responseLines.size, searchQuery) {
         if (searchQuery.isBlank()) emptyList()
         else responseLines.mapIndexedNotNull { index, line ->
@@ -201,6 +241,24 @@ fun ResponsePanel(
             if (currentMatchIndex < matchingLineIndices.size) {
                 responseListState.scrollToItem(matchingLineIndices[currentMatchIndex])
             }
+        }
+    }
+
+    LaunchedEffect(responseLines.size) {
+        selectedSseEventIndex = -1
+        sseEventPanelHeight = 0f
+    }
+
+    LaunchedEffect(isResponseLoading) {
+        if (isResponseLoading) {
+            selectedSseEventIndex = -1
+            sseEventPanelHeight = 0f
+        }
+    }
+
+    LaunchedEffect(selectedSseEventIndex) {
+        if (selectedSseEventIndex >= 0) {
+            sseDetailListState.scrollToItem(0)
         }
     }
 
@@ -683,106 +741,262 @@ fun ResponsePanel(
                                     )
                                 }
                             } else {
-                                Box(
+                                Column(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .fillMaxWidth(),
+                                        .fillMaxWidth()
+                                        .onGloballyPositioned { sseContentHeightPx = it.size.height.toFloat() },
                                 ) {
-                                    if (isSseResponse || searchActive) {
-                                        SelectionContainer {
-                                            LazyColumn(
-                                                modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .padding(end = 12.dp),
-                                                state = responseListState,
-                                            ) {
-                                                itemsIndexed(responseLines) { index, line ->
-                                                    if (line.isBlank()) {
-                                                        Spacer(Modifier.fillMaxWidth().height(8.dp))
-                                                    } else {
-                                                        val isDataLine = line.startsWith("data:")
-                                                        val displayLine =
-                                                            if (isDataLine) "data:  ${line.removePrefix("data:").trimStart()}" else line
-                                                        val isMatch = searchActive && searchQuery.isNotBlank() &&
-                                                            line.contains(searchQuery, ignoreCase = true)
-                                                        val isCurrentMatch = isMatch &&
-                                                            matchingLineIndices.getOrNull(currentMatchIndex) == index
-                                                        Text(
-                                                            buildAnnotatedString {
-                                                                if (isDataLine) {
-                                                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
-                                                                        append("data:  ")
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .fillMaxWidth(),
+                                    ) {
+                                        if (isSseResponse || searchActive) {
+                                            SelectionContainer {
+                                                LazyColumn(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(end = 12.dp),
+                                                    state = responseListState,
+                                                ) {
+                                                    itemsIndexed(responseLines) { index, line ->
+                                                        if (line.isBlank()) {
+                                                            Spacer(Modifier.fillMaxWidth().height(8.dp))
+                                                        } else {
+                                                            val isDataLine = line.startsWith("data:")
+                                                            val displayLine =
+                                                                if (isDataLine) "data:  ${line.removePrefix("data:").trimStart()}" else line
+                                                            val isMatch = searchActive && searchQuery.isNotBlank() &&
+                                                                line.contains(searchQuery, ignoreCase = true)
+                                                            val isCurrentMatch = isMatch &&
+                                                                matchingLineIndices.getOrNull(currentMatchIndex) == index
+                                                            val isSelectedSseEvent = isSseResponse && isDataLine &&
+                                                                index == selectedSseEventIndex
+                                                            Text(
+                                                                buildAnnotatedString {
+                                                                    if (isDataLine) {
+                                                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
+                                                                            append("data:  ")
+                                                                        }
+                                                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
+                                                                            append(line.removePrefix("data:").trimStart())
+                                                                        }
+                                                                    } else {
+                                                                        append(displayLine)
                                                                     }
-                                                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
-                                                                        append(line.removePrefix("data:").trimStart())
-                                                                    }
-                                                                } else {
-                                                                    append(displayLine)
-                                                                }
-                                                            },
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .then(
-                                                                    if (isCurrentMatch) {
-                                                                        Modifier.background(
-                                                                            MaterialTheme.colors.primary.copy(alpha = 0.25f)
-                                                                        )
-                                                                    } else if (isMatch) {
-                                                                        Modifier.background(
-                                                                            MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
-                                                                        )
-                                                                    } else Modifier
+                                                                },
+                                                                modifier = Modifier
+                                                                    .fillMaxWidth()
+                                                                    .then(
+                                                                        when {
+                                                                            isSelectedSseEvent -> Modifier.background(
+                                                                                MaterialTheme.colors.primary.copy(alpha = 0.18f)
+                                                                            )
+                                                                            isCurrentMatch -> Modifier.background(
+                                                                                MaterialTheme.colors.primary.copy(alpha = 0.25f)
+                                                                            )
+                                                                            isMatch -> Modifier.background(
+                                                                                MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+                                                                            )
+                                                                            else -> Modifier
+                                                                        }
+                                                                    )
+                                                                    .then(
+                                                                        if (isSseResponse && isDataLine && !isResponseLoading) {
+                                                                            Modifier.clickable {
+                                                                                selectedSseEventIndex =
+                                                                                    if (selectedSseEventIndex == index) -1 else index
+                                                                                if (selectedSseEventIndex >= 0 && sseEventPanelHeight < 1f) {
+                                                                                    sseEventPanelHeight = 200f
+                                                                                }
+                                                                            }
+                                                                        } else Modifier
+                                                                    ),
+                                                                style = TextStyle(
+                                                                    fontSize = exchangeMetrics.body,
+                                                                    lineHeight = exchangeMetrics.body * 1.35f,
+                                                                    color = MaterialTheme.colors.onSurface,
                                                                 ),
-                                                            style = TextStyle(
-                                                                fontSize = exchangeMetrics.body,
-                                                                lineHeight = exchangeMetrics.body * 1.35f,
-                                                                color = MaterialTheme.colors.onSurface,
-                                                            ),
-                                                        )
+                                                            )
+                                                        }
+                                                    }
+                                                    responsePartialLine?.let { partial ->
+                                                        item("partial") {
+                                                            Text(
+                                                                partial,
+                                                                style = TextStyle(
+                                                                    fontSize = exchangeMetrics.body,
+                                                                    lineHeight = exchangeMetrics.body * 1.35f,
+                                                                    color = MaterialTheme.colors.onSurface,
+                                                                ),
+                                                            )
+                                                        }
                                                     }
                                                 }
-                                                responsePartialLine?.let { partial ->
-                                                    item("partial") {
+                                            }
+                                            VerticalScrollbar(
+                                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                                adapter = rememberScrollbarAdapter(responseListState),
+                                            )
+                                        } else {
+                                            SelectionContainer {
+                                                LazyColumn(
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .padding(end = 12.dp),
+                                                    state = responseListState,
+                                                ) {
+                                                    itemsIndexed(responseLines) { _, line ->
                                                         Text(
-                                                            partial,
+                                                            text = line,
                                                             style = TextStyle(
+                                                                fontFamily = FontFamily.Monospace,
                                                                 fontSize = exchangeMetrics.body,
-                                                                lineHeight = exchangeMetrics.body * 1.35f,
                                                                 color = MaterialTheme.colors.onSurface,
                                                             ),
                                                         )
                                                     }
                                                 }
                                             }
+                                            VerticalScrollbar(
+                                                modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                                adapter = rememberScrollbarAdapter(responseListState),
+                                            )
                                         }
-                                        VerticalScrollbar(
-                                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                            adapter = rememberScrollbarAdapter(responseListState),
-                                        )
-                                    } else {
-                                        SelectionContainer {
-                                            LazyColumn(
+                                    }
+                                    if (isSseResponse && selectedSseEventIndex >= 0) {
+                                        val ssePayload = remember(selectedSseEventIndex, responseLines.size) {
+                                            extractSseEventData(responseLines, selectedSseEventIndex)
+                                        }
+                                        val sseHighlightedLines = remember(ssePayload, darkTheme) {
+                                            ssePayload?.let { highlightJsonLinesOrNull(it, darkTheme) }
+                                        }
+                                        var dragHeight by remember { mutableFloatStateOf(0f) }
+                                        LaunchedEffect(Unit) {
+                                            dragHeight = sseEventPanelHeight
+                                        }
+                                        val panelHeightDp = with(LocalDensity.current) {
+                                            dragHeight.toDp()
+                                        }
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(10.dp)
+                                                .pointerInput(Unit) {
+                                                    detectDragGestures(
+                                                        onDragStart = {
+                                                            dragHeight = sseEventPanelHeight
+                                                        },
+                                                        onDrag = { change, dragAmount ->
+                                                            change.consume()
+                                                            val maxHeight = (sseContentHeightPx * 0.7f).coerceAtLeast(200f)
+                                                            dragHeight =
+                                                                (dragHeight - dragAmount.y).coerceIn(80f, maxHeight)
+                                                        },
+                                                        onDragEnd = {
+                                                            sseEventPanelHeight = dragHeight
+                                                        },
+                                                    )
+                                                },
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Box(
                                                 modifier = Modifier
-                                                    .fillMaxSize()
-                                                    .padding(end = 12.dp),
-                                                state = responseListState,
+                                                    .fillMaxWidth()
+                                                    .height(1.dp)
+                                                    .background(MaterialTheme.colors.onSurface.copy(alpha = 0.12f))
+                                            )
+                                        }
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(panelHeightDp)
+                                                .background(MaterialTheme.colors.surface)
+                                                .padding(8.dp),
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically,
                                             ) {
-                                                itemsIndexed(responseLines) { _, line ->
+                                                Text(
+                                                    text = "Event #${selectedSseEventIndex + 1}",
+                                                    fontSize = exchangeMetrics.tab,
+                                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                )
+                                                IconButton(
+                                                    onClick = { selectedSseEventIndex = -1 },
+                                                    modifier = Modifier.size(20.dp),
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Close,
+                                                        contentDescription = "关闭",
+                                                        modifier = Modifier.size(14.dp),
+                                                        tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                    )
+                                                }
+                                            }
+                                            if (ssePayload != null) {
+                                            if (sseHighlightedLines != null) {
+                                                Box(modifier = Modifier.fillMaxSize()) {
+                                                    SelectionContainer {
+                                                        LazyColumn(
+                                                            modifier = Modifier.fillMaxSize().padding(end = 8.dp),
+                                                            state = sseDetailListState,
+                                                        ) {
+                                                            itemsIndexed(sseHighlightedLines) { _, line ->
+                                                                Text(
+                                                                    text = line,
+                                                                    style = TextStyle(
+                                                                        fontFamily = FontFamily.Monospace,
+                                                                        fontSize = exchangeMetrics.body,
+                                                                        color = MaterialTheme.colors.onSurface,
+                                                                    ),
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    VerticalScrollbar(
+                                                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                                        adapter = rememberScrollbarAdapter(sseDetailListState),
+                                                    )
+                                                }
+                                            } else {
+                                                Box(modifier = Modifier.fillMaxSize()) {
+                                                    SelectionContainer {
+                                                        LazyColumn(
+                                                            modifier = Modifier.fillMaxSize().padding(end = 8.dp),
+                                                            state = sseDetailListState,
+                                                        ) {
+                                                            itemsIndexed(ssePayload.lines()) { _, line ->
+                                                                Text(
+                                                                    text = line,
+                                                                    style = TextStyle(
+                                                                        fontFamily = FontFamily.Monospace,
+                                                                        fontSize = exchangeMetrics.body,
+                                                                        color = MaterialTheme.colors.onSurface,
+                                                                    ),
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+                                                    VerticalScrollbar(
+                                                        modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                                                        adapter = rememberScrollbarAdapter(sseDetailListState),
+                                                    )
+                                                }
+                                                }
+                                            } else {
+                                                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                                     Text(
-                                                        text = line,
-                                                        style = TextStyle(
-                                                            fontFamily = FontFamily.Monospace,
-                                                            fontSize = exchangeMetrics.body,
-                                                            color = MaterialTheme.colors.onSurface,
-                                                        ),
+                                                        text = "非 JSON 内容",
+                                                        fontSize = exchangeMetrics.tab,
+                                                        color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                                                     )
                                                 }
                                             }
                                         }
-                                        VerticalScrollbar(
-                                            modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
-                                            adapter = rememberScrollbarAdapter(responseListState),
-                                        )
                                     }
                                 }
                             }

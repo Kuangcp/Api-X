@@ -376,7 +376,7 @@ fun sendRequestStreaming(
         if (control.activeInput != null) {
             control.activeInput = null
         }
-        onSseDetected(false)
+        if (!control.responseWasSse) onSseDetected(false)
     }
 }
 

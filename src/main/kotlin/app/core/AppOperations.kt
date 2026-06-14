@@ -91,6 +91,7 @@ fun startRequest(
     val gen = session.requestGen
     session.isLoading = true
     session.isCacheLoading = false
+    session.isSseResponse = false
     responseState.addRunningRequest(boundRequestId)
     session.responseLines.clear()
     session.responsePartialLine = null
@@ -161,7 +162,7 @@ fun startRequest(
                 if (control.requestFailed) { session.statusCodeText = HttpExchangeErrorStatusMark; if (control.responseStatusCode < 0) { session.responseHeaderLines.clear(); session.responseHeaderLines.add("(无响应头 — 请求未成功)") } }
                 applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
             } else { control.lineBuffer.drainUpdate() }
-            session.responseTimeText = timeText; session.responseSizeText = formatBytes(control.totalBytes); session.isSseResponse = false
+            session.responseTimeText = timeText; session.responseSizeText = formatBytes(control.totalBytes)
             flusher.interrupt()
         }
     }
@@ -207,5 +208,5 @@ fun cancelActiveRequest(
     ))
     session.workerThread?.interrupt()
     session.flusherThread?.interrupt()
-    session.isLoading = false; session.isSseResponse = false; responseState.removeRunningRequest(boundId); session.control = null; session.workerThread = null; session.flusherThread = null
+    session.isLoading = false; responseState.removeRunningRequest(boundId); session.control = null; session.workerThread = null; session.flusherThread = null
 }
