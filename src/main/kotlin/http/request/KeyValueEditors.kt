@@ -141,7 +141,7 @@ private fun KeyValueTextFormEditor(
     fun commitForm() {
         onTextChange(
             joinHeadersEditor(
-                formRows.filter { it.first.isNotBlank() },
+                formRows.toList(),
                 formOrphans.toList(),
             ),
         )

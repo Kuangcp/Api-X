@@ -113,6 +113,9 @@ fun splitHeadersForEditor(headersText: String): Pair<List<Triple<String, String,
         val parsed = parseHeaderLine(content)
         if (parsed != null) {
             valid.add(Triple(parsed.first, parsed.second, !disabled))
+        } else if (content.startsWith(":")) {
+            val value = content.substring(1).trim()
+            valid.add(Triple("", value, !disabled))
         } else {
             invalid.add(trimmed)
         }
@@ -204,7 +207,7 @@ private fun wrapResponseBodyStream(
 private val DECODING_CHAIN = setOf("gzip", "x-gzip", "deflate")
 
 fun joinHeadersEditor(validRows: List<Triple<String, String, Boolean>>, orphanLines: List<String>): String {
-    val rowsPart = validRows.filter { it.first.isNotBlank() }.joinToString("\n") { (k, v, enabled) ->
+    val rowsPart = validRows.joinToString("\n") { (k, v, enabled) ->
         if (enabled) "$k: $v" else "! $k: $v"
     }
     val orphanPart = orphanLines.filter { it.isNotBlank() }.joinToString("\n")
