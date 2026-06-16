@@ -27,7 +27,7 @@ class ResponseState {
 
     fun getOrCreateSession(reqId: String): RequestSession {
         requestSessions[reqId]?.let { session ->
-            Logger.debug("SESSION") { "getOrCreateSession: found existing $reqId, isCacheLoading=${session.isCacheLoading}, isLoading=${session.isLoading}, lines=${session.responseLines.size}, firstLine=${session.responseLines.firstOrNull()}" }
+            // Logger.debug("SESSION") { "getOrCreateSession: found existing $reqId, isCacheLoading=${session.isCacheLoading}, isLoading=${session.isLoading}, lines=${session.responseLines.size}, firstLine=${session.responseLines.firstOrNull()}" }
             touch(reqId)
             return session
         }
