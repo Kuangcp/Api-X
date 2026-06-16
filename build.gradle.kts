@@ -11,6 +11,7 @@ group = "com.github.kuangcp"
 version = "1.3.1"
 
 val appIconPng = layout.projectDirectory.file("api.png").asFile
+val appIconIco = layout.projectDirectory.file("api.ico").asFile
 
 tasks.processResources {
     if (appIconPng.exists()) {
@@ -60,16 +61,18 @@ compose.desktop {
             packageVersion = project.findProperty("version")?.toString() ?: "1.0.0"
             // java.sql：SQLite JDBC 需要 DriverManager 等（jlink 默认运行时未包含）
             modules("java.net.http", "java.sql")
-            // 根目录 api-3.png；Linux 打包用 PNG 最合适。Windows 安装包若失败可另备 .ico，macOS 可另备 .icns。
+            // 根目录 api.png（Linux/macOS）、api.ico（Windows）
             if (appIconPng.exists()) {
                 linux {
                     iconFile.set(appIconPng)
                 }
-                windows {
-                    iconFile.set(appIconPng)
-                }
                 macOS {
                     iconFile.set(appIconPng)
+                }
+            }
+            if (appIconIco.exists()) {
+                windows {
+                    iconFile.set(appIconIco)
                 }
             }
         }
