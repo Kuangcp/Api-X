@@ -43,6 +43,9 @@ import http.contentTypeHeaderIndicatesJson
 import http.highlightJsonLinesOrNull
 import kotlinx.coroutines.launch
 
+private const val MAX_JSON_HIGHLIGHT_BYTES = 100_000
+private const val MAX_PREVIEW_CHARS = 5_000
+
 @Composable
 fun ResponsePanel(
     modifier: Modifier = Modifier,
@@ -90,9 +93,17 @@ fun ResponsePanel(
             }
         }
     }
+    val jsonBodyTooLarge = responseLines.sumOf { it.length } + (responsePartialLine?.length ?: 0) > MAX_JSON_HIGHLIGHT_BYTES
+    val displayLines = if (jsonBodyTooLarge) {
+        val truncated = rawBodyCombined.take(MAX_PREVIEW_CHARS)
+        truncated.lines() + "…(响应过大，仅显示前 ${MAX_PREVIEW_CHARS} 字符，复制可获取全文)"
+    } else {
+        responseLines
+    }
+    val displayPartialLine = if (jsonBodyTooLarge) null else responsePartialLine
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
-    val shouldHighlight = jsonSyntaxHighlightEnabled && isJsonContentType && !isSseResponse && !isResponseLoading
+    val shouldHighlight = jsonSyntaxHighlightEnabled && isJsonContentType && !isSseResponse && !isResponseLoading && !isCacheLoading && !jsonBodyTooLarge
     LaunchedEffect(rawBodyCombined, shouldHighlight, darkTheme) {
         if (!shouldHighlight) {
             jsonHighlightState = JsonHighlightState.Idle
@@ -115,9 +126,9 @@ fun ResponsePanel(
     val sseDetailListState = remember { LazyListState() }
     val scope = rememberCoroutineScope()
 
-    val matchingLineIndices = remember(responseLines.size, searchQuery) {
+    val matchingLineIndices = remember(displayLines.size, searchQuery) {
         if (searchQuery.isBlank()) emptyList()
-        else responseLines.mapIndexedNotNull { index, line ->
+        else displayLines.mapIndexedNotNull { index, line ->
             if (line.contains(searchQuery, ignoreCase = true)) index else null
         }
     }
@@ -131,10 +142,10 @@ fun ResponsePanel(
 
     // ── Auto-scroll effects ─────────────────────────────────
     LaunchedEffect(
-        responseLines.size, responsePartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive
+        displayLines.size, displayPartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive
     ) {
         if (!searchActive && isSseResponse && rightTabIndex == 0 && jsonHighlightState !is JsonHighlightState.Ready) {
-            val total = responseLines.size + if (responsePartialLine != null) 1 else 0
+            val total = displayLines.size + if (displayPartialLine != null) 1 else 0
             if (total > 0) responseListState.scrollToItem(total - 1)
         }
     }
@@ -145,7 +156,7 @@ fun ResponsePanel(
             }
         }
     }
-    LaunchedEffect(responseLines.size) {
+    LaunchedEffect(displayLines.size) {
         selectedSseEventIndex = -1
         sseEventPanelHeight = 0f
     }
@@ -220,12 +231,13 @@ fun ResponsePanel(
                         // Body content
                         ResponseBodyView(
                             exchangeMetrics = exchangeMetrics,
-                            responseLines = responseLines,
-                            responsePartialLine = responsePartialLine,
+                            responseLines = displayLines,
+                            responsePartialLine = displayPartialLine,
                             responseListState = responseListState,
                             jsonHighlightState = jsonHighlightState,
                             jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
                             onJsonSyntaxHighlightEnabledChange = onJsonSyntaxHighlightEnabledChange,
+                            jsonBodyTooLarge = jsonBodyTooLarge,
                             isSseResponse = isSseResponse,
                             isResponseLoading = isResponseLoading,
                             isCacheLoading = isCacheLoading,

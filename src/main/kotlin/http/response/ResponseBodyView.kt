@@ -52,6 +52,7 @@ internal fun ResponseBodyView(
     jsonHighlightState: JsonHighlightState,
     jsonSyntaxHighlightEnabled: Boolean,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit,
+    jsonBodyTooLarge: Boolean,
     isSseResponse: Boolean,
     isResponseLoading: Boolean,
     isCacheLoading: Boolean,
@@ -69,7 +70,6 @@ internal fun ResponseBodyView(
 ) {
     val isJsonReady = jsonHighlightState is JsonHighlightState.Ready
     val isJsonComputing = jsonHighlightState is JsonHighlightState.Computing
-    val heavyBody = responseLines.size > 100
 
     Column(modifier = Modifier.fillMaxSize()) {
         // JSON highlight toggle
@@ -79,7 +79,7 @@ internal fun ResponseBodyView(
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
             Text(
-                text = "JSON 高亮",
+                text = if (jsonBodyTooLarge && jsonSyntaxHighlightEnabled) "JSON 高亮 (响应过大，已禁用)" else "JSON 高亮",
                 fontSize = exchangeMetrics.tab,
                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
             )
@@ -96,30 +96,48 @@ internal fun ResponseBodyView(
         // Main body content
         if (isJsonReady) {
             JsonReadyBody(exchangeMetrics, jsonHighlightState, responseListState)
-        } else if (isJsonComputing && heavyBody && !isSseResponse && !searchActive) {
-            JsonComputingIndicator(exchangeMetrics)
         } else if (isCacheLoading) {
             CacheLoadingIndicator(exchangeMetrics)
         } else {
-            PlainTextOrSseBody(
-                exchangeMetrics = exchangeMetrics,
-                responseLines = responseLines,
-                responsePartialLine = responsePartialLine,
-                responseListState = responseListState,
-                isSseResponse = isSseResponse,
-                searchActive = searchActive,
-                searchQuery = searchQuery,
-                matchingLineIndices = matchingLineIndices,
-                currentMatchIndex = currentMatchIndex,
-                selectedSseEventIndex = selectedSseEventIndex,
-                onSseEventClick = onSseEventClick,
-                sseContentHeightPx = sseContentHeightPx,
-                onSseContentHeightChange = onSseContentHeightChange,
-                sseEventPanelHeight = sseEventPanelHeight,
-                onSseEventPanelHeightChange = onSseEventPanelHeightChange,
-                sseDetailListState = sseDetailListState,
-                isResponseLoading = isResponseLoading,
-            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                PlainTextOrSseBody(
+                    exchangeMetrics = exchangeMetrics,
+                    responseLines = responseLines,
+                    responsePartialLine = responsePartialLine,
+                    responseListState = responseListState,
+                    isSseResponse = isSseResponse,
+                    searchActive = searchActive,
+                    searchQuery = searchQuery,
+                    matchingLineIndices = matchingLineIndices,
+                    currentMatchIndex = currentMatchIndex,
+                    selectedSseEventIndex = selectedSseEventIndex,
+                    onSseEventClick = onSseEventClick,
+                    sseContentHeightPx = sseContentHeightPx,
+                    onSseContentHeightChange = onSseContentHeightChange,
+                    sseEventPanelHeight = sseEventPanelHeight,
+                    onSseEventPanelHeightChange = onSseEventPanelHeightChange,
+                    sseDetailListState = sseDetailListState,
+                    isResponseLoading = isResponseLoading,
+                )
+                if (isJsonComputing) {
+                    Row(
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(14.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colors.primary,
+                        )
+                        Spacer(Modifier.size(6.dp))
+                        Text(
+                            "解析中…",
+                            fontSize = exchangeMetrics.tiny,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                    }
+                }
+            }
         }
     }
 }
