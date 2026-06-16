@@ -93,13 +93,13 @@ fun ResponsePanel(
         }
     }
     val jsonBodyTooLarge = responseLines.sumOf { it.length } + (responsePartialLine?.length ?: 0) > MAX_JSON_HIGHLIGHT_BYTES
-    val displayLines = if (jsonBodyTooLarge) {
+    val displayLines = if (jsonBodyTooLarge && !isSseResponse) {
         val truncated = rawBodyCombined.take(MAX_PREVIEW_CHARS)
         truncated.lines() + "…(响应过大，仅显示前 ${MAX_PREVIEW_CHARS} 字符，复制可获取全文)"
     } else {
         responseLines
     }
-    val displayPartialLine = if (jsonBodyTooLarge) null else responsePartialLine
+    val displayPartialLine = if (jsonBodyTooLarge && !isSseResponse) null else responsePartialLine
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
     val shouldHighlight = jsonSyntaxHighlightEnabled && isJsonContentType && !isSseResponse && !isResponseLoading && !isCacheLoading && !jsonBodyTooLarge
