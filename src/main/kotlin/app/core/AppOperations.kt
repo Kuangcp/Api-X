@@ -1,5 +1,6 @@
 package app.core
 
+import app.log.Logger
 import app.state.TreeState
 import app.state.RequestEditorState
 import app.state.ResponseState
@@ -66,8 +67,12 @@ fun startRequest(
     repository: CollectionRepository,
 ) {
     val boundRequestId = editorState.editorRequestId ?: return
+    Logger.info("HTTP") { "startRequest: $boundRequestId, url=${editorState.url}" }
     val session = responseState.getOrCreateSession(boundRequestId)
-    if (session.isLoading) return
+    if (session.isLoading) {
+        Logger.info("HTTP") { "startRequest: $boundRequestId already loading, skip" }
+        return
+    }
     editorState.saveEditorIfBound()
     RequestResponseStore.ensureLayout(boundRequestId)
     val tabAtStart = session.rightTabIndex
@@ -102,6 +107,7 @@ fun startRequest(
     session.responseSizeText = ""
     session.responseSseEventCount = ""
     applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
+    Logger.info("HTTP") { "startRequest: $boundRequestId gen=$gen, control started" }
     val flusher = thread(isDaemon = true) {
         var lastTimerSec = -1L
         while (!control.finished && !control.cancelled) {
@@ -123,16 +129,20 @@ fun startRequest(
         }
     }
     val worker = thread {
-        sendRequestStreaming(
-            method = editorState.method, url = effectiveRequestUrl, body = reqBodySnap, headersText = finalHeaders, control = control,
-            onSseDetected = { isSse -> EventQueue.invokeLater { if (session.control === control) session.isSseResponse = isSse } },
-            onStatusCode = { code -> EventQueue.invokeLater { if (session.control === control) session.statusCodeText = code.toString() } },
-            onResponseTime = { },
-            onProgress = { bytes -> EventQueue.invokeLater { if (session.control === control) session.responseSizeText = formatBytes(bytes) } },
-            onSseEventCount = { count -> EventQueue.invokeLater { if (session.control === control) session.responseSseEventCount = "${count}个事件" } },
-            onResponseHeaders = { lines -> EventQueue.invokeLater { if (session.control === control) { session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines) } } },
-            onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } }
-        )
+        try {
+            sendRequestStreaming(
+                method = editorState.method, url = effectiveRequestUrl, body = reqBodySnap, headersText = finalHeaders, control = control,
+                onSseDetected = { isSse -> EventQueue.invokeLater { if (session.control === control) session.isSseResponse = isSse } },
+                onStatusCode = { code -> EventQueue.invokeLater { if (session.control === control) session.statusCodeText = code.toString() } },
+                onResponseTime = { },
+                onProgress = { bytes -> EventQueue.invokeLater { if (session.control === control) session.responseSizeText = formatBytes(bytes) } },
+                onSseEventCount = { count -> EventQueue.invokeLater { if (session.control === control) session.responseSseEventCount = "${count}个事件" } },
+                onResponseHeaders = { lines -> EventQueue.invokeLater { if (session.control === control) { session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines) } } },
+                onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } }
+            )
+        } catch (e: Exception) {
+            Logger.error("HTTP", e) { "sendRequestStreaming exception for $boundRequestId: ${e.message}" }
+        }
         EventQueue.invokeLater {
             if (session.requestGen != gen) return@invokeLater
             control.finished = true
@@ -140,17 +150,22 @@ fun startRequest(
             val timeText = formatDuration(elapsed)
             if (!control.cancelled && !control.requestFailed) {
                 val code = control.responseStatusCode
-                RequestResponseStore.save(boundRequestId, HarSnapshot(
-                    savedAtEpochMs = System.currentTimeMillis(), requestMethod = reqMethodSnap, requestUrl = effectiveRequestUrl,
-                    requestHeadersFullText = reqHeadersFullSnap, requestBody = reqBodySnap, requestHeadersSent = parseHeadersForSend(reqHeadersFullSnap),
-                    responseStatus = if (code >= 0) code else 0,
-                    responseStatusText = if (code >= 0) HarLogCodec.responseStatusPhrase(code) else "",
-                    responseHeaderLines = responseHeaderLinesForHar(control.responseHeaderSnapshot, control.responseBodyDecodedForHar),
-                    responseBodyLines = control.snapshotRawBodyLines(), responseTimeMs = elapsed, responseSizeBytes = control.totalBytes,
-                    responseTimeLabel = timeText, responseSizeLabel = formatBytes(control.totalBytes),
-                    rightTabIndex = tabAtStart.coerceIn(0, 2), isSseResponse = control.responseWasSse,
-                    responseSseEventCountText = session.responseSseEventCount,
-                ))
+                try {
+                    RequestResponseStore.save(boundRequestId, HarSnapshot(
+                        savedAtEpochMs = System.currentTimeMillis(), requestMethod = reqMethodSnap, requestUrl = effectiveRequestUrl,
+                        requestHeadersFullText = reqHeadersFullSnap, requestBody = reqBodySnap, requestHeadersSent = parseHeadersForSend(reqHeadersFullSnap),
+                        responseStatus = if (code >= 0) code else 0,
+                        responseStatusText = if (code >= 0) HarLogCodec.responseStatusPhrase(code) else "",
+                        responseHeaderLines = responseHeaderLinesForHar(control.responseHeaderSnapshot, control.responseBodyDecodedForHar),
+                        responseBodyLines = control.snapshotRawBodyLines(), responseTimeMs = elapsed, responseSizeBytes = control.totalBytes,
+                        responseTimeLabel = timeText, responseSizeLabel = formatBytes(control.totalBytes),
+                        rightTabIndex = tabAtStart.coerceIn(0, 2), isSseResponse = control.responseWasSse,
+                        responseSseEventCountText = session.responseSseEventCount,
+                    ))
+                    Logger.info("HTTP") { "Saved response for $boundRequestId, status=$code, time=${elapsed}ms, bytes=${control.totalBytes}" }
+                } catch (e: Exception) {
+                    Logger.error("HTTP", e) { "Save response failed for $boundRequestId: ${e.message}" }
+                }
                 if (editorState.editorRequestId == boundRequestId) {
                     session.historyEntries = RequestResponseStore.listHistory(boundRequestId)
                 }
@@ -164,6 +179,7 @@ fun startRequest(
             } else { control.lineBuffer.drainUpdate() }
             session.responseTimeText = timeText; session.responseSizeText = formatBytes(control.totalBytes)
             flusher.interrupt()
+            Logger.info("HTTP") { "Request done: $boundRequestId, gen=$gen, cancelled=${control.cancelled}, failed=${control.requestFailed}, lines=${session.responseLines.size}" }
         }
     }
     session.workerThread = worker

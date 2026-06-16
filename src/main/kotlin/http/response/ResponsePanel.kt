@@ -78,8 +78,7 @@ fun ResponsePanel(
     // ── State ────────────────────────────────────────────────
     val headersSnapshot = responseHeaderLines.toList()
     val isJsonContentType = remember(headersSnapshot) { contentTypeHeaderIndicatesJson(headersSnapshot) }
-    val linesSize = responseLines.size
-    val rawBodyCombined = remember(linesSize, responsePartialLine) {
+    val rawBodyCombined = remember(responseLines, responsePartialLine) {
         buildString {
             if (responseLines.isNotEmpty()) {
                 responseLines.forEachIndexed { i, line ->

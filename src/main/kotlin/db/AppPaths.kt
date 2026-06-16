@@ -114,5 +114,7 @@ object AppPaths {
     fun environmentsJsonPath(): Path = dataDirectory().resolve("environments.json")
 
     /** 各请求下的 response / bench 等落盘目录（非 SQLite）。 */
+    fun logDirectory(): Path = dataDirectory().resolve("logs")
+
     fun requestArtifactsRoot(): Path = dataDirectory().resolve("request")
 }

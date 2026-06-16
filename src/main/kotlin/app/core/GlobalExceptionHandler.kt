@@ -4,6 +4,7 @@ import java.io.PrintWriter
 import java.io.StringWriter
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import app.log.Logger
 
 object GlobalExceptionHandler {
 
@@ -25,6 +26,7 @@ object GlobalExceptionHandler {
                 if (errorLog.size > 50) errorLog.removeAt(0)
             }
             System.err.println(crashInfo)
+            Logger.error("CRASH") { crashInfo }
             onErrorCaptured?.invoke(throwable)
         }
     }

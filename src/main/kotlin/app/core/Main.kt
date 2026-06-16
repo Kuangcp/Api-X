@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.key
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -92,6 +93,9 @@ import app.ui.Dialogs
 import app.ui.ErrorBoundary
 import app.ui.appMaterialColors
 import app.ui.typographyFromSettings
+import app.log.Logger
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.awt.AWTEvent
 import java.awt.EventQueue
 import java.awt.KeyboardFocusManager
@@ -139,6 +143,65 @@ fun App(onExitRequest: () -> Unit) {
     var contentRowWidthPx by remember { mutableStateOf(1f) }
 
     val currentSession = editorState.editorRequestId?.let { responseState.getOrCreateSession(it) }
+
+    LaunchedEffect(editorState.editorRequestId) {
+        val id = editorState.editorRequestId ?: return@LaunchedEffect
+        Logger.info("CACHE") { "LaunchedEffect start: id=$id, requestGen=${responseState.getOrCreateSession(id).requestGen}" }
+        val session = responseState.getOrCreateSession(id)
+        try {
+            Logger.info("CACHE") { "Loading cache for id=$id, isCacheLoading=${session.isCacheLoading}" }
+            val cached = withContext(Dispatchers.Default) {
+                val start = System.currentTimeMillis()
+                val result = runCatching { RequestResponseStore.loadLatest(id) }.getOrElse { e ->
+                    Logger.error("CACHE", e) { "loadLatest failed for id=$id: ${e.message}" }
+                    null
+                }
+                Logger.info("CACHE") { "loadLatest for id=$id done in ${System.currentTimeMillis() - start}ms, found=${result != null}" }
+                result
+            }
+            Logger.info("CACHE") { "After loadLatest: id=$id, requestGen=${session.requestGen}, isCacheLoading=${session.isCacheLoading}, cached=${cached != null}" }
+            if (session.requestGen != 0) {
+                Logger.info("CACHE") { "Skip cache apply for id=$id: requestGen=${session.requestGen} (HTTP request started)" }
+                return@LaunchedEffect
+            }
+            if (cached != null) {
+                Logger.info("CACHE") { "Applying cached data for id=$id, bodyLines=${cached.responseBodyLines.size}, headerLines=${cached.responseHeaderLines.size}" }
+                session.responseLines.clear()
+                session.responseLines.addAll(cached.responseBodyLines)
+                session.responseHeaderLines.clear()
+                session.responseHeaderLines.addAll(cached.responseHeaderLines)
+                session.statusCodeText = cached.statusCodeText
+                session.responseTimeText = cached.responseTimeText
+                session.responseSizeText = cached.responseSizeText
+                session.isSseResponse = cached.isSseResponse
+                session.responseSseEventCount = cached.responseSseEventCount
+                session.rightTabIndex = cached.rightTabIndex.coerceIn(0, 2)
+                session.exchangeRequestPlainText = cached.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" }
+                Logger.info("CACHE") { "Applied cache for id=$id, responseLines=${session.responseLines.size}" }
+            } else {
+                Logger.info("CACHE") { "No cached data for id=$id, showing empty state" }
+                session.responseLines.clear()
+                session.responseLines.add("响应结果会显示在这里")
+                session.responseHeaderLines.clear()
+                session.responseHeaderLines.add("(暂无响应头)")
+            }
+        } catch (e: Exception) {
+            Logger.error("CACHE", e) { "Exception in cache LaunchedEffect for id=$id: ${e.message}" }
+        } finally {
+            Logger.info("CACHE") { "Cache LaunchedEffect finally for id=$id, isCacheLoading=${session.isCacheLoading} -> false, lines=${session.responseLines.size}, firstLine=${session.responseLines.firstOrNull()}" }
+            session.isCacheLoading = false
+            if (session.responseLines.firstOrNull() == "加载中…") {
+                session.responseLines.clear()
+                session.responseLines.add("响应结果会显示在这里")
+                session.responseHeaderLines.clear()
+                session.responseHeaderLines.add("(暂无响应头)")
+            }
+            responseState.cacheRefreshVersion++
+            Logger.info("CACHE") { "cacheRefreshVersion incremented to ${responseState.cacheRefreshVersion}" }
+        }
+    }
+
+    val cacheVersion = responseState.cacheRefreshVersion
 
     fun cycleRecentSwitcher(forward: Boolean) {
         val list = recentSwitcherState.ids
@@ -312,7 +375,7 @@ fun App(onExitRequest: () -> Unit) {
                                     }
                                     treeState.refresh()
                                 },
-                                onDelete = { deleteSelection(treeState, editorState, repository, it) },
+                                onDelete = { deleteSelection(treeState, editorState, responseState, repository, it) },
                                 onCountFolderContents = { repository.countFolderContents(it.id) },
                                 onSettings = { dialogState.collectionSettingsTarget = it; dialogState.showCollectionSettings = true },
                                 folderAddEnabled = repository.newFolderTarget(treeState.treeSelection) != null,
@@ -391,44 +454,46 @@ fun App(onExitRequest: () -> Unit) {
                             },
                             onPositioned = { coords -> splitHandlePos = coords.boundsInRoot().topLeft; splitHandleH = coords.size.height },
                         )
-                        ResponsePanel(
-                            modifier = Modifier.weight(middleFraction * (1f - splitRatio)),
-                            exchangeMetrics = exchangeMetrics,
-                            statusCodeText = currentSession?.statusCodeText ?: "",
-                            responseTimeText = currentSession?.responseTimeText ?: "",
-                            responseSizeText = currentSession?.responseSizeText ?: "",
-                            responseSseEventCount = currentSession?.responseSseEventCount ?: "",
-                            responseLines = currentSession?.responseLines ?: responseState.placeholderResponseLines,
-                            responsePartialLine = currentSession?.responsePartialLine,
-                            responseHeaderLines = currentSession?.responseHeaderLines ?: responseState.placeholderResponseHeaders,
-                            requestPlainText = currentSession?.exchangeRequestPlainText ?: "请先选择或创建一个请求",
-                            rightTabIndex = currentSession?.rightTabIndex ?: 0,
-                            onRightTabIndexChange = { currentSession?.rightTabIndex = it.coerceIn(0, 2) },
-                            isSseResponse = currentSession?.isSseResponse ?: false,
-                            isResponseLoading = currentSession?.isLoading ?: false,
-                            isCacheLoading = currentSession?.isCacheLoading ?: false,
-                            responseListState = currentSession?.responseListState ?: responseState.placeholderListState,
-                            responseHeadersListState = currentSession?.responseHeadersListState ?: responseState.placeholderListState,
-                            copyResponseBodyEnabled = editorState.editorRequestId != null && responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine).isNotBlank(),
-                            onCopyResponseBody = { val text = responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine); if (text.isNotBlank()) writeClipboardText(text) },
-                            clearResponseLogsEnabled = editorState.editorRequestId != null && currentSession?.isLoading != true,
-                            onClearResponseLogs = {
-                                val id = editorState.editorRequestId ?: return@ResponsePanel
-                                val s = currentSession ?: return@ResponsePanel
-                                RequestResponseStore.clearResponseAndBenchLogs(id)
-                                s.responseLines.clear(); s.responseLines.add("响应结果会显示在这里")
-                                s.responseHeaderLines.clear(); s.responseHeaderLines.add("(暂无响应头)")
-                                s.responsePartialLine = null
-                                s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""
-                                s.isSseResponse = false
-                                s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
-                            },
-                            jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
-                            onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
-                            historyEntries = currentSession?.historyEntries ?: emptyList(),
-                            selectedHistoryEpochMs = currentSession?.selectedHistoryEpochMs,
-                            onHistorySelected = { loadHistory(editorState, responseState, it) },
-                        )
+                        key(cacheVersion) {
+                            ResponsePanel(
+                                modifier = Modifier.weight(middleFraction * (1f - splitRatio)),
+                                exchangeMetrics = exchangeMetrics,
+                                statusCodeText = currentSession?.statusCodeText ?: "",
+                                responseTimeText = currentSession?.responseTimeText ?: "",
+                                responseSizeText = currentSession?.responseSizeText ?: "",
+                                responseSseEventCount = currentSession?.responseSseEventCount ?: "",
+                                responseLines = currentSession?.responseLines ?: responseState.placeholderResponseLines,
+                                responsePartialLine = currentSession?.responsePartialLine,
+                                responseHeaderLines = currentSession?.responseHeaderLines ?: responseState.placeholderResponseHeaders,
+                                requestPlainText = currentSession?.exchangeRequestPlainText ?: "请先选择或创建一个请求",
+                                rightTabIndex = currentSession?.rightTabIndex ?: 0,
+                                onRightTabIndexChange = { currentSession?.rightTabIndex = it.coerceIn(0, 2) },
+                                isSseResponse = currentSession?.isSseResponse ?: false,
+                                isResponseLoading = currentSession?.isLoading ?: false,
+                                isCacheLoading = currentSession?.isCacheLoading ?: false,
+                                responseListState = currentSession?.responseListState ?: responseState.placeholderListState,
+                                responseHeadersListState = currentSession?.responseHeadersListState ?: responseState.placeholderListState,
+                                copyResponseBodyEnabled = editorState.editorRequestId != null && responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine).isNotBlank(),
+                                onCopyResponseBody = { val text = responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine); if (text.isNotBlank()) writeClipboardText(text) },
+                                clearResponseLogsEnabled = editorState.editorRequestId != null && currentSession?.isLoading != true,
+                                onClearResponseLogs = {
+                                    val id = editorState.editorRequestId ?: return@ResponsePanel
+                                    val s = currentSession ?: return@ResponsePanel
+                                    RequestResponseStore.clearResponseAndBenchLogs(id)
+                                    s.responseLines.clear(); s.responseLines.add("响应结果会显示在这里")
+                                    s.responseHeaderLines.clear(); s.responseHeaderLines.add("(暂无响应头)")
+                                    s.responsePartialLine = null
+                                    s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""
+                                    s.isSseResponse = false
+                                    s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
+                                },
+                                jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
+                                onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
+                                historyEntries = currentSession?.historyEntries ?: emptyList(),
+                                selectedHistoryEpochMs = currentSession?.selectedHistoryEpochMs,
+                                onHistorySelected = { loadHistory(editorState, responseState, it) },
+                            )
+                        }
                     }
                 }
                 if (isDragging && splitHandlePos != Offset.Zero) {
@@ -637,6 +702,7 @@ private fun ToastMessage(message: String, onDismiss: () -> Unit) {
 
 fun main() {
     GlobalExceptionHandler.install()
+    Logger.info("APP") { "Api-X started, log dir: ${AppPaths.logDirectory()}" }
     application {
         ErrorBoundary {
             App(onExitRequest = { exitApplication() })

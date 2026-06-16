@@ -32,4 +32,18 @@ class RequestSession(val requestId: String) {
     var workerThread: Thread? = null
     var flusherThread: Thread? = null
     var requestGen: Int = 0
+
+    fun dispose() {
+        control?.cancelled = true
+        workerThread?.interrupt()
+        flusherThread?.interrupt()
+        workerThread = null
+        flusherThread = null
+        control = null
+        responseLines.clear()
+        responseHeaderLines.clear()
+        historyEntries = emptyList()
+        isLoading = false
+        isCacheLoading = false
+    }
 }

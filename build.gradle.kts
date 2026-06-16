@@ -45,11 +45,11 @@ compose.desktop {
     application {
         mainClass = "app.core.MainKt"
         jvmArgs += listOf(
-            "-Xms256m",
+            "-Xms30m",
             "-Xmx512m",
-            "-Xss512k",
+            "-Xss384k",
             "-XX:MaxDirectMemorySize=512M",
-            "-XX:+UseShenandoahGC",
+            // "-XX:+UseShenandoahGC",
             "-XX:NativeMemoryTracking=detail",
             // Skiko：OPENGL 由 GPU 合成，列表滚动更顺滑；若需对比内存/RSS 可临时改为 SOFTWARE / SOFTWARE_FAST
             "-Dskiko.renderApi=OPENGL",

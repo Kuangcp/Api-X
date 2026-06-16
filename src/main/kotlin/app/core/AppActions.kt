@@ -185,6 +185,7 @@ fun pullData(
 fun deleteSelection(
     treeState: TreeState,
     editorState: RequestEditorState,
+    responseState: ResponseState,
     repository: CollectionRepository,
     sel: TreeSelection,
 ) {
@@ -192,7 +193,7 @@ fun deleteSelection(
     when (sel) {
         is TreeSelection.Collection -> repository.deleteCollection(sel.id)
         is TreeSelection.Folder -> repository.deleteFolder(sel.id)
-        is TreeSelection.Request -> { repository.deleteRequest(sel.id); RecentRequestUsageStore.remove(sel.id); RequestResponseStore.deleteRequestArtifacts(sel.id) }
+        is TreeSelection.Request -> { repository.deleteRequest(sel.id); RecentRequestUsageStore.remove(sel.id); RequestResponseStore.deleteRequestArtifacts(sel.id); responseState.removeSession(sel.id) }
     }
     val nextTree = repository.loadTree()
     treeState.tree = nextTree
