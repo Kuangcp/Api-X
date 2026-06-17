@@ -62,7 +62,7 @@ compose.desktop {
             packageName = "api-x"
             packageVersion = project.findProperty("version")?.toString() ?: "1.0.0"
             // java.sql：SQLite JDBC 需要 DriverManager 等（jlink 默认运行时未包含）
-            modules("java.net.http", "java.sql")
+            modules("java.net.http", "java.sql", "java.management")
             // 根目录 api.png（Linux/macOS）、api.ico（Windows）
             if (appIconPng.exists()) {
                 linux {
