@@ -39,6 +39,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.8.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.0")
     implementation("com.neoutils.highlight:highlight-compose:2.3.0")
+    implementation("org.tinylog:tinylog-api:2.7.0")
+    runtimeOnly("org.tinylog:tinylog-impl:2.7.0")
 }
 
 compose.desktop {

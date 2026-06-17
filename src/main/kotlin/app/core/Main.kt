@@ -702,7 +702,7 @@ private fun ToastMessage(message: String, onDismiss: () -> Unit) {
 
 fun main() {
     GlobalExceptionHandler.install()
-    Logger.info("APP") { "Api-X started, log dir: ${AppPaths.logDirectory()}" }
+    Logger.configure()
     application {
         ErrorBoundary {
             App(onExitRequest = { exitApplication() })
