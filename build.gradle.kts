@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.github.kuangcp"
-version = "1.3.1"
+version = "1.3.2"
 
 val appIconPng = layout.projectDirectory.file("api.png").asFile
 val appIconIco = layout.projectDirectory.file("api.ico").asFile
@@ -79,6 +79,45 @@ compose.desktop {
             }
         }
     }
+}
+
+// 生成版本信息（含 git commit hash）
+val generatedVersionDir = layout.buildDirectory.dir("generated/version/kotlin")
+
+val generateVersion by tasks.registering {
+    val outputDir = generatedVersionDir.get()
+    outputs.cacheIf { true }
+    doLast {
+        outputDir.asFile.mkdirs()
+        val hash = try {
+            val proc = ProcessBuilder("git", "rev-parse", "--short", "HEAD")
+                .directory(project.rootDir)
+                .start()
+            proc.inputStream.bufferedReader().readText().trim()
+        } catch (_: Exception) { "unknown" }
+
+        val file = outputDir.file("app/build/Version.kt").asFile
+        file.parentFile.mkdirs()
+        val content = """
+            |package app.build
+            |
+            |object Version {
+            |    const val COMMIT = "${hash}"
+            |    const val NAME = "${project.version}"
+            |}
+        """.trimMargin()
+        if (!file.exists() || file.readText() != content) {
+            file.writeText(content)
+        }
+    }
+}
+
+kotlin.sourceSets.main {
+    kotlin.srcDir(generatedVersionDir)
+}
+
+tasks.matching { it.name == "compileKotlin" }.configureEach {
+    dependsOn(generateVersion)
 }
 
 // 开启警告 强报错

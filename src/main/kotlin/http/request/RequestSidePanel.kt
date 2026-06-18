@@ -199,13 +199,13 @@ private fun UrlInputWithInlineSend(
                     )
                 ),
                 decorationBox = { innerTextField ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .fillMaxHeight()
-                            .padding(start = 10.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .fillMaxHeight()
+                                .padding(start = 6.dp, end = 2.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                         Box(Modifier.weight(1f)) {
                             if (url.isEmpty()) {
                                 Text(

@@ -365,9 +365,14 @@ private fun SettingsDialogBody(
         Spacer(modifier = Modifier.height(12.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            Text(
+                text = "版本：v${app.build.Version.NAME}-${app.build.Version.COMMIT}",
+                style = MaterialTheme.typography.caption,
+                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            )
+            Spacer(Modifier.weight(1f))
             TextButton(onClick = onCancel) {
                 Text("取消")
             }
