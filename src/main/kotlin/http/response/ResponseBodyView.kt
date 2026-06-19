@@ -3,6 +3,7 @@ package http.response
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,6 +28,7 @@ import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.SpanStyle
@@ -35,7 +37,13 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.graphics.Color
 import http.ExchangeFontMetrics
+
+internal enum class ResponseBodyRenderMode {
+    Raw,
+    Model,
+}
 
 internal sealed class JsonHighlightState {
     data object Idle : JsonHighlightState()
@@ -46,6 +54,10 @@ internal sealed class JsonHighlightState {
 @Composable
 internal fun ResponseBodyView(
     exchangeMetrics: ExchangeFontMetrics,
+    renderMode: ResponseBodyRenderMode,
+    onRenderModeChange: (ResponseBodyRenderMode) -> Unit,
+    modelOutputAvailable: Boolean,
+    modelOutputChunkCount: Int,
     responseLines: List<String>,
     responsePartialLine: String?,
     responseListState: LazyListState,
@@ -68,27 +80,52 @@ internal fun ResponseBodyView(
     onSseEventPanelHeightChange: (Float) -> Unit,
     sseDetailListState: LazyListState,
 ) {
-    val isJsonReady = jsonHighlightState is JsonHighlightState.Ready
-    val isJsonComputing = jsonHighlightState is JsonHighlightState.Computing
+    val isJsonReady = renderMode == ResponseBodyRenderMode.Raw && jsonHighlightState is JsonHighlightState.Ready
+    val isJsonComputing = renderMode == ResponseBodyRenderMode.Raw && jsonHighlightState is JsonHighlightState.Computing
+    val jsonToggleEnabled = renderMode == ResponseBodyRenderMode.Raw
 
     Column(modifier = Modifier.fillMaxSize()) {
-        // JSON highlight toggle
         Row(
             modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
+            if (modelOutputAvailable) {
+                Row(
+                    modifier = Modifier
+                        .height(26.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f)),
+                ) {
+                    ResponseBodyModeButton(
+                        label = "Raw",
+                        selected = renderMode == ResponseBodyRenderMode.Raw,
+                        onClick = { onRenderModeChange(ResponseBodyRenderMode.Raw) },
+                        exchangeMetrics = exchangeMetrics,
+                    )
+                    ResponseBodyModeButton(
+                        label = if (modelOutputChunkCount > 0) "Model ($modelOutputChunkCount)" else "Model",
+                        selected = renderMode == ResponseBodyRenderMode.Model,
+                        onClick = { onRenderModeChange(ResponseBodyRenderMode.Model) },
+                        exchangeMetrics = exchangeMetrics,
+                    )
+                }
+            }
+            Spacer(Modifier.weight(1f))
             Text(
-                text = if (jsonBodyTooLarge && jsonSyntaxHighlightEnabled) "JSON 高亮 (响应过大，已禁用)" else "JSON 高亮",
+                text = if (jsonBodyTooLarge && jsonSyntaxHighlightEnabled) "JSON highlight disabled" else "JSON highlight",
                 fontSize = exchangeMetrics.tab,
                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
             )
             Switch(
                 checked = jsonSyntaxHighlightEnabled,
                 onCheckedChange = onJsonSyntaxHighlightEnabledChange,
+                enabled = jsonToggleEnabled,
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = MaterialTheme.colors.primary,
                     checkedTrackColor = MaterialTheme.colors.primary.copy(alpha = 0.5f),
+                    disabledCheckedThumbColor = MaterialTheme.colors.onSurface.copy(alpha = 0.25f),
+                    disabledCheckedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
                 ),
             )
         }
@@ -139,6 +176,30 @@ internal fun ResponseBodyView(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ResponseBodyModeButton(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    exchangeMetrics: ExchangeFontMetrics,
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxHeight()
+            .background(if (selected) MaterialTheme.colors.primary.copy(alpha = 0.14f) else Color.Transparent)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            fontSize = exchangeMetrics.tab,
+            color = if (selected) MaterialTheme.colors.onSurface
+            else MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+        )
     }
 }
 

@@ -77,31 +77,42 @@ fun ResponsePanel(
 ) {
     // ── State ────────────────────────────────────────────────
     val headersSnapshot = responseHeaderLines.toList()
+    val responseLineSnapshot = responseLines.toList()
     val isJsonContentType = remember(headersSnapshot) { contentTypeHeaderIndicatesJson(headersSnapshot) }
-    val rawBodyCombined = remember(responseLines, responsePartialLine) {
+    val rawBodyCombined = remember(responseLineSnapshot, responsePartialLine) {
         buildString {
-            if (responseLines.isNotEmpty()) {
-                responseLines.forEachIndexed { i, line ->
+            if (responseLineSnapshot.isNotEmpty()) {
+                responseLineSnapshot.forEachIndexed { i, line ->
                     if (i > 0) append('\n')
                     append(line)
                 }
             }
             responsePartialLine?.let { p ->
-                if (responseLines.isNotEmpty()) append('\n')
+                if (responseLineSnapshot.isNotEmpty()) append('\n')
                 append(p)
             }
         }
     }
-    val jsonBodyTooLarge = responseLines.sumOf { it.length } + (responsePartialLine?.length ?: 0) > MAX_JSON_HIGHLIGHT_BYTES
+    val jsonBodyTooLarge = responseLineSnapshot.sumOf { it.length } + (responsePartialLine?.length ?: 0) > MAX_JSON_HIGHLIGHT_BYTES
     val displayLines = if (jsonBodyTooLarge && !isSseResponse) {
         val truncated = rawBodyCombined.take(MAX_PREVIEW_CHARS)
         truncated.lines() + "…(响应过大，仅显示前 ${MAX_PREVIEW_CHARS} 字符，复制可获取全文)"
     } else {
-        responseLines
+        responseLineSnapshot
     }
     val displayPartialLine = if (jsonBodyTooLarge && !isSseResponse) null else responsePartialLine
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
+    var bodyRenderMode by remember { mutableStateOf(ResponseBodyRenderMode.Raw) }
+    val modelContent = remember(responseLineSnapshot, responsePartialLine, isSseResponse) {
+        if (isSseResponse) extractSseRenderableContent(responseLineSnapshot, responsePartialLine) else ExtractedSseContent("", 0)
+    }
+    val modelLines = remember(modelContent.text) {
+        if (modelContent.text.isBlank()) listOf("No model output extracted")
+        else modelContent.text.lines()
+    }
+    val activeBodyLines = if (bodyRenderMode == ResponseBodyRenderMode.Model) modelLines else displayLines
+    val activePartialLine = if (bodyRenderMode == ResponseBodyRenderMode.Model) null else displayPartialLine
     val shouldHighlight = jsonSyntaxHighlightEnabled && isJsonContentType && !isSseResponse && !isResponseLoading && !isCacheLoading && !jsonBodyTooLarge
     LaunchedEffect(rawBodyCombined, shouldHighlight, darkTheme) {
         if (!shouldHighlight) {
@@ -125,9 +136,13 @@ fun ResponsePanel(
     val sseDetailListState = remember { LazyListState() }
     val scope = rememberCoroutineScope()
 
-    val matchingLineIndices = remember(displayLines.size, searchQuery) {
+    LaunchedEffect(isSseResponse) {
+        if (!isSseResponse) bodyRenderMode = ResponseBodyRenderMode.Raw
+    }
+
+    val matchingLineIndices = remember(activeBodyLines, searchQuery) {
         if (searchQuery.isBlank()) emptyList()
-        else displayLines.mapIndexedNotNull { index, line ->
+        else activeBodyLines.mapIndexedNotNull { index, line ->
             if (line.contains(searchQuery, ignoreCase = true)) index else null
         }
     }
@@ -141,10 +156,12 @@ fun ResponsePanel(
 
     // ── Auto-scroll effects ─────────────────────────────────
     LaunchedEffect(
-        displayLines.size, displayPartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive
+        activeBodyLines.size, activePartialLine, isSseResponse, rightTabIndex, jsonHighlightState, searchActive, bodyRenderMode
     ) {
-        if (!searchActive && isSseResponse && rightTabIndex == 0 && jsonHighlightState !is JsonHighlightState.Ready) {
-            val total = displayLines.size + if (displayPartialLine != null) 1 else 0
+        if (!searchActive && isSseResponse && rightTabIndex == 0 && bodyRenderMode == ResponseBodyRenderMode.Raw &&
+            jsonHighlightState !is JsonHighlightState.Ready
+        ) {
+            val total = activeBodyLines.size + if (activePartialLine != null) 1 else 0
             if (total > 0) responseListState.scrollToItem(total - 1)
         }
     }
@@ -155,7 +172,7 @@ fun ResponsePanel(
             }
         }
     }
-    LaunchedEffect(displayLines.size) {
+    LaunchedEffect(displayLines.size, bodyRenderMode) {
         selectedSseEventIndex = -1
         sseEventPanelHeight = 0f
     }
@@ -230,14 +247,18 @@ fun ResponsePanel(
                         // Body content
                         ResponseBodyView(
                             exchangeMetrics = exchangeMetrics,
-                            responseLines = displayLines,
-                            responsePartialLine = displayPartialLine,
+                            renderMode = bodyRenderMode,
+                            onRenderModeChange = { bodyRenderMode = it },
+                            modelOutputAvailable = isSseResponse,
+                            modelOutputChunkCount = modelContent.chunkCount,
+                            responseLines = activeBodyLines,
+                            responsePartialLine = activePartialLine,
                             responseListState = responseListState,
                             jsonHighlightState = jsonHighlightState,
                             jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
                             onJsonSyntaxHighlightEnabledChange = onJsonSyntaxHighlightEnabledChange,
                             jsonBodyTooLarge = jsonBodyTooLarge,
-                            isSseResponse = isSseResponse,
+                            isSseResponse = isSseResponse && bodyRenderMode == ResponseBodyRenderMode.Raw,
                             isResponseLoading = isResponseLoading,
                             isCacheLoading = isCacheLoading,
                             searchActive = searchActive,
