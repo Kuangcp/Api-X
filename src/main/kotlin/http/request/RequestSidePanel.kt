@@ -44,7 +44,7 @@ import androidx.compose.ui.unit.dp
 import app.settings.EnvVariable
 import http.ExchangeFontMetrics
 
-private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS")
+private val requestMethodDropdownChoices = listOf("GET", "POST", "PUT", "DELETE", "OPTIONS", "MCP")
 
 /**
  * 左侧整栏：方法/URL/发送 + Body/Headers 编辑区（与右侧响应区对称分栏；顶栏由 [RequestTopBar] 单独提供）。
