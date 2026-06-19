@@ -42,8 +42,6 @@ import http.ExchangeFontMetrics
 import http.contentTypeHeaderIndicatesJson
 import http.highlightJsonLinesOrNull
 import kotlinx.coroutines.launch
-import mcp.buildMcpToolCallTemplate
-import mcp.extractMcpToolsFromLog
 
 private const val MAX_JSON_HIGHLIGHT_BYTES = 100_000
 private const val MAX_PREVIEW_CHARS = 5_000
@@ -77,7 +75,6 @@ fun ResponsePanel(
     historyEntries: List<HistoryEntry> = emptyList(),
     selectedHistoryEpochMs: Long? = null,
     onHistorySelected: (Long?) -> Unit = {},
-    onMcpToolCallTemplateSelected: (String) -> Unit = {},
 ) {
     // ── State ────────────────────────────────────────────────
     val headersSnapshot = responseHeaderLines.toList()
@@ -105,9 +102,6 @@ fun ResponsePanel(
         responseLineSnapshot
     }
     val displayPartialLine = if (jsonBodyTooLarge && !isSseResponse) null else responsePartialLine
-    val mcpTools = remember(responseLineSnapshot, responsePartialLine, statusCodeText) {
-        if (statusCodeText == "MCP") extractMcpToolsFromLog(responseLineSnapshot, responsePartialLine) else emptyList()
-    }
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
     var bodyRenderMode by remember { mutableStateOf(ResponseBodyRenderMode.Raw) }
@@ -265,8 +259,6 @@ fun ResponsePanel(
                             responseLines = activeBodyLines,
                             responsePartialLine = activePartialLine,
                             responseListState = responseListState,
-                            mcpTools = mcpTools,
-                            onMcpToolSelected = { tool -> onMcpToolCallTemplateSelected(buildMcpToolCallTemplate(tool)) },
                             jsonHighlightState = jsonHighlightState,
                             jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
                             onJsonSyntaxHighlightEnabledChange = onJsonSyntaxHighlightEnabledChange,

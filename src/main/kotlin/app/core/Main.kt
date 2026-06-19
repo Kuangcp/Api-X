@@ -66,6 +66,9 @@ import http.request.RequestTabBar
 import http.request.RequestTopBar
 import http.response.ResponsePanel
 import kotlinx.coroutines.delay
+import mcp.buildMcpPromptGetTemplate
+import mcp.buildMcpResourceReadTemplate
+import mcp.buildMcpToolCallTemplate
 import tree.collectAllFolderIds
 import tree.CollectionTreeSidebar
 import tree.TreeDragPayload
@@ -354,9 +357,25 @@ fun App(onExitRequest: () -> Unit) {
                                 expandedCollectionIds = treeState.expandedCollectionIds,
                                 expandedFolderIds = treeState.expandedFolderIds,
                                 runningRequestIds = responseState.runningRequestIds,
+                                mcpCatalogByRequestId = responseState.mcpCatalogByRequestId(),
                                 onToggleCollection = { treeState.toggleCollection(it) },
                                 onToggleFolder = { treeState.toggleFolder(it) },
                                 onSelectNode = { selectTreeNode(it, treeState, editorState) },
+                                onMcpToolSelected = { requestId, tool ->
+                                    selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
+                                    editorState.bodyText = buildMcpToolCallTemplate(tool)
+                                    editorState.leftTabIndex = 0
+                                },
+                                onMcpResourceSelected = { requestId, resource ->
+                                    selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
+                                    editorState.bodyText = buildMcpResourceReadTemplate(resource)
+                                    editorState.leftTabIndex = 0
+                                },
+                                onMcpPromptSelected = { requestId, prompt ->
+                                    selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
+                                    editorState.bodyText = buildMcpPromptGetTemplate(prompt)
+                                    editorState.leftTabIndex = 0
+                                },
                                 onAddCollection = {
                                     val id = repository.createCollection("新集合")
                                     treeState.refresh()
@@ -490,10 +509,6 @@ fun App(onExitRequest: () -> Unit) {
                                 jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
                                 onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
                                 customSseTextRulePaths = appSettingsState.appSettings.responseSseTextRulePaths,
-                                onMcpToolCallTemplateSelected = { template ->
-                                    editorState.bodyText = template
-                                    editorState.leftTabIndex = 0
-                                },
                                 historyEntries = currentSession?.historyEntries ?: emptyList(),
                                 selectedHistoryEpochMs = currentSession?.selectedHistoryEpochMs,
                                 onHistorySelected = { loadHistory(editorState, responseState, it) },

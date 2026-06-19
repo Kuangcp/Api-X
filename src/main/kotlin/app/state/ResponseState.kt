@@ -7,6 +7,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import app.log.Logger
 import db.RequestResponseStore
+import mcp.McpCatalogSummary
+import mcp.extractMcpCatalogFromLog
 import java.awt.EventQueue
 import kotlin.concurrent.thread
 
@@ -62,6 +64,12 @@ class ResponseState {
         return session
     }
 
+    fun mcpCatalogByRequestId(): Map<String, McpCatalogSummary> {
+        return requestSessions.mapNotNull { (reqId, session) ->
+            val catalog = extractMcpCatalogFromLog(session.responseLines, session.responsePartialLine)
+            if (catalog.isEmpty) null else reqId to catalog
+        }.toMap()
+    }
     fun removeSession(reqId: String) {
         Logger.info("SESSION") { "removeSession: $reqId" }
         requestSessions.remove(reqId)?.dispose()

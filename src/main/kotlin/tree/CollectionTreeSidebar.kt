@@ -2,6 +2,9 @@ package tree
 
 import androidx.compose.foundation.ContextMenuArea
 import androidx.compose.foundation.ContextMenuItem
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
@@ -38,11 +41,16 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.Text
 import androidx.compose.material.TextButton
+import androidx.compose.material.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import app.ui.CustomIcons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import mcp.McpCatalogSummary
+import mcp.McpPromptSummary
+import mcp.McpResourceSummary
+import mcp.McpToolSummary
 
 
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -79,10 +87,14 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.LayoutCoordinates
 import kotlinx.coroutines.delay
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 private class DropZoneRegistry {
     val zones = mutableStateMapOf<String, Pair<Rect, TreeDropTarget>>()
@@ -158,9 +170,13 @@ fun CollectionTreeSidebar(
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
     runningRequestIds: Set<String>,
+    mcpCatalogByRequestId: Map<String, McpCatalogSummary> = emptyMap(),
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onMcpToolSelected: (String, McpToolSummary) -> Unit = { _, _ -> },
+    onMcpResourceSelected: (String, McpResourceSummary) -> Unit = { _, _ -> },
+    onMcpPromptSelected: (String, McpPromptSummary) -> Unit = { _, _ -> },
     onAddCollection: () -> Unit,
     onAddFolder: () -> Unit,
     onAddRequest: () -> Unit,
@@ -184,6 +200,7 @@ fun CollectionTreeSidebar(
     var renameText by remember { mutableStateOf("") }
     var deleteTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var folderDeleteCounts by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var expandedMcpRequestIds by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     LaunchedEffect(deleteTarget) {
         folderDeleteCounts = if (deleteTarget is TreeSelection.Folder && onCountFolderContents != null) {
@@ -328,9 +345,17 @@ fun CollectionTreeSidebar(
                             expandedCollectionIds = expandedCollectionIds,
                             expandedFolderIds = expandedFolderIds,
                             runningRequestIds = runningRequestIds,
+                            mcpCatalogByRequestId = mcpCatalogByRequestId,
                             onToggleCollection = onToggleCollection,
                             onToggleFolder = onToggleFolder,
                             onSelectNode = onSelectNode,
+                            onMcpToolSelected = onMcpToolSelected,
+                            onMcpResourceSelected = onMcpResourceSelected,
+                            onMcpPromptSelected = onMcpPromptSelected,
+                            expandedMcpRequestIds = expandedMcpRequestIds,
+                            onToggleMcpRequest = { id ->
+                                expandedMcpRequestIds = if (id in expandedMcpRequestIds) expandedMcpRequestIds - id else expandedMcpRequestIds + id
+                            },
                             onBeginTreeRename = { sel, name ->
                                 renameTarget = sel
                                 renameText = name
@@ -465,9 +490,15 @@ private fun CollectionTreeBlock(
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
     runningRequestIds: Set<String>,
+    mcpCatalogByRequestId: Map<String, McpCatalogSummary> = emptyMap(),
     onToggleCollection: (String) -> Unit,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onMcpToolSelected: (String, McpToolSummary) -> Unit,
+    onMcpResourceSelected: (String, McpResourceSummary) -> Unit,
+    onMcpPromptSelected: (String, McpPromptSummary) -> Unit,
+    expandedMcpRequestIds: Set<String>,
+    onToggleMcpRequest: (String) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
@@ -566,8 +597,14 @@ private fun CollectionTreeBlock(
                 editorBoundRequestId = editorBoundRequestId,
                 expandedFolderIds = expandedFolderIds,
                 runningRequestIds = runningRequestIds,
+                mcpCatalogByRequestId = mcpCatalogByRequestId,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
+                onMcpToolSelected = onMcpToolSelected,
+                onMcpResourceSelected = onMcpResourceSelected,
+                onMcpPromptSelected = onMcpPromptSelected,
+                expandedMcpRequestIds = expandedMcpRequestIds,
+                onToggleMcpRequest = onToggleMcpRequest,
                 onBeginTreeRename = onBeginTreeRename,
                 onContextAddFolder = onContextAddFolder,
                 onContextAddRequest = onContextAddRequest,
@@ -607,7 +644,13 @@ private fun CollectionTreeBlock(
                 onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 runningRequestIds = runningRequestIds,
+                mcpCatalog = mcpCatalogByRequestId[req.id] ?: McpCatalogSummary(),
                 onSelectNode = onSelectNode,
+                onMcpToolSelected = onMcpToolSelected,
+                onMcpResourceSelected = onMcpResourceSelected,
+                onMcpPromptSelected = onMcpPromptSelected,
+                mcpExpanded = req.id in expandedMcpRequestIds,
+                onToggleMcpRequest = onToggleMcpRequest,
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
@@ -638,8 +681,14 @@ private fun FolderTreeBlock(
     editorBoundRequestId: String?,
     expandedFolderIds: Set<String>,
     runningRequestIds: Set<String>,
+    mcpCatalogByRequestId: Map<String, McpCatalogSummary>,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
+    onMcpToolSelected: (String, McpToolSummary) -> Unit,
+    onMcpResourceSelected: (String, McpResourceSummary) -> Unit,
+    onMcpPromptSelected: (String, McpPromptSummary) -> Unit,
+    expandedMcpRequestIds: Set<String>,
+    onToggleMcpRequest: (String) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
@@ -752,8 +801,14 @@ private fun FolderTreeBlock(
                 editorBoundRequestId = editorBoundRequestId,
                 expandedFolderIds = expandedFolderIds,
                 runningRequestIds = runningRequestIds,
+                mcpCatalogByRequestId = mcpCatalogByRequestId,
                 onToggleFolder = onToggleFolder,
                 onSelectNode = onSelectNode,
+                onMcpToolSelected = onMcpToolSelected,
+                onMcpResourceSelected = onMcpResourceSelected,
+                onMcpPromptSelected = onMcpPromptSelected,
+                expandedMcpRequestIds = expandedMcpRequestIds,
+                onToggleMcpRequest = onToggleMcpRequest,
                 onBeginTreeRename = onBeginTreeRename,
                 onContextAddFolder = onContextAddFolder,
                 onContextAddRequest = onContextAddRequest,
@@ -793,7 +848,13 @@ private fun FolderTreeBlock(
                 onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                 editorBoundRequestId = editorBoundRequestId,
                 runningRequestIds = runningRequestIds,
+                mcpCatalog = mcpCatalogByRequestId[req.id] ?: McpCatalogSummary(),
                 onSelectNode = onSelectNode,
+                onMcpToolSelected = onMcpToolSelected,
+                onMcpResourceSelected = onMcpResourceSelected,
+                onMcpPromptSelected = onMcpPromptSelected,
+                mcpExpanded = req.id in expandedMcpRequestIds,
+                onToggleMcpRequest = onToggleMcpRequest,
                 onBeginTreeRename = onBeginTreeRename,
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
@@ -822,7 +883,13 @@ private fun RequestTreeRow(
     onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     runningRequestIds: Set<String>,
+    mcpCatalog: McpCatalogSummary,
     onSelectNode: (TreeSelection) -> Unit,
+    onMcpToolSelected: (String, McpToolSummary) -> Unit,
+    onMcpResourceSelected: (String, McpResourceSummary) -> Unit,
+    onMcpPromptSelected: (String, McpPromptSummary) -> Unit,
+    mcpExpanded: Boolean,
+    onToggleMcpRequest: (String) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onExportRequestAsCurl: (String) -> Unit,
     onExportRequestAsGo: (String) -> Unit,
@@ -834,6 +901,8 @@ private fun RequestTreeRow(
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
     val isRunning = req.id in runningRequestIds
+    val isMcp = req.method.uppercase() == "MCP"
+    val hasMcpChildren = isMcp && !mcpCatalog.isEmpty
     val rowLc = remember(req.id) { LayoutCoordsHolder() }
     val bringIntoViewRequester = remember(req.id) { BringIntoViewRequester() }
     val payload = TreeDragPayload.Request(req.id)
@@ -846,26 +915,18 @@ private fun RequestTreeRow(
     ContextMenuArea(
         items = {
             listOf(
-                ContextMenuItem("cURL") {
-                    onExportRequestAsCurl(req.id)
-                },
-                ContextMenuItem("Go") {
-                    onExportRequestAsGo(req.id)
-                },
-                ContextMenuItem("复制") {
-                    onDuplicateRequestBelow(req.id)
-                },
-                ContextMenuItem("重命名") {
-                    onBeginTreeRename(TreeSelection.Request(req.id), req.name)
-                },
+                ContextMenuItem("cURL") { onExportRequestAsCurl(req.id) },
+                ContextMenuItem("Go") { onExportRequestAsGo(req.id) },
+                ContextMenuItem("复制") { onDuplicateRequestBelow(req.id) },
+                ContextMenuItem("重命名") { onBeginTreeRename(TreeSelection.Request(req.id), req.name) },
             )
         }
     ) {
         val folderNesting = (depth - 1).coerceAtLeast(0)
-        // 按 HTTP Method 区分颜色，兼容 Dark/Light 主题
         val methodColor = when (req.method.uppercase()) {
             "GET" -> Color(0xFF4CAF50)
             "POST" -> MaterialTheme.colors.primary
+            "MCP" -> MaterialTheme.colors.primary
             else -> Color(0xFFE65100)
         }
         val methodBadgeBg = methodColor.copy(alpha = if (folderNesting % 2 == 0) 0.18f else 0.10f)
@@ -887,10 +948,7 @@ private fun RequestTreeRow(
                         Box(
                             modifier = Modifier
                                 .widthIn(max = methodIconColumnW)
-                                .background(
-                                    methodBadgeBg,
-                                    RoundedCornerShape(3.dp)
-                                )
+                                .background(methodBadgeBg, RoundedCornerShape(3.dp))
                                 .padding(horizontal = 4.dp, vertical = 1.dp),
                             contentAlignment = Alignment.CenterStart
                         ) {
@@ -914,7 +972,18 @@ private fun RequestTreeRow(
                     }
                 }
             },
-            expandIcon = { Spacer(Modifier.width(20.dp)) },
+            expandIcon = {
+                if (hasMcpChildren) {
+                    Icon(
+                        if (mcpExpanded) Icons.Filled.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = if (mcpExpanded) "折叠 MCP" else "展开 MCP",
+                        modifier = Modifier.size(20.dp).clickable { onToggleMcpRequest(req.id) },
+                        tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                    )
+                } else {
+                    Spacer(Modifier.width(20.dp))
+                }
+            },
             label = req.name,
             selected = isTreeSelected || editingThis,
             onClick = { onSelectNode(TreeSelection.Request(req.id)) },
@@ -927,9 +996,7 @@ private fun RequestTreeRow(
                 .onGloballyPositioned { rowLc.coords = it },
             dragModifier = Modifier.pointerInput(payload) {
                 detectDragGestures(
-                    onDragStart = { offset ->
-                        rowLc.coords?.localToRoot(offset)?.let { onTreeDragStart(payload, it) }
-                    },
+                    onDragStart = { offset -> rowLc.coords?.localToRoot(offset)?.let { onTreeDragStart(payload, it) } },
                     onDrag = { change, _ ->
                         change.consume()
                         rowLc.coords?.localToRoot(change.position)?.let(onTreeDragMove)
@@ -940,6 +1007,142 @@ private fun RequestTreeRow(
             },
         )
     }
+    if (hasMcpChildren && mcpExpanded) {
+        McpCatalogChildren(
+            requestId = req.id,
+            catalog = mcpCatalog,
+            depth = depth + 1,
+            onSelectRequest = { onSelectNode(TreeSelection.Request(req.id)) },
+            onToolSelected = onMcpToolSelected,
+            onResourceSelected = onMcpResourceSelected,
+            onPromptSelected = onMcpPromptSelected,
+        )
+    }
+}
+
+@Composable
+private fun McpCatalogChildren(
+    requestId: String,
+    catalog: McpCatalogSummary,
+    depth: Int,
+    onSelectRequest: () -> Unit,
+    onToolSelected: (String, McpToolSummary) -> Unit,
+    onResourceSelected: (String, McpResourceSummary) -> Unit,
+    onPromptSelected: (String, McpPromptSummary) -> Unit,
+) {
+    McpCatalogGroup("Tools", catalog.tools, depth, "{}", onSelectRequest) { onToolSelected(requestId, it) }
+    McpCatalogGroup("Resources", catalog.resources, depth, "R", onSelectRequest) { onResourceSelected(requestId, it) }
+    McpCatalogGroup("Prompts", catalog.prompts, depth, "P", onSelectRequest) { onPromptSelected(requestId, it) }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun <T> McpCatalogGroup(
+    title: String,
+    items: List<T>,
+    depth: Int,
+    itemIcon: String,
+    onSelectRequest: () -> Unit,
+    onItemSelected: (T) -> Unit,
+) {
+    if (items.isEmpty()) return
+    TreeRow(
+        depth = depth,
+        iconColumnWidth = 26.dp,
+        iconNameSpacing = 6.dp,
+        icon = {
+            Text("MCP", fontSize = 9.sp, maxLines = 1, color = MaterialTheme.colors.primary.copy(alpha = 0.9f))
+        },
+        expandIcon = { Spacer(Modifier.width(20.dp)) },
+        label = title,
+        selected = false,
+        onClick = onSelectRequest,
+        rowExtraModifier = Modifier.heightIn(max = 24.dp),
+    )
+    items.forEach { item ->
+        val tooltipText = mcpItemTooltip(item)
+        TooltipArea(
+            tooltip = { McpItemTooltip(tooltipText) },
+            delayMillis = 350,
+            tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(12.dp, 12.dp)),
+        ) {
+            TreeRow(
+                depth = depth + 1,
+                iconColumnWidth = 18.dp,
+                iconNameSpacing = 6.dp,
+                icon = {
+                    Text(itemIcon, fontSize = 10.sp, maxLines = 1, color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium))
+                },
+                expandIcon = { Spacer(Modifier.width(20.dp)) },
+                label = mcpItemLabel(item),
+                selected = false,
+                onClick = {
+                    onSelectRequest()
+                    onItemSelected(item)
+                },
+                rowExtraModifier = Modifier.heightIn(max = 24.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun McpItemTooltip(text: String) {
+    Surface(
+        color = MaterialTheme.colors.surface,
+        contentColor = MaterialTheme.colors.onSurface,
+        elevation = 6.dp,
+        shape = RoundedCornerShape(4.dp),
+    ) {
+        Text(
+            text = text.ifBlank { "No description" },
+            modifier = Modifier.widthIn(max = 360.dp).padding(horizontal = 10.dp, vertical = 8.dp),
+            fontSize = 12.sp,
+            lineHeight = 16.sp,
+            color = MaterialTheme.colors.onSurface,
+        )
+    }
+}
+
+private fun mcpItemLabel(item: Any?): String = when (item) {
+    is McpToolSummary -> item.name
+    is McpResourceSummary -> item.name
+    is McpPromptSummary -> item.name
+    else -> item?.toString().orEmpty()
+}
+
+private fun mcpItemTooltip(item: Any?): String = when (item) {
+    is McpToolSummary -> buildString {
+        if (item.description.isNotBlank()) append(item.description)
+        val properties = item.inputSchema?.get("properties") as? JsonObject
+        if (properties != null && properties.isNotEmpty()) {
+            if (isNotEmpty()) append("\n\n")
+            append("Params: ")
+            append(properties.keys.joinToString(", "))
+        }
+    }
+    is McpResourceSummary -> buildString {
+        if (item.description.isNotBlank()) append(item.description)
+        if (item.uri.isNotBlank()) {
+            if (isNotEmpty()) append("\n")
+            append("URI: ").append(item.uri)
+        }
+        if (item.mimeType.isNotBlank()) {
+            if (isNotEmpty()) append("\n")
+            append("MIME: ").append(item.mimeType)
+        }
+    }
+    is McpPromptSummary -> buildString {
+        if (item.description.isNotBlank()) append(item.description)
+        val names = item.arguments?.mapNotNull { arg ->
+            (arg as? JsonObject)?.get("name")?.jsonPrimitive?.contentOrNull
+        }.orEmpty()
+        if (names.isNotEmpty()) {
+            if (isNotEmpty()) append("\n\n")
+            append("Args: ").append(names.joinToString(", "))
+        }
+    }
+    else -> ""
 }
 
 @Composable

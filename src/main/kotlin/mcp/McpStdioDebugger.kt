@@ -44,6 +44,11 @@ data class McpToolCallRequest(
     val arguments: JsonElement,
 )
 
+data class McpJsonRpcRequest(
+    val method: String,
+    val params: JsonObject?,
+)
+
 fun runMcpStdioDebug(
     commandLine: String,
     envLines: List<Pair<String, String>>,
@@ -132,17 +137,16 @@ fun runMcpStdioDebug(
         send(2, "tools/list")
         val toolsResponse = await(2, "tools/list")
         emitToolSummary(toolsResponse, ::emit)
+        send(3, "resources/list")
+        val resourcesResponse = await(3, "resources/list")
+        emitResourceSummary(resourcesResponse, ::emit)
+        send(4, "prompts/list")
+        val promptsResponse = await(4, "prompts/list")
+        emitPromptSummary(promptsResponse, ::emit)
 
-        parseToolCall(toolCallBody)?.let { call ->
-            send(
-                3,
-                "tools/call",
-                buildJsonObject {
-                    put("name", call.name)
-                    put("arguments", call.arguments)
-                },
-            )
-            await(3, "tools/call")
+        parseMcpRequest(toolCallBody)?.let { call ->
+            send(5, call.method, call.params)
+            await(5, call.method)
         }
     }
 
@@ -289,17 +293,16 @@ fun runMcpSseDebug(
     post(2, "tools/list")
     val toolsResponse = await(2, "tools/list")
     emitToolSummary(toolsResponse, ::emit)
+    post(3, "resources/list")
+    val resourcesResponse = await(3, "resources/list")
+    emitResourceSummary(resourcesResponse, ::emit)
+    post(4, "prompts/list")
+    val promptsResponse = await(4, "prompts/list")
+    emitPromptSummary(promptsResponse, ::emit)
 
-    parseToolCall(toolCallBody)?.let { call ->
-        post(
-            3,
-            "tools/call",
-            buildJsonObject {
-                put("name", call.name)
-                put("arguments", call.arguments)
-            },
-        )
-        await(3, "tools/call")
+    parseMcpRequest(toolCallBody)?.let { call ->
+        post(5, call.method, call.params)
+        await(5, call.method)
     }
 
     sseThread.interrupt()
@@ -316,6 +319,49 @@ private fun emitToolSummary(response: JsonObject?, emit: (String) -> Unit) {
         val desc = obj["description"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
         emit("- $name${desc?.let { ": $it" } ?: ""}\n")
     }
+}
+
+private fun emitResourceSummary(response: JsonObject?, emit: (String) -> Unit) {
+    val resources = response?.get("result")?.jsonObject?.get("resources") as? JsonArray ?: return
+    emit("\n[MCP resources]\n")
+    for (resource in resources) {
+        val obj = resource as? JsonObject ?: continue
+        val uri = obj["uri"]?.jsonPrimitive?.contentOrNull ?: continue
+        val name = obj["name"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        emit("- ${name ?: uri}: $uri\n")
+    }
+}
+
+private fun emitPromptSummary(response: JsonObject?, emit: (String) -> Unit) {
+    val prompts = response?.get("result")?.jsonObject?.get("prompts") as? JsonArray ?: return
+    emit("\n[MCP prompts]\n")
+    for (prompt in prompts) {
+        val obj = prompt as? JsonObject ?: continue
+        val name = obj["name"]?.jsonPrimitive?.contentOrNull ?: continue
+        val desc = obj["description"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+        emit("- $name${desc?.let { ": $it" } ?: ""}\n")
+    }
+}
+private fun parseMcpRequest(body: String): McpJsonRpcRequest? {
+    parseRawMcpRequest(body)?.let { return it }
+    return parseToolCall(body)?.let { call ->
+        McpJsonRpcRequest(
+            method = "tools/call",
+            params = buildJsonObject {
+                put("name", call.name)
+                put("arguments", call.arguments)
+            },
+        )
+    }
+}
+
+private fun parseRawMcpRequest(body: String): McpJsonRpcRequest? {
+    val trimmed = body.trim()
+    if (trimmed.isEmpty()) return null
+    val obj = runCatching { mcpWireJson.parseToJsonElement(trimmed).jsonObject }.getOrNull() ?: return null
+    val method = obj["method"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() } ?: return null
+    val params = obj["params"] as? JsonObject
+    return McpJsonRpcRequest(method = method, params = params)
 }
 
 private fun parseToolCall(body: String): McpToolCallRequest? {
