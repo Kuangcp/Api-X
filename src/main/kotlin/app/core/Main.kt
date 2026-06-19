@@ -490,6 +490,10 @@ fun App(onExitRequest: () -> Unit) {
                                 jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
                                 onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
                                 customSseTextRulePaths = appSettingsState.appSettings.responseSseTextRulePaths,
+                                onMcpToolCallTemplateSelected = { template ->
+                                    editorState.bodyText = template
+                                    editorState.leftTabIndex = 0
+                                },
                                 historyEntries = currentSession?.historyEntries ?: emptyList(),
                                 selectedHistoryEpochMs = currentSession?.selectedHistoryEpochMs,
                                 onHistorySelected = { loadHistory(editorState, responseState, it) },

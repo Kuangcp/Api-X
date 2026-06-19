@@ -39,6 +39,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import http.ExchangeFontMetrics
+import mcp.McpToolSummary
 
 internal enum class ResponseBodyRenderMode {
     Raw,
@@ -61,6 +62,8 @@ internal fun ResponseBodyView(
     responseLines: List<String>,
     responsePartialLine: String?,
     responseListState: LazyListState,
+    mcpTools: List<McpToolSummary> = emptyList(),
+    onMcpToolSelected: (McpToolSummary) -> Unit = {},
     jsonHighlightState: JsonHighlightState,
     jsonSyntaxHighlightEnabled: Boolean,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit,
@@ -130,6 +133,13 @@ internal fun ResponseBodyView(
             )
         }
 
+        if (mcpTools.isNotEmpty()) {
+            McpToolsPanel(
+                exchangeMetrics = exchangeMetrics,
+                tools = mcpTools,
+                onToolSelected = onMcpToolSelected,
+            )
+        }
         // Main body content
         if (isJsonReady) {
             JsonReadyBody(exchangeMetrics, jsonHighlightState, responseListState)
@@ -179,6 +189,58 @@ internal fun ResponseBodyView(
     }
 }
 
+@Composable
+private fun McpToolsPanel(
+    exchangeMetrics: ExchangeFontMetrics,
+    tools: List<McpToolSummary>,
+    onToolSelected: (McpToolSummary) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = "MCP Tools",
+            fontSize = exchangeMetrics.tab,
+            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+        )
+        tools.forEach { tool ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colors.onSurface.copy(alpha = 0.05f), RoundedCornerShape(4.dp))
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = tool.name,
+                        fontSize = exchangeMetrics.body,
+                        color = MaterialTheme.colors.onSurface,
+                    )
+                    if (tool.description.isNotBlank()) {
+                        Text(
+                            text = tool.description,
+                            fontSize = exchangeMetrics.tiny,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                    }
+                }
+                Text(
+                    text = "Use",
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .clickable { onToolSelected(tool) }
+                        .background(MaterialTheme.colors.primary.copy(alpha = 0.14f))
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                    fontSize = exchangeMetrics.tab,
+                    color = MaterialTheme.colors.onSurface,
+                )
+            }
+        }
+    }
+}
 @Composable
 private fun ResponseBodyModeButton(
     label: String,
