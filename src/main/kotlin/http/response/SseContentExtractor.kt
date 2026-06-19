@@ -52,6 +52,7 @@ private val textRules = listOf(
 internal fun extractSseRenderableContent(
     responseLines: List<String>,
     responsePartialLine: String?,
+    customTextRulePaths: List<String> = emptyList(),
 ): ExtractedSseContent {
     val events = parseSseEvents(responseLines, responsePartialLine).ifEmpty {
         parseBareJsonEvents(responseLines, responsePartialLine)
@@ -61,7 +62,7 @@ internal fun extractSseRenderableContent(
             if (event.data == "[DONE]") continue
             val parsed = runCatching { extractorJson.parseToJsonElement(event.data) }.getOrNull()
             if (parsed != null) {
-                addAll(extractTextChunks(parsed, event.eventType))
+                addAll(extractTextChunks(parsed, event.eventType, customTextRulePaths))
             } else if (event.data.isNotBlank()) {
                 add(event.data)
             }
@@ -165,9 +166,14 @@ private fun jsonObjectIsComplete(text: String): Boolean {
     return sawJsonStart && depth == 0 && !inString
 }
 
-private fun extractTextChunks(element: JsonElement, eventType: String?): List<String> {
+private fun extractTextChunks(
+    element: JsonElement,
+    eventType: String?,
+    customTextRulePaths: List<String>,
+): List<String> {
     val chunks = mutableListOf<String>()
-    for (rule in textRules) {
+    val customRules = customTextRulePaths.map { JsonTextRule(paths = listOf(it)) }
+    for (rule in textRules + customRules) {
         if (rule.eventTypes.isNotEmpty() && eventType !in rule.eventTypes) continue
         for (path in rule.paths) {
             chunks += valuesAtPath(element, path).mapNotNull { it.stringContentOrNull() }

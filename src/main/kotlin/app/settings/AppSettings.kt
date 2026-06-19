@@ -4,27 +4,23 @@ import db.AppPaths
 import java.nio.file.Files
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicReference
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
-/** 用户偏好：界面字体与 HTTP 代理。持久化到应用数据目录。 */
 data class AppSettings(
     val fontFamilyName: String = "",
     val fontSizeSp: Float = 13f,
-    /** 中间 Request / Response 编辑区正文字号（sp），与全局界面字体独立。 */
     val requestResponseFontSizeSp: Float = 13f,
-    /** 主窗口背景色，如 `#282923`；空则跟随主题默认。 */
     val backgroundHex: String = "",
-    /** 建立连接阶段超时（毫秒）。 */
     val httpConnectTimeoutMillis: Long = 10_000L,
-    /** 读取响应正文流的最长时间（毫秒）；SSE 流式响应不单独套用此项。 */
     val httpReadTimeoutMillis: Long = 6000L,
-    /** 从发起请求到整次交换结束（含正文）的最长时间（毫秒），对应 [java.net.http.HttpRequest.Builder.timeout]。 */
     val httpRequestTimeoutMillis: Long = 10000L,
     val httpProxyUrl: String = "",
     val httpsProxyUrl: String = "",
-    /** 每行一条正则，匹配请求主机名则直连（不走代理）。 */
     val bypassRegexLines: String = "",
-    /** HTTP 协议版本：空/"" 为自动协商，或 "HTTP_1_1"、"HTTP_2"。 */
     val httpProtocolVersion: String = "",
+    val responseSseTextRulePaths: List<String> = emptyList(),
 ) {
     companion object {
         private const val KEY_FONT_FAMILY = "ui.fontFamily"
@@ -32,7 +28,6 @@ data class AppSettings(
         private const val KEY_REQ_RESP_FONT = "ui.requestResponseFontSizeSp"
         private const val KEY_BACKGROUND = "ui.backgroundHex"
         private const val KEY_HTTP_CONNECT_MS = "http.connectTimeoutMillis"
-        /** 旧版为秒，加载时换算为毫秒。 */
         private const val KEY_HTTP_CONNECT_SEC_LEGACY = "http.connectTimeoutSeconds"
         private const val KEY_HTTP_READ_MS = "http.readTimeoutMillis"
         private const val KEY_HTTP_REQUEST_MS = "http.requestTimeoutMillis"
@@ -40,6 +35,9 @@ data class AppSettings(
         private const val KEY_HTTPS_PROXY = "proxy.https"
         private const val KEY_BYPASS = "proxy.bypassRegex"
         private const val KEY_HTTP_PROTOCOL = "http.protocolVersion"
+        private const val KEY_RESPONSE_SSE_TEXT_RULES = "response.sseTextRulePathsJson"
+
+        private val settingsJson = Json { ignoreUnknownKeys = true }
 
         private fun path() = AppPaths.dataDirectory().resolve("app-settings.properties")
 
@@ -72,6 +70,9 @@ data class AppSettings(
                     httpProtocolVersion = props.getProperty(KEY_HTTP_PROTOCOL, "").let {
                         if (it in listOf("", "HTTP_1_1", "HTTP_2")) it else ""
                     },
+                    responseSseTextRulePaths = decodeResponseSseTextRulePaths(
+                        props.getProperty(KEY_RESPONSE_SSE_TEXT_RULES, ""),
+                    ),
                 )
             }.getOrElse { AppSettings() }
         }
@@ -90,15 +91,42 @@ data class AppSettings(
                 props.setProperty(KEY_HTTPS_PROXY, settings.httpsProxyUrl)
                 props.setProperty(KEY_BYPASS, settings.bypassRegexLines)
                 props.setProperty(KEY_HTTP_PROTOCOL, settings.httpProtocolVersion)
+                props.setProperty(
+                    KEY_RESPONSE_SSE_TEXT_RULES,
+                    settingsJson.encodeToString(normalizeResponseSseTextRulePaths(settings.responseSseTextRulePaths)),
+                )
                 Files.newOutputStream(path()).use { out ->
                     props.store(out, "api-x app settings")
                 }
             }
         }
+
+        private fun decodeResponseSseTextRulePaths(raw: String): List<String> {
+            if (raw.isBlank()) return emptyList()
+            return runCatching {
+                normalizeResponseSseTextRulePaths(settingsJson.decodeFromString<List<String>>(raw))
+            }.getOrDefault(emptyList())
+        }
+
+        fun normalizeResponseSseTextRulePaths(paths: List<String>): List<String> {
+            val seen = LinkedHashSet<String>()
+            for (path in paths) {
+                val trimmed = path.trim()
+                if (isValidResponseSseTextRulePath(trimmed)) seen += trimmed
+            }
+            return seen.toList()
+        }
+
+        fun isValidResponseSseTextRulePath(path: String): Boolean {
+            if (path.isBlank()) return false
+            return path.split('.').all { segment ->
+                val key = if (segment.endsWith("[]")) segment.dropLast(2) else segment
+                key.isNotBlank() && key.all { ch -> ch.isLetterOrDigit() || ch == '_' || ch == '-' }
+            }
+        }
     }
 }
 
-/** 内存中的当前设置，供 UI 与 [http.ApiXProxySelector] 读取。 */
 class AppSettingsStore {
     private val ref = AtomicReference(AppSettings.load())
 
@@ -110,10 +138,6 @@ class AppSettingsStore {
     }
 }
 
-/**
- * HTTP 层（后台线程）持有 [AppSettingsStore] 的桥接引用，
- * 在 Main.kt 启动时赋值，避免将 store 穿过整个 UI 树。
- */
 object AppSettingsBridge {
     lateinit var store: AppSettingsStore
 }

@@ -71,6 +71,7 @@ fun ResponsePanel(
     onClearResponseLogs: () -> Unit,
     jsonSyntaxHighlightEnabled: Boolean = true,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit = {},
+    customSseTextRulePaths: List<String> = emptyList(),
     historyEntries: List<HistoryEntry> = emptyList(),
     selectedHistoryEpochMs: Long? = null,
     onHistorySelected: (Long?) -> Unit = {},
@@ -104,8 +105,12 @@ fun ResponsePanel(
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
     var bodyRenderMode by remember { mutableStateOf(ResponseBodyRenderMode.Raw) }
-    val modelContent = remember(responseLineSnapshot, responsePartialLine, isSseResponse) {
-        if (isSseResponse) extractSseRenderableContent(responseLineSnapshot, responsePartialLine) else ExtractedSseContent("", 0)
+    val modelContent = remember(responseLineSnapshot, responsePartialLine, isSseResponse, customSseTextRulePaths) {
+        if (isSseResponse) {
+            extractSseRenderableContent(responseLineSnapshot, responsePartialLine, customSseTextRulePaths)
+        } else {
+            ExtractedSseContent("", 0)
+        }
     }
     val modelLines = remember(modelContent.text) {
         if (modelContent.text.isBlank()) listOf("No model output extracted")

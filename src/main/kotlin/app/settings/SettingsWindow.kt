@@ -111,6 +111,9 @@ private fun SettingsDialogBody(
     var httpProtocolVersion by remember {
         mutableStateOf(initial.httpProtocolVersion)
     }
+    var responseRulePaths by remember {
+        mutableStateOf(initial.responseSseTextRulePaths.ifEmpty { listOf("") })
+    }
     var errorText by remember { mutableStateOf<String?>(null) }
 
     val outlinedFieldColors = TextFieldDefaults.outlinedTextFieldColors(
@@ -159,6 +162,11 @@ private fun SettingsDialogBody(
                     label = "代理",
                     selected = section == 2,
                     onClick = { section = 2; errorText = null },
+                )
+                NavRow(
+                    label = "响应规则",
+                    selected = section == 3,
+                    onClick = { section = 3; errorText = null },
                 )
             }
             Divider(
@@ -316,7 +324,7 @@ private fun SettingsDialogBody(
                             ProtocolOption("HTTP/2", "HTTP_2", httpProtocolVersion) { httpProtocolVersion = it }
                         }
                     }
-                    else -> {
+                    2 -> {
                         Text(
                             "网络代理",
                             style = MaterialTheme.typography.subtitle2,
@@ -351,6 +359,53 @@ private fun SettingsDialogBody(
                             maxLines = 8,
                             colors = outlinedFieldColors,
                         )
+                    }
+                    3 -> {
+                        Text(
+                            "响应规则",
+                            style = MaterialTheme.typography.subtitle2,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        Text(
+                            "每行配置一个 JSON 路径，例如 content、payload.text、choices[].delta.content。内置规则会保留，这里只追加自定义规则；保存时会忽略空行和非法路径。",
+                            style = MaterialTheme.typography.caption,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            responseRulePaths.forEachIndexed { index, rule ->
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    OutlinedTextField(
+                                        value = rule,
+                                        onValueChange = { value ->
+                                            responseRulePaths = responseRulePaths.toMutableList().also { it[index] = value }
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        label = { Text("JSON 路径") },
+                                        placeholder = { Text("payload.text") },
+                                        singleLine = true,
+                                        colors = outlinedFieldColors,
+                                    )
+                                    TextButton(
+                                        onClick = {
+                                            responseRulePaths = responseRulePaths.toMutableList().also { list ->
+                                                if (list.size > 1) list.removeAt(index) else list[0] = ""
+                                            }
+                                        },
+                                    ) {
+                                        Text("删除")
+                                    }
+                                }
+                            }
+                        }
+                        TextButton(
+                            onClick = { responseRulePaths = responseRulePaths + "" },
+                        ) {
+                            Text("增加规则")
+                        }
                     }
                 }
                 errorText?.let { err ->
@@ -402,6 +457,7 @@ private fun SettingsDialogBody(
                             httpsProxyUrl = httpsProxy.trim(),
                             bypassRegexLines = bypassText.trimEnd(),
                             httpProtocolVersion = httpProtocolVersion,
+                            responseSseTextRulePaths = AppSettings.normalizeResponseSseTextRulePaths(responseRulePaths),
                         ),
                     )
                 },
