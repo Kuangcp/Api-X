@@ -126,6 +126,7 @@ fun RequestSidePanel(
             onLeftTabIndexChange = p.onLeftTabIndexChange,
             bodyText = p.bodyText,
             onBodyTextChange = p.onBodyTextChange,
+            mcpBodyHint = p.mcpBodyHint,
             headersText = p.headersText,
             onHeadersTextChange = p.onHeadersTextChange,
             paramsText = p.paramsText,

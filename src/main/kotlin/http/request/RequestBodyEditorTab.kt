@@ -163,36 +163,52 @@ fun BoxScope.RequestBodyEditorTab(
     isDarkTheme: Boolean,
     bodyText: String,
     onBodyTextChange: (String) -> Unit,
+    mcpBodyHint: String? = null,
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     bodyScrollState: ScrollState,
     envVars: List<EnvVariable> = emptyList(),
 ) {
-    val bodyKind = inferBodyKindFromHeaders(headersText)
+    val isMcpBody = mcpBodyHint != null
+    val bodyKind = if (isMcpBody) BodyContentKind.Json else inferBodyKindFromHeaders(headersText)
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(end = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            BodyContentKindSelector(
-                exchangeMetrics = exchangeMetrics,
-                headersText = headersText,
-                onHeadersTextChange = onHeadersTextChange,
-                enabled = !isLoading,
-                bodyText = bodyText,
-                onBodyTextChange = onBodyTextChange,
+        if (mcpBodyHint == null) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                BodyContentKindSelector(
+                    exchangeMetrics = exchangeMetrics,
+                    headersText = headersText,
+                    onHeadersTextChange = onHeadersTextChange,
+                    enabled = !isLoading,
+                    bodyText = bodyText,
+                    onBodyTextChange = onBodyTextChange,
+                )
+            }
+            Text(
+                "Body",
+                fontSize = exchangeMetrics.tab,
+                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                modifier = Modifier.padding(bottom = 4.dp, start = 2.dp, top = 4.dp, end = 10.dp)
+            )
+        } else {
+            Text(
+                mcpBodyHint,
+                fontSize = exchangeMetrics.tab,
+                color = MaterialTheme.colors.primary,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 6.dp, start = 0.dp, top = 0.dp, end = 10.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colors.primary.copy(alpha = 0.10f))
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
             )
         }
-        Text(
-            "Body（POST / PUT 等会携带）",
-            fontSize = exchangeMetrics.tab,
-            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-            modifier = Modifier.padding(bottom = 4.dp, start = 2.dp, top = 4.dp, end = 10.dp)
-        )
         if (bodyKind == BodyContentKind.FormUrlEncoded) {
             PlainKeyValueEditor(
                 exchangeMetrics = exchangeMetrics,

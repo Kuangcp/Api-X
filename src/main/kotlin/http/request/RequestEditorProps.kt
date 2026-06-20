@@ -21,6 +21,7 @@ data class RequestEditorProps(
     val onLeftTabIndexChange: (Int) -> Unit,
     val bodyText: String,
     val onBodyTextChange: (String) -> Unit,
+    val mcpBodyHint: String? = null,
     val headersText: String,
     val onHeadersTextChange: (String) -> Unit,
     val paramsText: String,

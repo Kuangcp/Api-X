@@ -499,6 +499,7 @@ fun App(onExitRequest: () -> Unit) {
                                     onLeftTabIndexChange = { editorState.leftTabIndex = it.coerceIn(0, 3) },
                                     bodyText = editorState.bodyText,
                                     onBodyTextChange = { text -> editorState.bodyText = text; if (editorState.method.equals("MCP", ignoreCase = true)) mcpSelectionState.rememberCurrentDraft(text) },
+                                    mcpBodyHint = if (editorState.method.equals("MCP", ignoreCase = true)) mcpSelectionState.editorHintFor(editorState.editorRequestId) else null,
                                     headersText = editorState.headersText,
                                     onHeadersTextChange = { editorState.headersText = it },
                                     paramsText = editorState.paramsText,

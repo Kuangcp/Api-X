@@ -43,19 +43,19 @@ class McpSelectionState {
     fun selectTool(requestId: String, tool: McpToolSummary): String {
         val item = McpSelection.Tool(tool)
         select(requestId, item)
-        return loadDraft(requestId, item)?.let { editableParamsFor(item, it) } ?: defaultEditableParams(item)
+        return loadDraft(requestId, item)?.let { draftOrDefault(item, it) } ?: defaultEditableParams(item)
     }
 
     fun selectResource(requestId: String, resource: McpResourceSummary): String {
         val item = McpSelection.Resource(resource)
         select(requestId, item)
-        return loadDraft(requestId, item)?.let { editableParamsFor(item, it) } ?: defaultEditableParams(item)
+        return loadDraft(requestId, item)?.let { draftOrDefault(item, it) } ?: defaultEditableParams(item)
     }
 
     fun selectPrompt(requestId: String, prompt: McpPromptSummary): String {
         val item = McpSelection.Prompt(prompt)
         select(requestId, item)
-        return loadDraft(requestId, item)?.let { editableParamsFor(item, it) } ?: defaultEditableParams(item)
+        return loadDraft(requestId, item)?.let { draftOrDefault(item, it) } ?: defaultEditableParams(item)
     }
 
     fun buildSelectedRequest(bodyText: String): McpJsonRpcRequest? {
@@ -94,6 +94,14 @@ class McpSelectionState {
         }
         return mcpSelectionJson.encodeToString(JsonElement.serializer(), root)
     }
+    fun editorHintFor(requestId: String?): String? {
+        if (requestId == null || selectedRequestId != requestId) return null
+        return when (val item = selectedItem ?: return null) {
+            is McpSelection.Tool -> "MCP ${item.method} / ${item.identifier} / editing arguments JSON"
+            is McpSelection.Resource -> "MCP ${item.method} / ${item.identifier} / uri is fixed from catalog"
+            is McpSelection.Prompt -> "MCP ${item.method} / ${item.identifier} / editing arguments JSON"
+        }
+    }
 
     private fun select(requestId: String, item: McpSelection) {
         selectedRequestId = requestId
@@ -102,6 +110,17 @@ class McpSelectionState {
 
     private fun loadDraft(requestId: String, item: McpSelection): String? {
         return McpDraftStore.loadDraft(requestId, item.method, item.identifier)
+    }
+
+    private fun draftOrDefault(item: McpSelection, draft: String): String {
+        val editable = editableParamsFor(item, draft)
+        val default = defaultEditableParams(item)
+        val editableObj = parseObject(editable).getOrNull()
+        val defaultObj = parseObject(default).getOrNull()
+        if (editableObj != null && editableObj.isEmpty() && defaultObj != null && defaultObj.isNotEmpty()) {
+            return default
+        }
+        return editable
     }
 
     private fun defaultEditableParams(item: McpSelection): String {
@@ -140,7 +159,8 @@ class McpSelectionState {
     }
 
     private fun normalizeObject(element: JsonElement?): JsonObject? {
-        if (element == null || element is JsonNull) return JsonObject(emptyMap())
+        if (element == null) return null
+        if (element is JsonNull) return JsonObject(emptyMap())
         return element as? JsonObject
     }
 
