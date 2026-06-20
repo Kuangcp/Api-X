@@ -403,4 +403,48 @@ object CustomIcons {
             )
         }.build()
     }
+    val Link: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Link",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            addPathSegments(
+                pathData = "M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4v-2H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-2H7c-1.71 0-3.1-1.39-3.1-2.9zM8 13h8v-2H8v2zm9-6.1h-4v2h4c1.71 0 3.1 1.39 3.1 3.1S18.71 15.1 17 15.1h-4v2h4c2.76 0 5-2.24 5-5s-2.24-5.2-5-5.2z",
+                fill = Color.Black,
+            )
+        }.build()
+    }
+
+    val LinkOff: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "LinkOff",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            addPathSegments(
+                pathData = "M2 4.27L4.28 2 22 19.72 19.73 22l-3.2-3.2c-.18.02-.35.03-.53.03h-4v-2h2.73l-3.8-3.8H8v-2h.93L6.89 9H7c-1.71 0-3.1 1.39-3.1 3.1S5.29 15.2 7 15.2h4v2H7c-2.76 0-5-2.24-5-5 0-2.12 1.32-3.93 3.18-4.66L2 4.27zM17 6.9c2.76 0 5 2.24 5 5 0 1.36-.54 2.59-1.42 3.49l-1.42-1.42c.52-.54.84-1.27.84-2.07 0-1.71-1.39-3.1-3.1-3.1h-4v-2H17zm-6 0v2H8.83l-2-2H11z",
+                fill = Color.Black,
+            )
+        }.build()
+    }
+
+    val Refresh: ImageVector by lazy {
+        ImageVector.Builder(
+            name = "Refresh",
+            defaultWidth = 24.dp,
+            defaultHeight = 24.dp,
+            viewportWidth = 24f,
+            viewportHeight = 24f
+        ).apply {
+            addPathSegments(
+                pathData = "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h8V3l-3.35 3.35z",
+                fill = Color.Black,
+            )
+        }.build()
+    }
 }

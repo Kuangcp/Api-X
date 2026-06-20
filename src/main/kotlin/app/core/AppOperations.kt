@@ -6,6 +6,7 @@ import app.state.RequestEditorState
 import app.state.ResponseState
 import app.state.EnvironmentState
 import app.state.RequestSession
+import app.state.McpConnectionState
 import app.state.AppSettingsState
 import app.state.ToastState
 import app.settings.AppSettings
@@ -29,6 +30,7 @@ import http.responseHeaderLinesForHar
 import http.sendRequestStreaming
 import http.substitutionMapForActive
 import mcp.extractMcpCatalogFromLog
+import mcp.openMcpLiveConnection
 import mcp.runMcpStdioDebug
 import mcp.runMcpSseDebug
 import tree.TreeSelection
@@ -194,6 +196,150 @@ fun startRequest(
     session.flusherThread = flusher
 }
 
+fun connectMcpSession(
+    editorState: RequestEditorState,
+    responseState: ResponseState,
+    environmentState: EnvironmentState,
+    mcpConnectionState: McpConnectionState,
+    forceReconnect: Boolean = false,
+) {
+    val boundRequestId = editorState.editorRequestId ?: return
+    if (!editorState.method.equals("MCP", ignoreCase = true)) return
+    val session = responseState.getOrCreateSession(boundRequestId)
+    if (session.isLoading) return
+
+    val varMap = environmentState.environmentsState.substitutionMapForActive()
+    val commandLine = applyEnvironmentVariables(editorState.url, varMap)
+    val envText = applyEnvironmentVariables(editorState.headersText, varMap)
+    val headersOrEnv = parseHeadersForSend(envText)
+    val liveSession = mcpConnectionState.getOrCreate(boundRequestId)
+    val targetChanged = liveSession.target != commandLine || liveSession.envText != envText
+    if (liveSession.isConnected && !forceReconnect && !targetChanged) {
+        session.responseLines.add("[MCP] Already connected")
+        return
+    }
+    if (forceReconnect || targetChanged) {
+        mcpConnectionState.close(boundRequestId)
+    }
+
+    val isHttpMcp = commandLine.startsWith("http://", ignoreCase = true) ||
+        commandLine.startsWith("https://", ignoreCase = true)
+    val transportLabel = if (isHttpMcp) "MCP SSE" else "MCP STDIO"
+    val control = RequestControl()
+    control.startTimeMs = System.currentTimeMillis()
+    session.control = control
+    session.requestGen++
+    val gen = session.requestGen
+    session.isLoading = true
+    session.isCacheLoading = false
+    session.isSseResponse = false
+    liveSession.isConnecting = true
+    responseState.addRunningRequest(boundRequestId)
+    session.responseLines.clear()
+    session.responsePartialLine = null
+    session.responseHeaderLines.clear()
+    session.responseHeaderLines.add(transportLabel)
+    session.statusCodeText = "MCP"
+    session.responseTimeText = ""
+    session.responseSizeText = ""
+    session.responseSseEventCount = ""
+    session.exchangeRequestPlainText = buildString {
+        appendLine(if (forceReconnect) "Reconnect MCP" else "Connect MCP")
+        appendLine(commandLine)
+        if (envText.isNotBlank()) {
+            appendLine()
+            appendLine("Env:")
+            appendLine(envText)
+        }
+    }
+
+    val flusher = thread(isDaemon = true) {
+        var lastTimerSec = -1L
+        while (!control.finished && !control.cancelled) {
+            try { Thread.sleep(UI_REFRESH_INTERVAL_MS) } catch (_: InterruptedException) { break }
+            if (session.control !== control) break
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            val sec = (elapsed / 1000L).toInt().coerceAtLeast(0)
+            val update = control.lineBuffer.drainUpdate()
+            EventQueue.invokeLater {
+                if (session.requestGen != gen) return@invokeLater
+                if (sec.toLong() != lastTimerSec) {
+                    session.responseTimeText = "${sec}S"
+                    lastTimerSec = sec.toLong()
+                }
+                if (update.hasChanges()) {
+                    applyBufferUpdate(update, session.responseLines) { session.responsePartialLine = it }
+                }
+            }
+        }
+    }
+
+    val worker = thread {
+        try {
+            val connection = openMcpLiveConnection(commandLine, headersOrEnv)
+            liveSession.connection = connection
+            liveSession.target = commandLine
+            liveSession.envText = envText
+            val onMcpChunk: (String) -> Unit = { chunk ->
+                if (session.control === control && !control.cancelled) {
+                    control.lineBuffer.append(chunk)
+                    control.appendRawResponse(chunk)
+                }
+            }
+            connection.connect(
+                isCancelled = { control.cancelled || Thread.currentThread().isInterrupted },
+                onChunk = onMcpChunk,
+            )
+            liveSession.isConnected = true
+            control.responseStatusCode = 0
+        } catch (e: Exception) {
+            control.requestFailed = true
+            control.lineBuffer.append("[MCP error] ${e.message ?: e::class.simpleName}\n")
+            Logger.error("MCP", e) { "MCP connect failed for $boundRequestId: ${e.message}" }
+            mcpConnectionState.close(boundRequestId)
+        }
+        EventQueue.invokeLater {
+            if (session.requestGen != gen) return@invokeLater
+            control.finished = true
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
+            val catalog = extractMcpCatalogFromLog(session.responseLines, session.responsePartialLine)
+            if (!catalog.isEmpty) {
+                McpCatalogStore.saveCatalog(boundRequestId, catalog)
+                responseState.cacheRefreshVersion++
+            }
+            session.responseTimeText = formatDuration(elapsed)
+            session.responseSizeText = formatBytes(control.totalBytes)
+            session.isLoading = false
+            liveSession.isConnecting = false
+            responseState.removeRunningRequest(boundRequestId)
+            if (session.control === control) {
+                session.control = null
+                session.workerThread = null
+                session.flusherThread = null
+            }
+            flusher.interrupt()
+        }
+    }
+    session.workerThread = worker
+    session.flusherThread = flusher
+}
+
+fun disconnectMcpSession(
+    editorState: RequestEditorState,
+    responseState: ResponseState,
+    mcpConnectionState: McpConnectionState,
+) {
+    val boundRequestId = editorState.editorRequestId ?: return
+    val session = responseState.getOrCreateSession(boundRequestId)
+    val chunks = StringBuilder()
+    mcpConnectionState.close(boundRequestId) { chunks.append(it) }
+    val text = chunks.toString().ifBlank { "\n[MCP] Disconnected\n" }
+    session.responseLines.addAll(text.trimEnd().lines())
+    session.responsePartialLine = null
+    session.statusCodeText = "MCP"
+    responseState.cacheRefreshVersion++
+}
 fun refreshMcpCatalog(
     editorState: RequestEditorState,
     responseState: ResponseState,

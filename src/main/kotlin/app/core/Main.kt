@@ -80,6 +80,7 @@ import app.state.TreeState
 import app.state.RequestEditorState
 import app.state.ResponseState
 import app.state.McpSelectionState
+import app.state.McpConnectionState
 import mcp.McpCatalogSummary
 import app.state.ThemeState
 import app.state.DialogState
@@ -149,6 +150,7 @@ fun App(onExitRequest: () -> Unit) {
 
     val currentSession = editorState.editorRequestId?.let { responseState.getOrCreateSession(it) }
     val mcpSelectionState = remember { McpSelectionState() }
+    val mcpConnectionState = remember { McpConnectionState() }
 
     LaunchedEffect(editorState.editorRequestId) {
         val id = editorState.editorRequestId ?: return@LaunchedEffect
@@ -301,7 +303,7 @@ fun App(onExitRequest: () -> Unit) {
     RequestEditorEffects(editorState, treeState, repository)
     LastRequestEffects(editorState)
     TreeEffects(treeState, editorState, repository, expandLoaded)
-    AppDisposableEffect(editorState, repository)
+    AppDisposableEffect(editorState, repository, mcpConnectionState)
 
     Window(
         title = "Api-X",
@@ -518,6 +520,14 @@ fun App(onExitRequest: () -> Unit) {
                                 showMcpCatalogRefresh = editorState.method.equals("MCP", ignoreCase = true),
                                 mcpCatalogRefreshEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
                                 onRefreshMcpCatalog = { refreshMcpCatalog(editorState, responseState, environmentState) },
+                                showMcpConnectionControls = editorState.method.equals("MCP", ignoreCase = true),
+                                isMcpConnected = editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } == true,
+                                mcpConnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } != true,
+                                mcpReconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
+                                mcpDisconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } == true,
+                                onMcpConnect = { connectMcpSession(editorState, responseState, environmentState, mcpConnectionState) },
+                                onMcpReconnect = { connectMcpSession(editorState, responseState, environmentState, mcpConnectionState, forceReconnect = true) },
+                                onMcpDisconnect = { disconnectMcpSession(editorState, responseState, mcpConnectionState) },
                                 jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
                                 onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
                                 customSseTextRulePaths = appSettingsState.appSettings.responseSseTextRulePaths,
@@ -654,10 +664,12 @@ private fun TreeEffects(
 private fun AppDisposableEffect(
     editorState: RequestEditorState,
     repository: CollectionRepository,
+    mcpConnectionState: McpConnectionState,
 ) {
     DisposableEffect(Unit) {
         onDispose {
             editorState.saveEditorIfBound()
+            mcpConnectionState.closeAll()
             repository.close()
         }
     }

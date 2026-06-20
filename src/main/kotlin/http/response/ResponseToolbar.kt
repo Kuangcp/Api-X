@@ -13,7 +13,6 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
-import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -47,6 +46,14 @@ internal fun ResponseToolbar(
     showMcpCatalogRefresh: Boolean,
     mcpCatalogRefreshEnabled: Boolean,
     onRefreshMcpCatalog: () -> Unit,
+    showMcpConnectionControls: Boolean,
+    isMcpConnected: Boolean,
+    mcpConnectEnabled: Boolean,
+    mcpReconnectEnabled: Boolean,
+    mcpDisconnectEnabled: Boolean,
+    onMcpConnect: () -> Unit,
+    onMcpReconnect: () -> Unit,
+    onMcpDisconnect: () -> Unit,
     historyEntries: List<HistoryEntry>,
     selectedHistoryEpochMs: Long?,
     onHistorySelected: (Long?) -> Unit,
@@ -115,12 +122,40 @@ internal fun ResponseToolbar(
             )
         }
 
+        if (showMcpConnectionControls) {
+            IconButton(onClick = onMcpConnect, enabled = mcpConnectEnabled, modifier = iconBtnMod) {
+                Icon(
+                    imageVector = CustomIcons.Link,
+                    contentDescription = if (isMcpConnected) "MCP connected" else "Connect MCP",
+                    modifier = iconMod,
+                    tint = if (isMcpConnected) MaterialTheme.colors.primary else iconTint,
+                )
+            }
+            IconButton(onClick = onMcpReconnect, enabled = mcpReconnectEnabled, modifier = iconBtnMod) {
+                Icon(
+                    imageVector = CustomIcons.Refresh,
+                    contentDescription = "Reconnect MCP",
+                    modifier = iconMod,
+                    tint = iconTint,
+                )
+            }
+            IconButton(onClick = onMcpDisconnect, enabled = mcpDisconnectEnabled, modifier = iconBtnMod) {
+                Icon(
+                    imageVector = CustomIcons.LinkOff,
+                    contentDescription = "Disconnect MCP",
+                    modifier = iconMod,
+                    tint = iconTint,
+                )
+            }
+        }
         if (showMcpCatalogRefresh) {
-            TextButton(
-                onClick = onRefreshMcpCatalog,
-                enabled = mcpCatalogRefreshEnabled,
-            ) {
-                Text("Refresh Catalog", fontSize = tab, color = MaterialTheme.colors.onSurface)
+            IconButton(onClick = onRefreshMcpCatalog, enabled = mcpCatalogRefreshEnabled, modifier = iconBtnMod) {
+                Icon(
+                    imageVector = CustomIcons.LibraryBooks,
+                    contentDescription = "Refresh MCP catalog",
+                    modifier = iconMod,
+                    tint = iconTint,
+                )
             }
         }
         var historyMenuExpanded by remember { mutableStateOf(false) }
