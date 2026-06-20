@@ -242,6 +242,8 @@ private class SseLiveConnection(
     private var sseThread: Thread? = null
     private var activeInput: InputStream? = null
     @Volatile private var closed = false
+    private val responseIdsSeen = mutableSetOf<String>()
+    private val responseIdsLock = Any()
 
     override fun connect(timeoutMs: Long, isCancelled: () -> Boolean, onChunk: (String) -> Unit) {
         if (connected) return
@@ -267,8 +269,12 @@ private class SseLiveConnection(
                             return
                         }
                         val data = dataLines.joinToString("\n")
-                        onChunk("\n<<< SSE $eventType\n$data\n")
-                        if (eventType == "endpoint") endpoints.offer(data) else responses.offer(data)
+                        if (eventType == "endpoint") {
+                            onChunk("\n<<< SSE $eventType\n$data\n")
+                            endpoints.offer(data)
+                        } else {
+                            offerIncomingResponse("SSE $eventType", data, onChunk)
+                        }
                         eventType = "message"
                         dataLines.clear()
                     }
@@ -356,8 +362,26 @@ private class SseLiveConnection(
         onChunk("[MCP] POST HTTP ${response.statusCode()}\n")
         val body = response.body().trim()
         if (body.isNotEmpty()) {
-            onChunk("\n<<< POST body\n$body\n")
-            responses.offer(body)
+            offerIncomingResponse("POST body", body, onChunk)
+        }
+    }
+
+    private fun offerIncomingResponse(sourceLabel: String, payload: String, onChunk: (String) -> Unit) {
+        val duplicateId = duplicateJsonRpcResponseId(payload)
+        if (duplicateId != null) {
+            onChunk("\n[MCP] Duplicate response #$duplicateId from $sourceLabel ignored\n")
+            return
+        }
+        onChunk("\n<<< $sourceLabel\n$payload\n")
+        responses.offer(payload)
+    }
+
+    private fun duplicateJsonRpcResponseId(payload: String): String? {
+        val obj = runCatching { mcpLiveWireJson.parseToJsonElement(payload).jsonObject }.getOrNull() ?: return null
+        if (obj["result"] == null && obj["error"] == null) return null
+        val id = obj["id"]?.jsonPrimitive?.contentOrNull ?: return null
+        return synchronized(responseIdsLock) {
+            if (responseIdsSeen.add(id)) null else id
         }
     }
 

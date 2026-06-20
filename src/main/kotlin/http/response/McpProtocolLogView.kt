@@ -152,7 +152,7 @@ private fun parseMcpProtocolEntries(
 ): List<McpProtocolEntry> {
     val entries = mutableListOf<McpProtocolEntry>()
     val allLines = if (partialLine.isNullOrBlank()) lines else lines + partialLine
-    var direction = "in"
+    var direction = "resp"
     val buffer = StringBuilder()
 
     fun flushBuffer() {
@@ -166,11 +166,11 @@ private fun parseMcpProtocolEntries(
         when {
             trimmed.startsWith(">>>") -> {
                 flushBuffer()
-                direction = "out"
+                direction = "req"
             }
             trimmed.startsWith("<<<") -> {
                 flushBuffer()
-                direction = "in"
+                direction = "resp"
                 val inlineJson = trimmed.removePrefix("<<<").trim()
                 if (inlineJson.startsWith("{")) {
                     buffer.appendLine(inlineJson)

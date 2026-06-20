@@ -276,6 +276,25 @@ private fun saveMcpSessionLog(
     val session = responseState.getOrCreateSession(boundRequestId)
     McpSessionLogStore.saveLog(boundRequestId, session.responseLines, session.responsePartialLine)
 }
+private fun appendMcpSessionText(
+    responseState: ResponseState,
+    boundRequestId: String,
+    text: String,
+) {
+    val session = responseState.getOrCreateSession(boundRequestId)
+    text.trimEnd().lines().forEach { line ->
+        session.responseLines.add(line)
+    }
+    session.responsePartialLine = null
+    session.statusCodeText = "MCP"
+    saveMcpSessionLog(responseState, boundRequestId)
+}
+
+private fun containsMcpCatalogChangedNotification(text: String): Boolean {
+    return text.contains("notifications/tools/list_changed") ||
+        text.contains("notifications/resources/list_changed") ||
+        text.contains("notifications/prompts/list_changed")
+}
 private fun startMcpLiveRequest(
     editorState: RequestEditorState,
     responseState: ResponseState,
@@ -475,9 +494,23 @@ fun connectMcpSession(
             liveSession.target = commandLine
             liveSession.envText = envText
             val onMcpChunk: (String) -> Unit = { chunk ->
-                if (session.control === control && !control.cancelled) {
-                    control.lineBuffer.append(chunk)
-                    control.appendRawResponse(chunk)
+                val activeControl = session.control
+                if (activeControl != null && !activeControl.cancelled) {
+                    activeControl.lineBuffer.append(chunk)
+                    activeControl.appendRawResponse(chunk)
+                } else if (chunk.isNotBlank()) {
+                    EventQueue.invokeLater {
+                        appendMcpSessionText(responseState, boundRequestId, chunk)
+                        if (containsMcpCatalogChangedNotification(chunk)) {
+                            session.responseLines.add("[MCP] Catalog changed notification received; refreshing catalog")
+                            saveMcpSessionLog(responseState, boundRequestId)
+                            val liveConnection = mcpConnectionState.get(boundRequestId)?.connection
+                            val isConnected = mcpConnectionState.get(boundRequestId)?.isConnected == true
+                            if (isConnected && liveConnection != null && !session.isLoading) {
+                                startMcpLiveCatalogRefresh(responseState, mcpConnectionState, boundRequestId, liveConnection)
+                            }
+                        }
+                    }
                 }
             }
             connection.connect(
