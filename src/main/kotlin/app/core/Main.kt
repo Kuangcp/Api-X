@@ -66,9 +66,6 @@ import http.request.RequestTabBar
 import http.request.RequestTopBar
 import http.response.ResponsePanel
 import kotlinx.coroutines.delay
-import mcp.buildMcpPromptGetTemplate
-import mcp.buildMcpResourceReadTemplate
-import mcp.buildMcpToolCallTemplate
 import tree.collectAllFolderIds
 import tree.CollectionTreeSidebar
 import tree.TreeDragPayload
@@ -79,6 +76,7 @@ import tree.firstRequestSelection
 import app.state.TreeState
 import app.state.RequestEditorState
 import app.state.ResponseState
+import app.state.McpSelectionState
 import app.state.ThemeState
 import app.state.DialogState
 import app.state.EnvironmentState
@@ -146,6 +144,7 @@ fun App(onExitRequest: () -> Unit) {
     var contentRowWidthPx by remember { mutableStateOf(1f) }
 
     val currentSession = editorState.editorRequestId?.let { responseState.getOrCreateSession(it) }
+    val mcpSelectionState = remember { McpSelectionState() }
 
     LaunchedEffect(editorState.editorRequestId) {
         val id = editorState.editorRequestId ?: return@LaunchedEffect
@@ -362,18 +361,21 @@ fun App(onExitRequest: () -> Unit) {
                                 onToggleFolder = { treeState.toggleFolder(it) },
                                 onSelectNode = { selectTreeNode(it, treeState, editorState) },
                                 onMcpToolSelected = { requestId, tool ->
+                                    mcpSelectionState.rememberCurrentDraft(editorState.bodyText)
                                     selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
-                                    editorState.bodyText = buildMcpToolCallTemplate(tool)
+                                    editorState.bodyText = mcpSelectionState.selectTool(requestId, tool)
                                     editorState.leftTabIndex = 0
                                 },
                                 onMcpResourceSelected = { requestId, resource ->
+                                    mcpSelectionState.rememberCurrentDraft(editorState.bodyText)
                                     selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
-                                    editorState.bodyText = buildMcpResourceReadTemplate(resource)
+                                    editorState.bodyText = mcpSelectionState.selectResource(requestId, resource)
                                     editorState.leftTabIndex = 0
                                 },
                                 onMcpPromptSelected = { requestId, prompt ->
+                                    mcpSelectionState.rememberCurrentDraft(editorState.bodyText)
                                     selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
-                                    editorState.bodyText = buildMcpPromptGetTemplate(prompt)
+                                    editorState.bodyText = mcpSelectionState.selectPrompt(requestId, prompt)
                                     editorState.leftTabIndex = 0
                                 },
                                 onAddCollection = {
@@ -449,7 +451,7 @@ fun App(onExitRequest: () -> Unit) {
                                     leftTabIndex = editorState.leftTabIndex,
                                     onLeftTabIndexChange = { editorState.leftTabIndex = it.coerceIn(0, 3) },
                                     bodyText = editorState.bodyText,
-                                    onBodyTextChange = { editorState.bodyText = it },
+                                    onBodyTextChange = { text -> editorState.bodyText = text; if (editorState.method.equals("MCP", ignoreCase = true)) mcpSelectionState.rememberCurrentDraft(text) },
                                     headersText = editorState.headersText,
                                     onHeadersTextChange = { editorState.headersText = it },
                                     paramsText = editorState.paramsText,
