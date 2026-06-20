@@ -342,7 +342,7 @@ private fun emitPromptSummary(response: JsonObject?, emit: (String) -> Unit) {
         emit("- $name${desc?.let { ": $it" } ?: ""}\n")
     }
 }
-private fun parseMcpRequest(body: String): McpJsonRpcRequest? {
+fun parseMcpRequest(body: String): McpJsonRpcRequest? {
     parseRawMcpRequest(body)?.let { return it }
     return parseToolCall(body)?.let { call ->
         McpJsonRpcRequest(

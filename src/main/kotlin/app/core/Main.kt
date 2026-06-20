@@ -322,7 +322,7 @@ fun App(onExitRequest: () -> Unit) {
                     when {
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { dialogState.showGlobalSearch = true; true }
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.B -> { treeState.treeSidebarVisible = !treeState.treeSidebarVisible; true }
-                        event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, environmentState, repository); true }
+                        event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, mcpConnectionState, environmentState, repository); true }
                         event.key == Key.Escape -> { if (currentSession?.isLoading == true) { cancelActiveRequest(editorState, responseState, environmentState, repository); true } else false }
                         else -> false
                     }
@@ -452,7 +452,7 @@ fun App(onExitRequest: () -> Unit) {
                                     onUrlChange = { editorState.url = it },
                                     onSendOrCancel = {
                                         if (currentSession?.isLoading != true) {
-                                            startRequest(editorState, responseState, environmentState, repository)
+                                            startRequest(editorState, responseState, mcpConnectionState, environmentState, repository)
                                         } else {
                                             cancelActiveRequest(editorState, responseState, environmentState, repository)
                                         }
@@ -519,7 +519,7 @@ fun App(onExitRequest: () -> Unit) {
                                 },
                                 showMcpCatalogRefresh = editorState.method.equals("MCP", ignoreCase = true),
                                 mcpCatalogRefreshEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
-                                onRefreshMcpCatalog = { refreshMcpCatalog(editorState, responseState, environmentState) },
+                                onRefreshMcpCatalog = { refreshMcpCatalog(editorState, responseState, mcpConnectionState, environmentState) },
                                 showMcpConnectionControls = editorState.method.equals("MCP", ignoreCase = true),
                                 isMcpConnected = editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } == true,
                                 mcpConnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } != true,

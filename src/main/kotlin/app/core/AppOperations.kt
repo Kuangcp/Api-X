@@ -29,8 +29,11 @@ import http.resolveAuthToHeaders
 import http.responseHeaderLinesForHar
 import http.sendRequestStreaming
 import http.substitutionMapForActive
+import mcp.McpJsonRpcRequest
+import mcp.McpLiveConnection
 import mcp.extractMcpCatalogFromLog
 import mcp.openMcpLiveConnection
+import mcp.parseMcpRequest
 import mcp.runMcpStdioDebug
 import mcp.runMcpSseDebug
 import tree.TreeSelection
@@ -69,6 +72,7 @@ fun addRequestAt(at: TreeSelection, treeState: TreeState, editorState: RequestEd
 fun startRequest(
     editorState: RequestEditorState,
     responseState: ResponseState,
+    mcpConnectionState: McpConnectionState,
     environmentState: EnvironmentState,
     repository: CollectionRepository,
 ) {
@@ -81,7 +85,13 @@ fun startRequest(
     }
     editorState.saveEditorIfBound()
     if (editorState.method.equals("MCP", ignoreCase = true)) {
-        startMcpStdioRequest(editorState, responseState, environmentState, boundRequestId)
+        val liveSession = mcpConnectionState.get(boundRequestId)
+        val liveConnection = liveSession?.connection
+        if (liveSession?.isConnected == true && liveConnection != null) {
+            startMcpLiveRequest(editorState, responseState, environmentState, boundRequestId, liveConnection)
+        } else {
+            startMcpStdioRequest(editorState, responseState, environmentState, boundRequestId)
+        }
         return
     }
     RequestResponseStore.ensureLayout(boundRequestId)
@@ -196,6 +206,114 @@ fun startRequest(
     session.flusherThread = flusher
 }
 
+private fun startMcpLiveRequest(
+    editorState: RequestEditorState,
+    responseState: ResponseState,
+    environmentState: EnvironmentState,
+    boundRequestId: String,
+    liveConnection: McpLiveConnection,
+) {
+    Logger.info("MCP") { "startMcpLiveRequest: $boundRequestId" }
+    val session = responseState.getOrCreateSession(boundRequestId)
+    if (session.isLoading) return
+    val varMap = environmentState.environmentsState.substitutionMapForActive()
+    val bodyText = applyEnvironmentVariables(editorState.bodyText, varMap)
+    val request = parseMcpRequest(bodyText)
+    if (request == null) {
+        session.responseLines.add("[MCP] No JSON-RPC request body to send")
+        session.responsePartialLine = null
+        session.statusCodeText = "MCP"
+        return
+    }
+
+    val control = RequestControl()
+    control.startTimeMs = System.currentTimeMillis()
+    session.control = control
+    session.requestGen++
+    val gen = session.requestGen
+    session.isLoading = true
+    session.isCacheLoading = false
+    session.isSseResponse = false
+    responseState.addRunningRequest(boundRequestId)
+    session.responsePartialLine = null
+    session.responseHeaderLines.clear()
+    session.responseHeaderLines.add(liveConnection.transportLabel)
+    session.statusCodeText = "MCP"
+    session.responseTimeText = ""
+    session.responseSizeText = ""
+    session.responseSseEventCount = ""
+    session.exchangeRequestPlainText = buildString {
+        appendLine("MCP live call")
+        appendLine(liveConnection.transportLabel)
+        appendLine(request.method)
+        if (bodyText.isNotBlank()) {
+            appendLine()
+            append(bodyText)
+        }
+    }
+    session.responseLines.add("\n[MCP] Live call: ${request.method}")
+
+    val flusher = thread(isDaemon = true) {
+        var lastTimerSec = -1L
+        while (!control.finished && !control.cancelled) {
+            try { Thread.sleep(UI_REFRESH_INTERVAL_MS) } catch (_: InterruptedException) { break }
+            if (session.control !== control) break
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            val sec = (elapsed / 1000L).toInt().coerceAtLeast(0)
+            val update = control.lineBuffer.drainUpdate()
+            EventQueue.invokeLater {
+                if (session.requestGen != gen) return@invokeLater
+                if (sec.toLong() != lastTimerSec) {
+                    session.responseTimeText = "${sec}S"
+                    lastTimerSec = sec.toLong()
+                }
+                if (update.hasChanges()) {
+                    applyBufferUpdate(update, session.responseLines) { session.responsePartialLine = it }
+                }
+            }
+        }
+    }
+
+    val worker = thread {
+        try {
+            val onMcpChunk: (String) -> Unit = { chunk ->
+                if (session.control === control && !control.cancelled) {
+                    control.lineBuffer.append(chunk)
+                    control.appendRawResponse(chunk)
+                }
+            }
+            val result = liveConnection.call(
+                request = request,
+                isCancelled = { control.cancelled || Thread.currentThread().isInterrupted },
+                onChunk = onMcpChunk,
+            )
+            control.totalBytes = result.bytes
+            control.responseStatusCode = result.exitCode ?: 0
+        } catch (e: Exception) {
+            control.requestFailed = true
+            control.lineBuffer.append("[MCP error] ${e.message ?: e::class.simpleName}\n")
+            Logger.error("MCP", e) { "MCP live request failed for $boundRequestId: ${e.message}" }
+        }
+        EventQueue.invokeLater {
+            if (session.requestGen != gen) return@invokeLater
+            control.finished = true
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
+            session.responseTimeText = formatDuration(elapsed)
+            session.responseSizeText = formatBytes(control.totalBytes)
+            session.isLoading = false
+            responseState.removeRunningRequest(boundRequestId)
+            if (session.control === control) {
+                session.control = null
+                session.workerThread = null
+                session.flusherThread = null
+            }
+            flusher.interrupt()
+        }
+    }
+    session.workerThread = worker
+    session.flusherThread = flusher
+}
 fun connectMcpSession(
     editorState: RequestEditorState,
     responseState: ResponseState,
@@ -343,10 +461,17 @@ fun disconnectMcpSession(
 fun refreshMcpCatalog(
     editorState: RequestEditorState,
     responseState: ResponseState,
+    mcpConnectionState: McpConnectionState,
     environmentState: EnvironmentState,
 ) {
     val boundRequestId = editorState.editorRequestId ?: return
     if (!editorState.method.equals("MCP", ignoreCase = true)) return
+    val liveSession = mcpConnectionState.get(boundRequestId)
+    val liveConnection = liveSession?.connection
+    if (liveSession?.isConnected == true && liveConnection != null) {
+        startMcpLiveCatalogRefresh(responseState, boundRequestId, liveConnection)
+        return
+    }
     startMcpStdioRequest(
         editorState = editorState,
         responseState = responseState,
@@ -354,6 +479,110 @@ fun refreshMcpCatalog(
         boundRequestId = boundRequestId,
         bodyOverride = "",
     )
+}
+
+private fun startMcpLiveCatalogRefresh(
+    responseState: ResponseState,
+    boundRequestId: String,
+    liveConnection: McpLiveConnection,
+) {
+    Logger.info("MCP") { "startMcpLiveCatalogRefresh: $boundRequestId" }
+    val session = responseState.getOrCreateSession(boundRequestId)
+    if (session.isLoading) return
+
+    val control = RequestControl()
+    control.startTimeMs = System.currentTimeMillis()
+    session.control = control
+    session.requestGen++
+    val gen = session.requestGen
+    session.isLoading = true
+    session.isCacheLoading = false
+    session.isSseResponse = false
+    responseState.addRunningRequest(boundRequestId)
+    session.responsePartialLine = null
+    session.responseHeaderLines.clear()
+    session.responseHeaderLines.add(liveConnection.transportLabel)
+    session.statusCodeText = "MCP"
+    session.responseTimeText = ""
+    session.responseSizeText = ""
+    session.responseSseEventCount = ""
+    session.exchangeRequestPlainText = buildString {
+        appendLine("MCP live catalog refresh")
+        appendLine(liveConnection.transportLabel)
+        appendLine("tools/list")
+        appendLine("resources/list")
+        appendLine("prompts/list")
+    }
+    session.responseLines.add("")
+    session.responseLines.add("[MCP] Refresh catalog")
+
+    val flusher = thread(isDaemon = true) {
+        var lastTimerSec = -1L
+        while (!control.finished && !control.cancelled) {
+            try { Thread.sleep(UI_REFRESH_INTERVAL_MS) } catch (_: InterruptedException) { break }
+            if (session.control !== control) break
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            val sec = (elapsed / 1000L).toInt().coerceAtLeast(0)
+            val update = control.lineBuffer.drainUpdate()
+            EventQueue.invokeLater {
+                if (session.requestGen != gen) return@invokeLater
+                if (sec.toLong() != lastTimerSec) {
+                    session.responseTimeText = "${sec}S"
+                    lastTimerSec = sec.toLong()
+                }
+                if (update.hasChanges()) {
+                    applyBufferUpdate(update, session.responseLines) { session.responsePartialLine = it }
+                }
+            }
+        }
+    }
+
+    val worker = thread {
+        try {
+            val onMcpChunk: (String) -> Unit = { chunk ->
+                if (session.control === control && !control.cancelled) {
+                    control.lineBuffer.append(chunk)
+                    control.appendRawResponse(chunk)
+                }
+            }
+            listOf("tools/list", "resources/list", "prompts/list").forEach { method ->
+                val result = liveConnection.call(
+                    request = McpJsonRpcRequest(method = method, params = null),
+                    isCancelled = { control.cancelled || Thread.currentThread().isInterrupted },
+                    onChunk = onMcpChunk,
+                )
+                control.totalBytes += result.bytes
+                control.responseStatusCode = result.exitCode ?: 0
+            }
+        } catch (e: Exception) {
+            control.requestFailed = true
+            control.lineBuffer.append("[MCP error] ${e.message ?: e::class.simpleName}\n")
+            Logger.error("MCP", e) { "MCP live catalog refresh failed for $boundRequestId: ${e.message}" }
+        }
+        EventQueue.invokeLater {
+            if (session.requestGen != gen) return@invokeLater
+            control.finished = true
+            val elapsed = System.currentTimeMillis() - control.startTimeMs
+            applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
+            val catalog = extractMcpCatalogFromLog(session.responseLines, session.responsePartialLine)
+            if (!catalog.isEmpty) {
+                McpCatalogStore.saveCatalog(boundRequestId, catalog)
+                responseState.cacheRefreshVersion++
+            }
+            session.responseTimeText = formatDuration(elapsed)
+            session.responseSizeText = formatBytes(control.totalBytes)
+            session.isLoading = false
+            responseState.removeRunningRequest(boundRequestId)
+            if (session.control === control) {
+                session.control = null
+                session.workerThread = null
+                session.flusherThread = null
+            }
+            flusher.interrupt()
+        }
+    }
+    session.workerThread = worker
+    session.flusherThread = flusher
 }
 
 private fun startMcpStdioRequest(

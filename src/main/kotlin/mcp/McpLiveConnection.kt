@@ -36,6 +36,12 @@ private val mcpLiveDisplayJson = Json {
 interface McpLiveConnection {
     val transportLabel: String
     fun connect(timeoutMs: Long = 30_000L, isCancelled: () -> Boolean, onChunk: (String) -> Unit)
+    fun call(
+        request: McpJsonRpcRequest,
+        timeoutMs: Long = 30_000L,
+        isCancelled: () -> Boolean,
+        onChunk: (String) -> Unit,
+    ): McpDebugResult
     fun close(onChunk: (String) -> Unit = {})
 }
 
@@ -169,6 +175,25 @@ private class StdioLiveConnection(
         onChunk("\n[MCP] Connected\n")
     }
 
+    @Synchronized
+    override fun call(
+        request: McpJsonRpcRequest,
+        timeoutMs: Long,
+        isCancelled: () -> Boolean,
+        onChunk: (String) -> Unit,
+    ): McpDebugResult {
+        check(connected) { "MCP STDIO is not connected" }
+        var bytes = 0L
+        fun emit(text: String) {
+            bytes += text.toByteArray(StandardCharsets.UTF_8).size.toLong()
+            onChunk(text)
+        }
+        val id = nextId()
+        send(id, request.method, request.params, ::emit)
+        val response = await(id, request.method, timeoutMs, isCancelled)
+        if (response == null) emit("\n[MCP] Timeout while waiting for ${request.method}\n")
+        return McpDebugResult(exitCode = 0, bytes = bytes)
+    }
     override fun close(onChunk: (String) -> Unit) {
         writer?.runCatching { close() }
         process?.let { waitOrDestroyLive(it, 500L) }
@@ -274,6 +299,25 @@ private class SseLiveConnection(
         onChunk("\n[MCP] Connected\n")
     }
 
+    @Synchronized
+    override fun call(
+        request: McpJsonRpcRequest,
+        timeoutMs: Long,
+        isCancelled: () -> Boolean,
+        onChunk: (String) -> Unit,
+    ): McpDebugResult {
+        check(connected) { "MCP SSE is not connected" }
+        var bytes = 0L
+        fun emit(text: String) {
+            bytes += text.toByteArray(StandardCharsets.UTF_8).size.toLong()
+            onChunk(text)
+        }
+        val id = nextId()
+        post(id, request.method, request.params, ::emit)
+        val response = await(id, request.method, timeoutMs, isCancelled)
+        if (response == null) emit("\n[MCP] Timeout while waiting for ${request.method}\n")
+        return McpDebugResult(exitCode = 0, bytes = bytes)
+    }
     override fun close(onChunk: (String) -> Unit) {
         closed = true
         activeInput?.runCatching { close() }
