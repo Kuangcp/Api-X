@@ -27,6 +27,10 @@ import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
@@ -45,6 +49,12 @@ internal enum class ResponseBodyRenderMode {
     Model,
 }
 
+private enum class BodyViewMode {
+    Raw,
+    Messages,
+    Notifications,
+}
+
 internal sealed class JsonHighlightState {
     data object Idle : JsonHighlightState()
     data object Computing : JsonHighlightState()
@@ -58,6 +68,7 @@ internal fun ResponseBodyView(
     onRenderModeChange: (ResponseBodyRenderMode) -> Unit,
     modelOutputAvailable: Boolean,
     modelOutputChunkCount: Int,
+    mcpProtocolViewAvailable: Boolean,
     responseLines: List<String>,
     responsePartialLine: String?,
     responseListState: LazyListState,
@@ -80,9 +91,10 @@ internal fun ResponseBodyView(
     onSseEventPanelHeightChange: (Float) -> Unit,
     sseDetailListState: LazyListState,
 ) {
-    val isJsonReady = renderMode == ResponseBodyRenderMode.Raw && jsonHighlightState is JsonHighlightState.Ready
-    val isJsonComputing = renderMode == ResponseBodyRenderMode.Raw && jsonHighlightState is JsonHighlightState.Computing
-    val jsonToggleEnabled = renderMode == ResponseBodyRenderMode.Raw
+    var bodyViewMode by remember { mutableStateOf(BodyViewMode.Raw) }
+    val isJsonReady = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Raw && jsonHighlightState is JsonHighlightState.Ready
+    val isJsonComputing = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Raw && jsonHighlightState is JsonHighlightState.Computing
+    val jsonToggleEnabled = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Raw
 
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
@@ -90,7 +102,7 @@ internal fun ResponseBodyView(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            if (modelOutputAvailable) {
+            if (mcpProtocolViewAvailable || modelOutputAvailable) {
                 Row(
                     modifier = Modifier
                         .height(26.dp)
@@ -99,16 +111,32 @@ internal fun ResponseBodyView(
                 ) {
                     ResponseBodyModeButton(
                         label = "Raw",
-                        selected = renderMode == ResponseBodyRenderMode.Raw,
-                        onClick = { onRenderModeChange(ResponseBodyRenderMode.Raw) },
+                        selected = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Raw,
+                        onClick = { bodyViewMode = BodyViewMode.Raw; onRenderModeChange(ResponseBodyRenderMode.Raw) },
                         exchangeMetrics = exchangeMetrics,
                     )
-                    ResponseBodyModeButton(
-                        label = if (modelOutputChunkCount > 0) "Model ($modelOutputChunkCount)" else "Model",
-                        selected = renderMode == ResponseBodyRenderMode.Model,
-                        onClick = { onRenderModeChange(ResponseBodyRenderMode.Model) },
-                        exchangeMetrics = exchangeMetrics,
-                    )
+                    if (mcpProtocolViewAvailable) {
+                        ResponseBodyModeButton(
+                            label = "Messages",
+                            selected = bodyViewMode == BodyViewMode.Messages,
+                            onClick = { bodyViewMode = BodyViewMode.Messages },
+                            exchangeMetrics = exchangeMetrics,
+                        )
+                        ResponseBodyModeButton(
+                            label = "Notifications",
+                            selected = bodyViewMode == BodyViewMode.Notifications,
+                            onClick = { bodyViewMode = BodyViewMode.Notifications },
+                            exchangeMetrics = exchangeMetrics,
+                        )
+                    }
+                    if (modelOutputAvailable) {
+                        ResponseBodyModeButton(
+                            label = if (modelOutputChunkCount > 0) "Model ($modelOutputChunkCount)" else "Model",
+                            selected = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Model,
+                            onClick = { bodyViewMode = BodyViewMode.Raw; onRenderModeChange(ResponseBodyRenderMode.Model) },
+                            exchangeMetrics = exchangeMetrics,
+                        )
+                    }
                 }
             }
             Spacer(Modifier.weight(1f))
@@ -131,7 +159,15 @@ internal fun ResponseBodyView(
         }
 
         // Main body content
-        if (isJsonReady) {
+        if (bodyViewMode == BodyViewMode.Messages || bodyViewMode == BodyViewMode.Notifications) {
+            McpProtocolLogView(
+                exchangeMetrics = exchangeMetrics,
+                mode = if (bodyViewMode == BodyViewMode.Messages) McpProtocolMode.Messages else McpProtocolMode.Notifications,
+                responseLines = responseLines,
+                responsePartialLine = responsePartialLine,
+                listState = responseListState,
+            )
+        } else if (isJsonReady) {
             JsonReadyBody(exchangeMetrics, jsonHighlightState, responseListState)
         } else if (isCacheLoading) {
             CacheLoadingIndicator(exchangeMetrics)

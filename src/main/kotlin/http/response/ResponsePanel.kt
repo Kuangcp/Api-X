@@ -278,6 +278,7 @@ fun ResponsePanel(
                             onRenderModeChange = { bodyRenderMode = it },
                             modelOutputAvailable = isSseResponse,
                             modelOutputChunkCount = modelContent.chunkCount,
+                            mcpProtocolViewAvailable = showMcpConnectionControls,
                             responseLines = activeBodyLines,
                             responsePartialLine = activePartialLine,
                             responseListState = responseListState,
