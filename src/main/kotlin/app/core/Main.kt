@@ -58,6 +58,7 @@ import org.jetbrains.compose.resources.painterResource
 import db.AppPaths
 import db.CollectionRepository
 import db.McpCatalogStore
+import db.McpSessionLogStore
 import db.RequestResponseStore
 import http.ExchangeFontMetrics
 import http.exchangeFontMetrics
@@ -159,6 +160,41 @@ fun App(onExitRequest: () -> Unit) {
         val session = responseState.getOrCreateSession(id)
         try {
             Logger.info("CACHE") { "Loading cache for id=$id, isCacheLoading=${session.isCacheLoading}" }
+            val isMcpRequest = repository.getRequest(id)?.method.equals("MCP", ignoreCase = true)
+            if (isMcpRequest) {
+                val mcpLines = withContext(Dispatchers.Default) { McpSessionLogStore.loadLog(id) }
+                if (session.requestGen != 0) {
+                    Logger.info("CACHE") { "Skip MCP log apply for id=$id: requestGen=${session.requestGen}" }
+                    return@LaunchedEffect
+                }
+                if (mcpLines.isNotEmpty()) {
+                    session.responseLines.clear()
+                    session.responseLines.addAll(mcpLines)
+                    session.responsePartialLine = null
+                    session.responseHeaderLines.clear()
+                    session.responseHeaderLines.add("MCP session log")
+                    session.statusCodeText = "MCP"
+                    session.responseTimeText = ""
+                    session.responseSizeText = ""
+                    session.responseSseEventCount = ""
+                    session.isSseResponse = false
+                    session.exchangeRequestPlainText = "MCP session log restored from disk."
+                    Logger.info("CACHE") { "Applied MCP session log for id=$id, lines=${mcpLines.size}" }
+                    return@LaunchedEffect
+                }
+                session.responseLines.clear()
+                session.responseLines.add("MCP session log will appear here after connecting or sending.")
+                session.responsePartialLine = null
+                session.responseHeaderLines.clear()
+                session.responseHeaderLines.add("MCP session log")
+                session.statusCodeText = "MCP"
+                session.responseTimeText = ""
+                session.responseSizeText = ""
+                session.responseSseEventCount = ""
+                session.isSseResponse = false
+                session.exchangeRequestPlainText = "No MCP session log has been saved yet."
+                return@LaunchedEffect
+            }
             val cached = withContext(Dispatchers.Default) {
                 val start = System.currentTimeMillis()
                 val result = runCatching { RequestResponseStore.loadLatest(id) }.getOrElse { e ->
@@ -511,6 +547,7 @@ fun App(onExitRequest: () -> Unit) {
                                     val id = editorState.editorRequestId ?: return@ResponsePanel
                                     val s = currentSession ?: return@ResponsePanel
                                     RequestResponseStore.clearResponseAndBenchLogs(id)
+                                    McpSessionLogStore.clearLog(id)
                                     s.responseLines.clear(); s.responseLines.add("响应结果会显示在这里")
                                     s.responseHeaderLines.clear(); s.responseHeaderLines.add("(暂无响应头)")
                                     s.responsePartialLine = null

@@ -13,6 +13,7 @@ import app.settings.AppSettings
 import db.CollectionRepository
 import db.HarLogCodec
 import db.McpCatalogStore
+import db.McpSessionLogStore
 import db.HarSnapshot
 import db.RequestResponseStore
 import http.BufferUpdate
@@ -249,6 +250,14 @@ private fun appendMcpConnectionMismatch(
     session.responseLines.add("[MCP] Connection target changed. Reconnect before sending on the live session.")
     session.responsePartialLine = null
     session.statusCodeText = "MCP"
+    saveMcpSessionLog(responseState, boundRequestId)
+}
+private fun saveMcpSessionLog(
+    responseState: ResponseState,
+    boundRequestId: String,
+) {
+    val session = responseState.getOrCreateSession(boundRequestId)
+    McpSessionLogStore.saveLog(boundRequestId, session.responseLines, session.responsePartialLine)
 }
 private fun startMcpLiveRequest(
     editorState: RequestEditorState,
@@ -345,6 +354,7 @@ private fun startMcpLiveRequest(
             applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
             session.responseTimeText = formatDuration(elapsed)
             session.responseSizeText = formatBytes(control.totalBytes)
+            saveMcpSessionLog(responseState, boundRequestId)
             session.isLoading = false
             responseState.removeRunningRequest(boundRequestId)
             if (session.control === control) {
@@ -472,6 +482,7 @@ fun connectMcpSession(
             }
             session.responseTimeText = formatDuration(elapsed)
             session.responseSizeText = formatBytes(control.totalBytes)
+            saveMcpSessionLog(responseState, boundRequestId)
             session.isLoading = false
             liveSession.isConnecting = false
             responseState.removeRunningRequest(boundRequestId)
@@ -500,6 +511,7 @@ fun disconnectMcpSession(
     session.responseLines.addAll(text.trimEnd().lines())
     session.responsePartialLine = null
     session.statusCodeText = "MCP"
+    saveMcpSessionLog(responseState, boundRequestId)
     responseState.cacheRefreshVersion++
 }
 fun refreshMcpCatalog(
@@ -620,6 +632,7 @@ private fun startMcpLiveCatalogRefresh(
             }
             session.responseTimeText = formatDuration(elapsed)
             session.responseSizeText = formatBytes(control.totalBytes)
+            saveMcpSessionLog(responseState, boundRequestId)
             session.isLoading = false
             responseState.removeRunningRequest(boundRequestId)
             if (session.control === control) {
@@ -749,6 +762,7 @@ private fun startMcpStdioRequest(
             }
             session.responseTimeText = formatDuration(elapsed)
             session.responseSizeText = formatBytes(control.totalBytes)
+            saveMcpSessionLog(responseState, boundRequestId)
             session.isLoading = false
             responseState.removeRunningRequest(boundRequestId)
             if (session.control === control) {
