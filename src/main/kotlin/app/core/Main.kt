@@ -153,6 +153,7 @@ fun App(onExitRequest: () -> Unit) {
     val mcpSelectionState = remember { McpSelectionState() }
     val mcpConnectionState = remember { McpConnectionState() }
     val isCurrentMcpConnected = isCurrentMcpConnectionActive(editorState, environmentState, mcpConnectionState)
+    val isAnyMcpConnected = isAnyMcpConnectionActive(editorState, mcpConnectionState)
 
     LaunchedEffect(editorState.editorRequestId) {
         val id = editorState.editorRequestId ?: return@LaunchedEffect
@@ -359,7 +360,7 @@ fun App(onExitRequest: () -> Unit) {
                     when {
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { dialogState.showGlobalSearch = true; true }
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.B -> { treeState.treeSidebarVisible = !treeState.treeSidebarVisible; true }
-                        event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, mcpConnectionState, environmentState, repository); true }
+                        event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, mcpConnectionState, mcpSelectionState, environmentState, repository); true }
                         event.key == Key.Escape -> { if (currentSession?.isLoading == true) { cancelActiveRequest(editorState, responseState, environmentState, repository); true } else false }
                         else -> false
                     }
@@ -489,7 +490,7 @@ fun App(onExitRequest: () -> Unit) {
                                     onUrlChange = { editorState.url = it },
                                     onSendOrCancel = {
                                         if (currentSession?.isLoading != true) {
-                                            startRequest(editorState, responseState, mcpConnectionState, environmentState, repository)
+                                            startRequest(editorState, responseState, mcpConnectionState, mcpSelectionState, environmentState, repository)
                                         } else {
                                             cancelActiveRequest(editorState, responseState, environmentState, repository)
                                         }
@@ -562,7 +563,7 @@ fun App(onExitRequest: () -> Unit) {
                                 isMcpConnected = isCurrentMcpConnected,
                                 mcpConnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && !isCurrentMcpConnected,
                                 mcpReconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
-                                mcpDisconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && isCurrentMcpConnected,
+                                mcpDisconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && isAnyMcpConnected,
                                 onMcpConnect = { connectMcpSession(editorState, responseState, environmentState, mcpConnectionState) },
                                 onMcpReconnect = { connectMcpSession(editorState, responseState, environmentState, mcpConnectionState, forceReconnect = true) },
                                 onMcpDisconnect = { disconnectMcpSession(editorState, responseState, mcpConnectionState) },
