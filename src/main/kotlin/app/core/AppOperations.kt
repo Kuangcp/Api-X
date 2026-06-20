@@ -88,7 +88,12 @@ fun startRequest(
         val liveSession = mcpConnectionState.get(boundRequestId)
         val liveConnection = liveSession?.connection
         if (liveSession?.isConnected == true && liveConnection != null) {
-            startMcpLiveRequest(editorState, responseState, environmentState, boundRequestId, liveConnection)
+            val target = currentMcpTarget(editorState, environmentState)
+            if (liveSession.target == target.commandLine && liveSession.envText == target.envText) {
+                startMcpLiveRequest(editorState, responseState, environmentState, boundRequestId, liveConnection)
+            } else {
+                appendMcpConnectionMismatch(responseState, boundRequestId)
+            }
         } else {
             startMcpStdioRequest(editorState, responseState, environmentState, boundRequestId)
         }
@@ -206,6 +211,45 @@ fun startRequest(
     session.flusherThread = flusher
 }
 
+data class McpTargetSnapshot(
+    val commandLine: String,
+    val envText: String,
+)
+
+fun currentMcpTarget(
+    editorState: RequestEditorState,
+    environmentState: EnvironmentState,
+): McpTargetSnapshot {
+    val varMap = environmentState.environmentsState.substitutionMapForActive()
+    return McpTargetSnapshot(
+        commandLine = applyEnvironmentVariables(editorState.url, varMap),
+        envText = applyEnvironmentVariables(editorState.headersText, varMap),
+    )
+}
+
+fun isCurrentMcpConnectionActive(
+    editorState: RequestEditorState,
+    environmentState: EnvironmentState,
+    mcpConnectionState: McpConnectionState,
+): Boolean {
+    val requestId = editorState.editorRequestId ?: return false
+    if (!editorState.method.equals("MCP", ignoreCase = true)) return false
+    val liveSession = mcpConnectionState.get(requestId) ?: return false
+    if (!liveSession.isConnected || liveSession.connection == null) return false
+    val target = currentMcpTarget(editorState, environmentState)
+    return liveSession.target == target.commandLine && liveSession.envText == target.envText
+}
+
+private fun appendMcpConnectionMismatch(
+    responseState: ResponseState,
+    boundRequestId: String,
+) {
+    val session = responseState.getOrCreateSession(boundRequestId)
+    session.responseLines.add("")
+    session.responseLines.add("[MCP] Connection target changed. Reconnect before sending on the live session.")
+    session.responsePartialLine = null
+    session.statusCodeText = "MCP"
+}
 private fun startMcpLiveRequest(
     editorState: RequestEditorState,
     responseState: ResponseState,
@@ -326,9 +370,9 @@ fun connectMcpSession(
     val session = responseState.getOrCreateSession(boundRequestId)
     if (session.isLoading) return
 
-    val varMap = environmentState.environmentsState.substitutionMapForActive()
-    val commandLine = applyEnvironmentVariables(editorState.url, varMap)
-    val envText = applyEnvironmentVariables(editorState.headersText, varMap)
+    val target = currentMcpTarget(editorState, environmentState)
+    val commandLine = target.commandLine
+    val envText = target.envText
     val headersOrEnv = parseHeadersForSend(envText)
     val liveSession = mcpConnectionState.getOrCreate(boundRequestId)
     val targetChanged = liveSession.target != commandLine || liveSession.envText != envText
@@ -469,7 +513,12 @@ fun refreshMcpCatalog(
     val liveSession = mcpConnectionState.get(boundRequestId)
     val liveConnection = liveSession?.connection
     if (liveSession?.isConnected == true && liveConnection != null) {
-        startMcpLiveCatalogRefresh(responseState, boundRequestId, liveConnection)
+        val target = currentMcpTarget(editorState, environmentState)
+        if (liveSession.target == target.commandLine && liveSession.envText == target.envText) {
+            startMcpLiveCatalogRefresh(responseState, boundRequestId, liveConnection)
+        } else {
+            appendMcpConnectionMismatch(responseState, boundRequestId)
+        }
         return
     }
     startMcpStdioRequest(

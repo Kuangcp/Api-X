@@ -151,6 +151,7 @@ fun App(onExitRequest: () -> Unit) {
     val currentSession = editorState.editorRequestId?.let { responseState.getOrCreateSession(it) }
     val mcpSelectionState = remember { McpSelectionState() }
     val mcpConnectionState = remember { McpConnectionState() }
+    val isCurrentMcpConnected = isCurrentMcpConnectionActive(editorState, environmentState, mcpConnectionState)
 
     LaunchedEffect(editorState.editorRequestId) {
         val id = editorState.editorRequestId ?: return@LaunchedEffect
@@ -521,10 +522,10 @@ fun App(onExitRequest: () -> Unit) {
                                 mcpCatalogRefreshEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
                                 onRefreshMcpCatalog = { refreshMcpCatalog(editorState, responseState, mcpConnectionState, environmentState) },
                                 showMcpConnectionControls = editorState.method.equals("MCP", ignoreCase = true),
-                                isMcpConnected = editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } == true,
-                                mcpConnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } != true,
+                                isMcpConnected = isCurrentMcpConnected,
+                                mcpConnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && !isCurrentMcpConnected,
                                 mcpReconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
-                                mcpDisconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && editorState.editorRequestId?.let { mcpConnectionState.get(it)?.isConnected } == true,
+                                mcpDisconnectEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true && isCurrentMcpConnected,
                                 onMcpConnect = { connectMcpSession(editorState, responseState, environmentState, mcpConnectionState) },
                                 onMcpReconnect = { connectMcpSession(editorState, responseState, environmentState, mcpConnectionState, forceReconnect = true) },
                                 onMcpDisconnect = { disconnectMcpSession(editorState, responseState, mcpConnectionState) },
