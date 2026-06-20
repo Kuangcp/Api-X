@@ -26,6 +26,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import app.settings.EnvVariable
 import http.ExchangeFontMetrics
+import mcp.McpArgumentFormField
 import tree.PostmanAuth
 
 /** 左侧 Body / Headers / Params 编辑区（分割条左侧） */
@@ -42,6 +43,7 @@ fun RequestEditorPane(
     onBodyTextChange: (String) -> Unit,
     mcpBodyHint: String? = null,
     mcpBodyPreview: String? = null,
+    mcpArgumentFields: List<McpArgumentFormField> = emptyList(),
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     paramsText: String,
@@ -108,6 +110,7 @@ fun RequestEditorPane(
                         onBodyTextChange = onBodyTextChange,
                         mcpBodyHint = mcpBodyHint,
                         mcpBodyPreview = mcpBodyPreview,
+                        mcpArgumentFields = mcpArgumentFields,
                         headersText = headersText,
                         onHeadersTextChange = onHeadersTextChange,
                         bodyScrollState = bodyScrollState,

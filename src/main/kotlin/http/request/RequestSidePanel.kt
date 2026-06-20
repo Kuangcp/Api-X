@@ -128,6 +128,7 @@ fun RequestSidePanel(
             onBodyTextChange = p.onBodyTextChange,
             mcpBodyHint = p.mcpBodyHint,
             mcpBodyPreview = p.mcpBodyPreview,
+            mcpArgumentFields = p.mcpArgumentFields,
             headersText = p.headersText,
             onHeadersTextChange = p.onHeadersTextChange,
             paramsText = p.paramsText,

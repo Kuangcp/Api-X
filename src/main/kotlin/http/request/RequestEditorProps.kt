@@ -1,6 +1,7 @@
 package http.request
 
 import app.settings.EnvVariable
+import mcp.McpArgumentFormField
 import tree.PostmanAuth
 
 /**
@@ -23,6 +24,7 @@ data class RequestEditorProps(
     val onBodyTextChange: (String) -> Unit,
     val mcpBodyHint: String? = null,
     val mcpBodyPreview: String? = null,
+    val mcpArgumentFields: List<McpArgumentFormField> = emptyList(),
     val headersText: String,
     val onHeadersTextChange: (String) -> Unit,
     val paramsText: String,

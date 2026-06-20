@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import db.McpDraftStore
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -14,6 +15,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import mcp.McpArgumentFormField
 import mcp.McpJsonRpcRequest
 import mcp.McpPromptSummary
 import mcp.McpResourceSummary
@@ -102,7 +104,65 @@ class McpSelectionState {
             is McpSelection.Prompt -> "MCP ${item.method} / ${item.identifier} / editing arguments JSON"
         }
     }
+    fun argumentFormFieldsFor(requestId: String?): List<McpArgumentFormField> {
+        if (requestId == null || selectedRequestId != requestId) return emptyList()
+        return when (val item = selectedItem ?: return emptyList()) {
+            is McpSelection.Tool -> formFieldsForTool(item.tool)
+            is McpSelection.Prompt -> formFieldsForPrompt(item.prompt)
+            is McpSelection.Resource -> emptyList()
+        }
+    }
 
+    private fun formFieldsForTool(tool: McpToolSummary): List<McpArgumentFormField> {
+        val schema = tool.inputSchema ?: return emptyList()
+        val props = schema["properties"] as? JsonObject ?: return emptyList()
+        val required = (schema["required"] as? JsonArray)
+            ?.mapNotNull { it.stringValue() }
+            ?.toSet()
+            .orEmpty()
+        return props.mapNotNull { (name, value) ->
+            val fieldSchema = value as? JsonObject ?: return@mapNotNull null
+            fieldFromSchema(name, fieldSchema, name in required)
+        }
+    }
+
+    private fun formFieldsForPrompt(prompt: McpPromptSummary): List<McpArgumentFormField> {
+        return prompt.arguments?.mapNotNull { arg ->
+            val obj = arg as? JsonObject ?: return@mapNotNull null
+            val name = obj["name"].stringValue()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val required = obj["required"].booleanValue()
+            McpArgumentFormField(
+                name = name,
+                type = obj["type"].stringValue()?.lowercase().orEmpty().ifBlank { "string" },
+                required = required,
+                description = obj["description"].stringValue().orEmpty(),
+                defaultValue = obj["default"].stringValue(),
+                enumValues = (obj["enum"] as? JsonArray)?.mapNotNull { it.stringValue() }.orEmpty(),
+            )
+        }.orEmpty()
+    }
+
+    private fun JsonElement?.stringValue(): String? {
+        return when (this) {
+            is kotlinx.serialization.json.JsonPrimitive -> contentOrNull
+            null -> null
+            else -> toString()
+        }
+    }
+
+    private fun JsonElement?.booleanValue(): Boolean {
+        return (this as? kotlinx.serialization.json.JsonPrimitive)?.contentOrNull?.toBooleanStrictOrNull() ?: false
+    }
+    private fun fieldFromSchema(name: String, schema: JsonObject, required: Boolean): McpArgumentFormField {
+        return McpArgumentFormField(
+            name = name,
+            type = schema["type"].stringValue()?.lowercase().orEmpty().ifBlank { "string" },
+            required = required,
+            description = schema["description"].stringValue().orEmpty(),
+            defaultValue = schema["default"].stringValue(),
+            enumValues = (schema["enum"] as? JsonArray)?.mapNotNull { it.stringValue() }.orEmpty(),
+        )
+    }
     private fun select(requestId: String, item: McpSelection) {
         selectedRequestId = requestId
         selectedItem = item

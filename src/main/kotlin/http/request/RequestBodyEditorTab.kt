@@ -13,13 +13,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollbarAdapter
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.ContentAlpha
+import androidx.compose.material.Checkbox
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
@@ -34,6 +37,12 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -62,6 +71,7 @@ import http.contentTypeValueForBodyKind
 import http.inferBodyKindFromHeaders
 import http.removeContentTypeHeader
 import http.upsertContentTypeHeader
+import mcp.McpArgumentFormField
 
 private fun Color.toUiColor(): UiColor {
     val r = (this.red * 255).toInt()
@@ -166,6 +176,7 @@ fun BoxScope.RequestBodyEditorTab(
     onBodyTextChange: (String) -> Unit,
     mcpBodyHint: String? = null,
     mcpBodyPreview: String? = null,
+    mcpArgumentFields: List<McpArgumentFormField> = emptyList(),
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     bodyScrollState: ScrollState,
@@ -227,7 +238,35 @@ fun BoxScope.RequestBodyEditorTab(
                 )
             }
         }
-        if (bodyKind == BodyContentKind.FormUrlEncoded) {
+        var mcpEditMode by remember(mcpBodyHint, mcpArgumentFields) { mutableStateOf("Form") }
+        if (mcpBodyHint != null && mcpArgumentFields.isNotEmpty()) {
+            Row(
+                modifier = Modifier
+                    .height(26.dp)
+                    .padding(bottom = 6.dp)
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(MaterialTheme.colors.onSurface.copy(alpha = 0.08f)),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = { mcpEditMode = "Form" }, enabled = !isLoading) {
+                    Text("Form", fontSize = exchangeMetrics.tab, color = if (mcpEditMode == "Form") MaterialTheme.colors.primary else MaterialTheme.colors.onSurface)
+                }
+                TextButton(onClick = { mcpEditMode = "JSON" }, enabled = !isLoading) {
+                    Text("JSON", fontSize = exchangeMetrics.tab, color = if (mcpEditMode == "JSON") MaterialTheme.colors.primary else MaterialTheme.colors.onSurface)
+                }
+            }
+        }
+        if (mcpBodyHint != null && mcpArgumentFields.isNotEmpty() && mcpEditMode == "Form") {
+            McpArgumentFormEditor(
+                exchangeMetrics = exchangeMetrics,
+                fields = mcpArgumentFields,
+                bodyText = bodyText,
+                onBodyTextChange = onBodyTextChange,
+                isLoading = isLoading,
+                isDarkTheme = isDarkTheme,
+                modifier = Modifier.weight(1f).fillMaxWidth().padding(end = 10.dp),
+            )
+        } else if (bodyKind == BodyContentKind.FormUrlEncoded) {
             PlainKeyValueEditor(
                 exchangeMetrics = exchangeMetrics,
                 editorRequestId = editorRequestId,
@@ -316,6 +355,168 @@ fun BoxScope.RequestBodyEditorTab(
         modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
         adapter = rememberScrollbarAdapter(bodyScrollState)
     )
+}
+
+
+@Composable
+private fun McpArgumentFormEditor(
+    exchangeMetrics: ExchangeFontMetrics,
+    fields: List<McpArgumentFormField>,
+    bodyText: String,
+    onBodyTextChange: (String) -> Unit,
+    isLoading: Boolean,
+    isDarkTheme: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val values = remember(bodyText) { parseMcpArgumentValues(bodyText) }
+    val cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium), RoundedCornerShape(4.dp))
+            .background(MaterialTheme.colors.surface)
+            .verticalScroll(rememberScrollState())
+            .padding(10.dp),
+    ) {
+        fields.forEach { field ->
+            val value = values[field.name].orEmpty()
+            Text(
+                text = field.name + if (field.required) " *" else "",
+                fontSize = exchangeMetrics.tab,
+                color = MaterialTheme.colors.onSurface,
+            )
+            if (field.description.isNotBlank()) {
+                Text(
+                    text = field.description,
+                    fontSize = exchangeMetrics.tiny,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                    modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
+                )
+            }
+            when {
+                field.enumValues.isNotEmpty() -> McpEnumField(exchangeMetrics, field, value, isLoading) { next ->
+                    onBodyTextChange(updateMcpArgumentValue(bodyText, field, next))
+                }
+                field.type == "boolean" -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = value.equals("true", ignoreCase = true),
+                        enabled = !isLoading,
+                        onCheckedChange = { checked -> onBodyTextChange(updateMcpArgumentValue(bodyText, field, checked.toString())) },
+                    )
+                    Text("true", fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium))
+                }
+                else -> McpArgumentTextField(
+                    exchangeMetrics = exchangeMetrics,
+                    field = field,
+                    value = value,
+                    isLoading = isLoading,
+                    cursorBrush = cursorBrush,
+                    onValueChange = { next -> onBodyTextChange(updateMcpArgumentValue(bodyText, field, next)) },
+                )
+            }
+            if (field.defaultValue != null) {
+                TextButton(
+                    onClick = { onBodyTextChange(updateMcpArgumentValue(bodyText, field, field.defaultValue)) },
+                    enabled = !isLoading,
+                    contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                ) {
+                    Text("Use default: ${field.defaultValue}", fontSize = exchangeMetrics.tiny)
+                }
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+}
+
+@Composable
+private fun McpArgumentTextField(
+    exchangeMetrics: ExchangeFontMetrics,
+    field: McpArgumentFormField,
+    value: String,
+    isLoading: Boolean,
+    cursorBrush: SolidColor,
+    onValueChange: (String) -> Unit,
+) {
+    var textFieldValue by remember(field.name) { mutableStateOf(TextFieldValue(value)) }
+
+    LaunchedEffect(value) {
+        if (textFieldValue.text != value) {
+            textFieldValue = textFieldValue.copy(text = value)
+        }
+    }
+
+    BasicTextField(
+        value = textFieldValue,
+        onValueChange = { next ->
+            textFieldValue = next
+            onValueChange(next.text)
+        },
+        enabled = !isLoading,
+        cursorBrush = cursorBrush,
+        singleLine = field.type != "object" && field.type != "array",
+        textStyle = MaterialTheme.typography.body2.copy(
+            fontSize = exchangeMetrics.body,
+            color = MaterialTheme.colors.onSurface.copy(alpha = if (!isLoading) 1f else ContentAlpha.disabled),
+        ),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(4.dp))
+            .border(1.dp, MaterialTheme.colors.onSurface.copy(alpha = 0.24f), RoundedCornerShape(4.dp))
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+    )
+}
+@Composable
+private fun McpEnumField(
+    exchangeMetrics: ExchangeFontMetrics,
+    field: McpArgumentFormField,
+    value: String,
+    isLoading: Boolean,
+    onValueChange: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }, enabled = !isLoading) {
+            Text(value.ifBlank { "Select ${field.name}" }, fontSize = exchangeMetrics.tab)
+            Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            field.enumValues.forEach { option ->
+                DropdownMenuItem(onClick = { expanded = false; onValueChange(option) }) {
+                    Text(option, fontSize = exchangeMetrics.tab, color = MaterialTheme.colors.onSurface)
+                }
+            }
+        }
+    }
+}
+
+private fun parseMcpArgumentValues(bodyText: String): Map<String, String> {
+    val obj = runCatching { prettyPrintJson.parseToJsonElement(bodyText.ifBlank { "{}" }).jsonObject }.getOrNull() ?: return emptyMap()
+    return obj.mapValues { (_, value) -> (value as? JsonPrimitive)?.contentOrNull ?: value.toString() }
+}
+
+private fun updateMcpArgumentValue(bodyText: String, field: McpArgumentFormField, rawValue: String): String {
+    val current = runCatching { prettyPrintJson.parseToJsonElement(bodyText.ifBlank { "{}" }).jsonObject }.getOrNull() ?: JsonObject(emptyMap())
+    val updated = buildJsonObject {
+        current.forEach { (key, value) -> if (key != field.name) put(key, value) }
+        put(field.name, jsonValueForField(field, rawValue))
+    }
+    return prettyPrintJson.encodeToString(JsonElement.serializer(), updated)
+}
+
+private fun jsonValueForField(field: McpArgumentFormField, rawValue: String): JsonElement {
+    val trimmed = rawValue.trim()
+    if (trimmed.isEmpty() && (field.type == "number" || field.type == "integer")) return JsonPrimitive("")
+    return when (field.type) {
+        "number" -> when {
+            trimmed.matches(Regex("[-+]?\\d+")) -> trimmed.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(rawValue)
+            trimmed.toDoubleOrNull() != null -> JsonPrimitive(trimmed.toDouble())
+            else -> JsonPrimitive(rawValue)
+        }
+        "integer" -> trimmed.toLongOrNull()?.let { JsonPrimitive(it) } ?: JsonPrimitive(rawValue)
+        "boolean" -> JsonPrimitive(rawValue.equals("true", ignoreCase = true))
+        "object", "array" -> runCatching { prettyPrintJson.parseToJsonElement(rawValue) }.getOrElse { JsonPrimitive(rawValue) }
+        else -> JsonPrimitive(rawValue)
+    }
 }
 
 @Composable
