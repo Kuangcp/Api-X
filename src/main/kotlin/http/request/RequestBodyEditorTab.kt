@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.ScrollState
 import com.neoutils.highlight.compose.remember.rememberHighlight
@@ -164,6 +165,7 @@ fun BoxScope.RequestBodyEditorTab(
     bodyText: String,
     onBodyTextChange: (String) -> Unit,
     mcpBodyHint: String? = null,
+    mcpBodyPreview: String? = null,
     headersText: String,
     onHeadersTextChange: (String) -> Unit,
     bodyScrollState: ScrollState,
@@ -208,6 +210,22 @@ fun BoxScope.RequestBodyEditorTab(
                     .background(MaterialTheme.colors.primary.copy(alpha = 0.10f))
                     .padding(horizontal = 8.dp, vertical = 6.dp)
             )
+            if (!mcpBodyPreview.isNullOrBlank()) {
+                Text(
+                    "Generated JSON-RPC\n$mcpBodyPreview",
+                    fontSize = exchangeMetrics.tab,
+                    fontFamily = FontFamily.Monospace,
+                    maxLines = 10,
+                    overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = 0.78f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 6.dp, start = 0.dp, top = 0.dp, end = 10.dp)
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MaterialTheme.colors.onSurface.copy(alpha = 0.06f))
+                        .padding(horizontal = 8.dp, vertical = 6.dp)
+                )
+            }
         }
         if (bodyKind == BodyContentKind.FormUrlEncoded) {
             PlainKeyValueEditor(

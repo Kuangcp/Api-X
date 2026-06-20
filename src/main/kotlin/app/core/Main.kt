@@ -500,6 +500,7 @@ fun App(onExitRequest: () -> Unit) {
                                     bodyText = editorState.bodyText,
                                     onBodyTextChange = { text -> editorState.bodyText = text; if (editorState.method.equals("MCP", ignoreCase = true)) mcpSelectionState.rememberCurrentDraft(text) },
                                     mcpBodyHint = if (editorState.method.equals("MCP", ignoreCase = true)) mcpSelectionState.editorHintFor(editorState.editorRequestId) else null,
+                                    mcpBodyPreview = if (editorState.method.equals("MCP", ignoreCase = true) && mcpSelectionState.selectedRequestId == editorState.editorRequestId) mcpSelectionState.buildSelectedRequestBody(editorState.bodyText) else null,
                                     headersText = editorState.headersText,
                                     onHeadersTextChange = { editorState.headersText = it },
                                     paramsText = editorState.paramsText,
