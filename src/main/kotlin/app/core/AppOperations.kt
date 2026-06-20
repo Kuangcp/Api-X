@@ -11,6 +11,7 @@ import app.state.ToastState
 import app.settings.AppSettings
 import db.CollectionRepository
 import db.HarLogCodec
+import db.McpCatalogStore
 import db.HarSnapshot
 import db.RequestResponseStore
 import http.BufferUpdate
@@ -27,6 +28,7 @@ import http.resolveAuthToHeaders
 import http.responseHeaderLinesForHar
 import http.sendRequestStreaming
 import http.substitutionMapForActive
+import mcp.extractMcpCatalogFromLog
 import mcp.runMcpStdioDebug
 import mcp.runMcpSseDebug
 import tree.TreeSelection
@@ -299,6 +301,11 @@ private fun startMcpStdioRequest(
             control.finished = true
             val elapsed = System.currentTimeMillis() - control.startTimeMs
             applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
+            val catalog = extractMcpCatalogFromLog(session.responseLines, session.responsePartialLine)
+            if (!catalog.isEmpty) {
+                McpCatalogStore.saveCatalog(boundRequestId, catalog)
+                responseState.cacheRefreshVersion++
+            }
             session.responseTimeText = formatDuration(elapsed)
             session.responseSizeText = formatBytes(control.totalBytes)
             session.isLoading = false

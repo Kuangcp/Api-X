@@ -57,6 +57,7 @@ import com.github.kuangcp.api_x.generated.resources.app_icon
 import org.jetbrains.compose.resources.painterResource
 import db.AppPaths
 import db.CollectionRepository
+import db.McpCatalogStore
 import db.RequestResponseStore
 import http.ExchangeFontMetrics
 import http.exchangeFontMetrics
@@ -71,12 +72,15 @@ import tree.CollectionTreeSidebar
 import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.TreeSelection
+import tree.UiCollection
+import tree.UiFolder
 import tree.expandSetsForRequest
 import tree.firstRequestSelection
 import app.state.TreeState
 import app.state.RequestEditorState
 import app.state.ResponseState
 import app.state.McpSelectionState
+import mcp.McpCatalogSummary
 import app.state.ThemeState
 import app.state.DialogState
 import app.state.EnvironmentState
@@ -204,6 +208,9 @@ fun App(onExitRequest: () -> Unit) {
     }
 
     val cacheVersion = responseState.cacheRefreshVersion
+    val mcpCatalogByRequestId = remember(treeState.tree, cacheVersion) {
+        mcpCatalogsForTree(treeState.tree, responseState)
+    }
 
     fun cycleRecentSwitcher(forward: Boolean) {
         val list = recentSwitcherState.ids
@@ -356,7 +363,7 @@ fun App(onExitRequest: () -> Unit) {
                                 expandedCollectionIds = treeState.expandedCollectionIds,
                                 expandedFolderIds = treeState.expandedFolderIds,
                                 runningRequestIds = responseState.runningRequestIds,
-                                mcpCatalogByRequestId = responseState.mcpCatalogByRequestId(),
+                                mcpCatalogByRequestId = mcpCatalogByRequestId,
                                 onToggleCollection = { treeState.toggleCollection(it) },
                                 onToggleFolder = { treeState.toggleFolder(it) },
                                 onSelectNode = { selectTreeNode(it, treeState, editorState) },
@@ -722,6 +729,27 @@ private fun ToastMessage(message: String, onDismiss: () -> Unit) {
     }
 }
 
+private fun mcpCatalogsForTree(
+    tree: List<UiCollection>,
+    responseState: ResponseState,
+): Map<String, McpCatalogSummary> {
+    val catalogs = linkedMapOf<String, McpCatalogSummary>()
+    fun addRequest(id: String, method: String) {
+        if (!method.equals("MCP", ignoreCase = true)) return
+        val catalog = McpCatalogStore.loadCatalog(id)
+        if (catalog != null && !catalog.isEmpty) catalogs[id] = catalog
+    }
+    fun visitFolder(folder: UiFolder) {
+        folder.requests.forEach { addRequest(it.id, it.method) }
+        folder.children.forEach(::visitFolder)
+    }
+    tree.forEach { collection ->
+        collection.rootRequests.forEach { addRequest(it.id, it.method) }
+        collection.folders.forEach(::visitFolder)
+    }
+    catalogs.putAll(responseState.mcpCatalogByRequestId())
+    return catalogs
+}
 fun main() {
     GlobalExceptionHandler.install()
     Logger.configure()
