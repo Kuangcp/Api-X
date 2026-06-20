@@ -194,11 +194,28 @@ fun startRequest(
     session.flusherThread = flusher
 }
 
+fun refreshMcpCatalog(
+    editorState: RequestEditorState,
+    responseState: ResponseState,
+    environmentState: EnvironmentState,
+) {
+    val boundRequestId = editorState.editorRequestId ?: return
+    if (!editorState.method.equals("MCP", ignoreCase = true)) return
+    startMcpStdioRequest(
+        editorState = editorState,
+        responseState = responseState,
+        environmentState = environmentState,
+        boundRequestId = boundRequestId,
+        bodyOverride = "",
+    )
+}
+
 private fun startMcpStdioRequest(
     editorState: RequestEditorState,
     responseState: ResponseState,
     environmentState: EnvironmentState,
     boundRequestId: String,
+    bodyOverride: String? = null,
 ) {
     Logger.info("MCP") { "startMcpStdioRequest: $boundRequestId, command=${editorState.url}" }
     val session = responseState.getOrCreateSession(boundRequestId)
@@ -206,7 +223,7 @@ private fun startMcpStdioRequest(
     val varMap = environmentState.environmentsState.substitutionMapForActive()
     val commandLine = applyEnvironmentVariables(editorState.url, varMap)
     val envText = applyEnvironmentVariables(editorState.headersText, varMap)
-    val bodyText = applyEnvironmentVariables(editorState.bodyText, varMap)
+    val bodyText = bodyOverride ?: applyEnvironmentVariables(editorState.bodyText, varMap)
     val isHttpMcp = commandLine.startsWith("http://", ignoreCase = true) ||
         commandLine.startsWith("https://", ignoreCase = true)
     val transportLabel = if (isHttpMcp) "MCP SSE" else "MCP STDIO"
@@ -237,7 +254,7 @@ private fun startMcpStdioRequest(
         }
         if (bodyText.isNotBlank()) {
             appendLine()
-            appendLine("Tool call:")
+            appendLine(if (bodyOverride == null) "Tool call:" else "Catalog refresh")
             append(bodyText)
         }
     }

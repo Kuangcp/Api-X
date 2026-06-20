@@ -13,6 +13,7 @@ import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
@@ -43,6 +44,9 @@ internal fun ResponseToolbar(
     onCopyResponseBody: () -> Unit,
     clearResponseLogsEnabled: Boolean,
     onClearResponseLogs: () -> Unit,
+    showMcpCatalogRefresh: Boolean,
+    mcpCatalogRefreshEnabled: Boolean,
+    onRefreshMcpCatalog: () -> Unit,
     historyEntries: List<HistoryEntry>,
     selectedHistoryEpochMs: Long?,
     onHistorySelected: (Long?) -> Unit,
@@ -111,6 +115,14 @@ internal fun ResponseToolbar(
             )
         }
 
+        if (showMcpCatalogRefresh) {
+            TextButton(
+                onClick = onRefreshMcpCatalog,
+                enabled = mcpCatalogRefreshEnabled,
+            ) {
+                Text("Refresh Catalog", fontSize = tab, color = MaterialTheme.colors.onSurface)
+            }
+        }
         var historyMenuExpanded by remember { mutableStateOf(false) }
         androidx.compose.foundation.layout.Box {
             IconButton(

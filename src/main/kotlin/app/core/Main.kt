@@ -515,6 +515,9 @@ fun App(onExitRequest: () -> Unit) {
                                     s.isSseResponse = false
                                     s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
                                 },
+                                showMcpCatalogRefresh = editorState.method.equals("MCP", ignoreCase = true),
+                                mcpCatalogRefreshEnabled = editorState.method.equals("MCP", ignoreCase = true) && currentSession?.isLoading != true,
+                                onRefreshMcpCatalog = { refreshMcpCatalog(editorState, responseState, environmentState) },
                                 jsonSyntaxHighlightEnabled = themeState.jsonSyntaxHighlightEnabled,
                                 onJsonSyntaxHighlightEnabledChange = { themeState.jsonSyntaxHighlightEnabled = it },
                                 customSseTextRulePaths = appSettingsState.appSettings.responseSseTextRulePaths,
