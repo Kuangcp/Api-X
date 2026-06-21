@@ -80,6 +80,14 @@ private fun CollectionSettingsBody(
             }
         )
     }
+    var openApiSourceState by remember(target) {
+        mutableStateOf(
+            when (target) {
+                is TreeSelection.Collection -> repository.getCollectionOpenApiSource(target.id).orEmpty()
+                else -> ""
+            }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -96,6 +104,13 @@ private fun CollectionSettingsBody(
                     selected = section == 0,
                     onClick = { section = 0 },
                 )
+                if (target is TreeSelection.Collection) {
+                    NavRow(
+                        label = "OpenAPI",
+                        selected = section == 1,
+                        onClick = { section = 1 },
+                    )
+                }
             }
 
             Divider(
@@ -120,6 +135,26 @@ private fun CollectionSettingsBody(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
+                    1 -> if (target is TreeSelection.Collection) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            Text("OpenAPI source URL", color = MaterialTheme.colors.onSurface)
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = openApiSourceState,
+                                onValueChange = { openApiSourceState = it },
+                                label = { Text("/v3/api-docs URL") },
+                                placeholder = { Text("http://localhost:8080/v3/api-docs") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Right-click this collection to refresh from the bound OpenAPI URL.",
+                                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                style = MaterialTheme.typography.caption,
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -137,7 +172,10 @@ private fun CollectionSettingsBody(
             Button(
                 onClick = {
                     when (target) {
-                        is TreeSelection.Collection -> repository.updateCollectionAuth(target.id, authState)
+                        is TreeSelection.Collection -> {
+                            repository.updateCollectionAuth(target.id, authState)
+                            repository.updateCollectionOpenApiSource(target.id, openApiSourceState.trim().takeIf { it.isNotBlank() })
+                        }
                         is TreeSelection.Folder -> repository.updateFolderAuth(target.id, authState)
                         else -> {}
                     }

@@ -426,10 +426,7 @@ fun App(onExitRequest: () -> Unit) {
                                     editorState.leftTabIndex = 0
                                 },
                                 onAddCollection = {
-                                    val id = repository.createCollection("新集合")
-                                    treeState.refresh()
-                                    treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
-                                    treeState.treeSelection = TreeSelection.Collection(id)
+                                    dialogState.showCreateCollection = true
                                 },
                                 onAddFolder = { treeState.treeSelection?.let { treeState.addFolderAt(it) } },
                                 onAddRequest = { treeState.treeSelection?.let { addRequestAt(it, treeState, editorState) } },
@@ -451,6 +448,7 @@ fun App(onExitRequest: () -> Unit) {
                                 onExportRequestAsCurl = { exportAsCurl(repository, environmentState, toastState, it) },
                                 onExportRequestAsGo = { exportAsGo(repository, environmentState, toastState, it) },
                                 onExportPostmanCollection = { exportPostmanCollection(repository, toastState, responseState, it) },
+                                onRefreshOpenApiCollection = { refreshOpenApiCollection(treeState, toastState, repository, it) },
                                 onDuplicateRequestBelow = { duplicateRequest(treeState, editorState, repository, it) },
                                 onApplyTreeDrop = { payload, target -> applyTreeDrop(treeState, repository, payload, target) },
                             )
@@ -628,6 +626,9 @@ fun App(onExitRequest: () -> Unit) {
                     collectionSettingsTarget = dialogState.collectionSettingsTarget,
                     onCloseCollectionSettings = { dialogState.showCollectionSettings = false },
                     onRefreshTree = { treeState.refresh() },
+                    showCreateCollection = dialogState.showCreateCollection,
+                    onCloseCreateCollection = { dialogState.showCreateCollection = false },
+                    onCreateCollection = { name, openApiUrl -> createCollectionFromDialog(treeState, toastState, repository, name, openApiUrl) },
                 )
             }
         }

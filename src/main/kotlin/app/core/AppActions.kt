@@ -23,12 +23,17 @@ import http.substitutionMapForActive
 import http.migrateFormBodyToEditorLinesIfNeeded
 import http.parseCurlCommand
 import java.awt.EventQueue
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import javax.swing.JFileChooser
 import javax.swing.JOptionPane
 import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.concurrent.thread
+import openapi.parseOpenApiToPortableCollection
 import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.PostmanAuth
@@ -37,6 +42,89 @@ import tree.parsePostmanCollectionJsonToPortable
 import tree.portableCollectionToPostmanV21Json
 import tree.firstRequestSelection
 
+fun createCollectionFromDialog(
+    treeState: TreeState,
+    toastState: ToastState,
+    repository: CollectionRepository,
+    name: String,
+    openApiUrl: String,
+) {
+    val cleanName = name.trim().ifBlank { "New Collection" }
+    val cleanUrl = openApiUrl.trim()
+    if (cleanUrl.isBlank()) {
+        val id = repository.createCollection(cleanName)
+        treeState.refresh()
+        treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
+        treeState.treeSelection = TreeSelection.Collection(id)
+        showToast(toastState, "已创建集合 $cleanName")
+        return
+    }
+    thread(name = "openapi-import") {
+        var collectionId: String? = null
+        try {
+            val id = repository.createCollection(cleanName)
+            collectionId = id
+            val text = fetchOpenApiJson(cleanUrl)
+            val result = parseOpenApiToPortableCollection(text, cleanUrl, cleanName, id)
+            repository.mergePortableIntoCollection(id, result.portable)
+            EventQueue.invokeLater {
+                treeState.refresh()
+                treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
+                treeState.treeSelection = TreeSelection.Collection(id)
+                showToast(toastState, "已从 OpenAPI 创建集合：${result.requestCount} 个接口")
+            }
+        } catch (e: Exception) {
+            collectionId?.let { runCatching { repository.deleteCollection(it) } }
+            EventQueue.invokeLater {
+                showToast(toastState, "OpenAPI 导入失败: ${e.message ?: e::class.simpleName}")
+            }
+        }
+    }
+}
+
+fun refreshOpenApiCollection(
+    treeState: TreeState,
+    toastState: ToastState,
+    repository: CollectionRepository,
+    collectionId: String,
+) {
+    val sourceUrl = repository.getCollectionOpenApiSource(collectionId)
+    if (sourceUrl.isNullOrBlank()) {
+        showToast(toastState, "当前集合没有绑定 OpenAPI 地址")
+        return
+    }
+    thread(name = "openapi-refresh") {
+        try {
+            val name = repository.exportPortableCollection(collectionId)?.name ?: "OpenAPI Collection"
+            val text = fetchOpenApiJson(sourceUrl)
+            val result = parseOpenApiToPortableCollection(text, sourceUrl, name, collectionId)
+            repository.mergePortableIntoCollection(collectionId, result.portable.copy(auth = repository.getCollectionAuth(collectionId)))
+            EventQueue.invokeLater {
+                treeState.refresh()
+                treeState.expandedCollectionIds = treeState.expandedCollectionIds + collectionId
+                treeState.treeSelection = TreeSelection.Collection(collectionId)
+                showToast(toastState, "OpenAPI 已刷新：${result.requestCount} 个接口")
+            }
+        } catch (e: Exception) {
+            EventQueue.invokeLater {
+                showToast(toastState, "OpenAPI 刷新失败: ${e.message ?: e::class.simpleName}")
+            }
+        }
+    }
+}
+
+private fun fetchOpenApiJson(url: String): String {
+    val request = HttpRequest.newBuilder(URI.create(url))
+        .GET()
+        .header("Accept", "application/json")
+        .build()
+    val response = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL).build()
+        .send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8))
+    if (response.statusCode() !in 200..299) {
+        throw IllegalStateException("HTTP ${response.statusCode()}")
+    }
+    return response.body()
+}
 fun importCollection(
     treeState: TreeState,
     toastState: ToastState,

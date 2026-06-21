@@ -84,6 +84,20 @@ internal class CollectionTable(private val conn: Connection, private val lock: A
             ps.executeUpdate()
         }
     }
+    fun updateCollectionOpenApiSource(collectionId: String, sourceUrl: String?) = synchronized(lock) {
+        val oldMeta = getCollectionMetaJson(collectionId)
+        val newMeta = mergeOpenApiSourceIntoMetaJson(oldMeta, sourceUrl)
+        conn.prepareStatement("UPDATE collections SET meta_json = ?, updated_at = ? WHERE id = ?").use { ps ->
+            ps.setString(1, newMeta)
+            ps.setLong(2, System.currentTimeMillis())
+            ps.setString(3, collectionId)
+            ps.executeUpdate()
+        }
+    }
+
+    fun getCollectionOpenApiSource(collectionId: String): String? = synchronized(lock) {
+        extractOpenApiSourceFromMetaJson(getCollectionMetaJson(collectionId))
+    }
 
     fun getCollectionMetaJson(id: String): String = synchronized(lock) {
         conn.prepareStatement("SELECT meta_json FROM collections WHERE id = ?").use { ps ->

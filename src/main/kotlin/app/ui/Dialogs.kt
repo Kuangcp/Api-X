@@ -6,6 +6,7 @@ import app.settings.EnvironmentsState
 import app.settings.SettingsDialogWindow
 import app.dialog.EnvironmentManagerDialogWindow
 import app.dialog.GlobalSearchDialogWindow
+import app.dialog.OpenApiImportDialog
 import app.dialog.CollectionSettingsDialog
 import app.ui.typographyFromSettings
 import androidx.compose.runtime.Composable
@@ -36,7 +37,22 @@ fun Dialogs(
     collectionSettingsTarget: TreeSelection?,
     onCloseCollectionSettings: () -> Unit,
     onRefreshTree: () -> Unit,
+    showCreateCollection: Boolean,
+    onCloseCreateCollection: () -> Unit,
+    onCreateCollection: (String, String) -> Unit,
 ) {
+    if (showCreateCollection) {
+        OpenApiImportDialog(
+            visible = showCreateCollection,
+            isDarkTheme = isDarkTheme,
+            typographyBase = typographyFromSettings(appSettings),
+            onCloseRequest = onCloseCreateCollection,
+            onCreate = { name, openApiUrl ->
+                onCloseCreateCollection()
+                onCreateCollection(name, openApiUrl)
+            },
+        )
+    }
     if (showSettings) {
         SettingsDialogWindow(
             visible = showSettings,

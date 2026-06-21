@@ -190,6 +190,7 @@ fun CollectionTreeSidebar(
     onExportRequestAsCurl: (String) -> Unit,
     onExportRequestAsGo: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
+    onRefreshOpenApiCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     onApplyTreeDrop: (TreeDragPayload, TreeDropTarget) -> Boolean,
     folderAddEnabled: Boolean,
@@ -367,6 +368,7 @@ fun CollectionTreeSidebar(
                             onExportRequestAsCurl = onExportRequestAsCurl,
                             onExportRequestAsGo = onExportRequestAsGo,
                             onExportPostmanCollection = onExportPostmanCollection,
+                            onRefreshOpenApiCollection = onRefreshOpenApiCollection,
                             onDuplicateRequestBelow = onDuplicateRequestBelow,
                             dragging = treeDragPayload,
                             dropRegistry = dropRegistry,
@@ -507,6 +509,7 @@ private fun CollectionTreeBlock(
     onExportRequestAsCurl: (String) -> Unit,
     onExportRequestAsGo: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
+    onRefreshOpenApiCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
@@ -540,12 +543,15 @@ private fun CollectionTreeBlock(
         val collSel = TreeSelection.Collection(collection.id)
         ContextMenuArea(
             items = {
-                listOf(
-                    ContextMenuItem("新建文件夹") { onContextAddFolder(collSel) },
-                    ContextMenuItem("新建请求") { onContextAddRequest(collSel) },
-                    ContextMenuItem("导出 Postman v2.1…") { onExportPostmanCollection(collection.id) },
-                    ContextMenuItem("设置") { onSettings(collSel) },
-                )
+                buildList {
+                    add(ContextMenuItem("新建文件夹") { onContextAddFolder(collSel) })
+                    add(ContextMenuItem("新建请求") { onContextAddRequest(collSel) })
+                    if (!collection.openApiSourceUrl.isNullOrBlank()) {
+                        add(ContextMenuItem("刷新 OpenAPI") { onRefreshOpenApiCollection(collection.id) })
+                    }
+                    add(ContextMenuItem("导出 Postman v2.1…") { onExportPostmanCollection(collection.id) })
+                    add(ContextMenuItem("设置") { onSettings(collSel) })
+                }
             }
         ) {
             TreeRow(

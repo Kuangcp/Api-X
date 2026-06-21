@@ -10,5 +10,6 @@ class DialogState {
     var showEnvironmentManager by mutableStateOf(false)
     var showGlobalSearch by mutableStateOf(false)
     var showCollectionSettings by mutableStateOf(false)
+    var showCreateCollection by mutableStateOf(false)
     var collectionSettingsTarget by mutableStateOf<TreeSelection?>(null)
 }

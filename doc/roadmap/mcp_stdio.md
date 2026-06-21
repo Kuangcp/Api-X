@@ -131,7 +131,7 @@ stderr 应作为独立日志进入右侧输出，不参与 JSON-RPC 解析。
 
 ```text
 [MCP stderr]
-+...
+...
 ```
 
 后续如果 UI 空间允许，可以增加 `stderr` filter 或 tab。
