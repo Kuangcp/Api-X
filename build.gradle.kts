@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.github.kuangcp"
-version = "1.3.2"
+version = "1.4.1"
 
 val appIconPng = layout.projectDirectory.file("api.png").asFile
 val appIconIco = layout.projectDirectory.file("api.ico").asFile
@@ -72,8 +72,16 @@ compose.desktop {
                     iconFile.set(appIconPng)
                 }
             }
-            if (appIconIco.exists()) {
-                windows {
+            windows {
+                // Keep this UUID stable forever. Windows Installer uses it to detect
+                // that a newer MSI should upgrade the existing api-x installation.
+                upgradeUuid = "7f3f1ab5-8205-4db2-90b4-6f2c5fdd8e7d"
+                msiPackageVersion = packageVersion
+                menuGroup = "Api-X"
+                shortcut = true
+                // 设置为false后就会自动安装到C盘程序, 能实现升级
+                // dirChooser = false
+                if (appIconIco.exists()) {
                     iconFile.set(appIconIco)
                 }
             }
