@@ -66,7 +66,7 @@ fun createCollectionFromDialog(
             collectionId = id
             val text = fetchOpenApiJson(cleanUrl)
             val result = parseOpenApiToPortableCollection(text, cleanUrl, cleanName, id)
-            repository.mergePortableIntoCollection(id, result.portable)
+            repository.mergeOpenApiIntoCollection(id, result.portable)
             EventQueue.invokeLater {
                 treeState.refresh()
                 treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
@@ -98,7 +98,7 @@ fun refreshOpenApiCollection(
             val name = repository.exportPortableCollection(collectionId)?.name ?: "OpenAPI Collection"
             val text = fetchOpenApiJson(sourceUrl)
             val result = parseOpenApiToPortableCollection(text, sourceUrl, name, collectionId)
-            repository.mergePortableIntoCollection(collectionId, result.portable.copy(auth = repository.getCollectionAuth(collectionId)))
+            repository.mergeOpenApiIntoCollection(collectionId, result.portable.copy(auth = repository.getCollectionAuth(collectionId)))
             EventQueue.invokeLater {
                 treeState.refresh()
                 treeState.expandedCollectionIds = treeState.expandedCollectionIds + collectionId

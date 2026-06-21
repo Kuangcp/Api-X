@@ -3,10 +3,20 @@ package db
 import java.nio.file.Path
 import java.sql.Connection
 import java.sql.DriverManager
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import openapi.openApiSyncKey
 import tree.PortableCollection
+import tree.PortableFolder
+import tree.PortableRequest
 import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.TreeSelection
+
+private val repositoryMetaJson = Json { ignoreUnknownKeys = true }
 
 class CollectionRepository(dbPath: Path) : AutoCloseable {
 
@@ -173,6 +183,113 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         )
     }
 
+    fun mergeOpenApiIntoCollection(targetCollectionId: String, portable: PortableCollection) = synchronized(lock) {
+        val existing = exportPortableCollection(targetCollectionId)
+        val preserved = if (existing == null) portable else portable.copy(
+            folders = preserveOpenApiFolders(portable.folders, buildOpenApiRequestIndex(existing)),
+            rootRequests = preserveOpenApiRequests(portable.rootRequests, buildOpenApiRequestIndex(existing)),
+        )
+        mergePortableIntoCollection(targetCollectionId, preserved)
+    }
+
+    private data class OpenApiRequestSnapshot(
+        val request: PortableRequest,
+        val keys: Set<String>,
+    )
+
+    private fun buildOpenApiRequestIndex(collection: PortableCollection): Map<String, OpenApiRequestSnapshot> {
+        val snapshots = mutableListOf<OpenApiRequestSnapshot>()
+        fun visitRequests(requests: List<PortableRequest>) {
+            requests.forEach { request ->
+                val keys = openApiRequestKeys(request).toMutableSet()
+                request.id?.takeIf { it.isNotBlank() }?.let { keys += "id:$it" }
+                if (keys.isNotEmpty()) snapshots += OpenApiRequestSnapshot(request, keys)
+            }
+        }
+        fun visitFolders(folders: List<PortableFolder>) {
+            folders.forEach { folder ->
+                visitRequests(folder.requests)
+                visitFolders(folder.folders)
+            }
+        }
+        visitRequests(collection.rootRequests)
+        visitFolders(collection.folders)
+        return buildMap {
+            snapshots.forEach { snapshot ->
+                snapshot.keys.forEach { key -> putIfAbsent(key, snapshot) }
+            }
+        }
+    }
+
+    private fun preserveOpenApiFolders(
+        folders: List<PortableFolder>,
+        existingByKey: Map<String, OpenApiRequestSnapshot>,
+    ): List<PortableFolder> {
+        return folders.map { folder ->
+            folder.copy(
+                folders = preserveOpenApiFolders(folder.folders, existingByKey),
+                requests = preserveOpenApiRequests(folder.requests, existingByKey),
+            )
+        }
+    }
+
+    private fun preserveOpenApiRequests(
+        requests: List<PortableRequest>,
+        existingByKey: Map<String, OpenApiRequestSnapshot>,
+    ): List<PortableRequest> {
+        return requests.map { incoming ->
+            val existing = openApiRequestKeys(incoming).asSequence()
+                .mapNotNull { existingByKey[it] }
+                .firstOrNull()
+                ?: incoming.id?.let { existingByKey["id:$it"] }
+            if (existing == null) {
+                incoming
+            } else {
+                incoming.copy(
+                    id = existing.request.id,
+                    url = existing.request.url,
+                    headersText = existing.request.headersText,
+                    paramsText = existing.request.paramsText,
+                    bodyText = existing.request.bodyText,
+                    auth = existing.request.auth,
+                )
+            }
+        }
+    }
+
+    private fun openApiRequestKeys(request: PortableRequest): Set<String> {
+        val meta = parseOpenApiMeta(request.metaJson) ?: return emptySet()
+        val keys = mutableSetOf<String>()
+        meta.syncKey?.let { keys += "sync:$it" }
+        if (!meta.method.isNullOrBlank() && !meta.path.isNullOrBlank()) {
+            keys += "sync:${openApiSyncKey(meta.method, meta.path)}"
+            keys += "raw:${meta.method.uppercase()} ${meta.path}"
+        }
+        meta.operationId?.let { keys += "operation:$it" }
+        return keys
+    }
+
+    private data class OpenApiRequestMeta(
+        val syncKey: String?,
+        val method: String?,
+        val path: String?,
+        val operationId: String?,
+    )
+
+    private fun parseOpenApiMeta(metaJson: String): OpenApiRequestMeta? {
+        return try {
+            val root = repositoryMetaJson.decodeFromString<JsonObject>(metaJson.ifBlank { "{}" })
+            val openApi = root["openapi"]?.jsonObject ?: return null
+            OpenApiRequestMeta(
+                syncKey = openApi["syncKey"]?.jsonPrimitive?.contentOrNull,
+                method = openApi["method"]?.jsonPrimitive?.contentOrNull,
+                path = openApi["path"]?.jsonPrimitive?.contentOrNull,
+                operationId = openApi["operationId"]?.jsonPrimitive?.contentOrNull,
+            )
+        } catch (e: Exception) {
+            null
+        }
+    }
     fun mergePortableIntoCollection(targetCollectionId: String, portable: PortableCollection) = synchronized(lock) {
         if (!collectionTable.collectionExists(targetCollectionId)) return@synchronized
         val now = System.currentTimeMillis()

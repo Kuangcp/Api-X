@@ -126,7 +126,7 @@ private fun operationToRequest(
     val body = requestBodyExample(root, operation)
     val url = listOfNotNull(baseUrl?.trimEnd('/'), path.ensureLeadingSlash()).joinToString("")
     return PortableRequest(
-        id = deterministicId("openapi:$collectionId:request:$method:$path"),
+        id = deterministicId("openapi:$collectionId:request:${openApiSyncKey(method, path)}"),
         name = name,
         method = method,
         url = url,
@@ -238,15 +238,30 @@ private fun openApiRequestMetaJson(
     path: String,
     operationId: String?,
 ): String {
+    val normalizedPath = normalizeOpenApiPath(path)
     return openApiJson.encodeToString(JsonElement.serializer(), buildJsonObject {
         put("openapi", buildJsonObject {
             put("sourceUrl", sourceUrl)
             put("tag", tag)
             put("method", method)
             put("path", path)
+            put("normalizedPath", normalizedPath)
+            put("syncKey", openApiSyncKey(method, path))
             if (!operationId.isNullOrBlank()) put("operationId", operationId)
         })
     })
+}
+
+fun openApiSyncKey(method: String, path: String): String {
+    return "${method.uppercase()} ${normalizeOpenApiPath(path)}"
+}
+
+fun normalizeOpenApiPath(path: String): String {
+    return path.ensureLeadingSlash()
+        .replace(Regex("\\{[^}/]+}"), "{}")
+        .replace(Regex("/{2,}"), "/")
+        .trimEnd('/')
+        .ifBlank { "/" }
 }
 
 private fun openApiMetaJson(sourceUrl: String, kind: String, name: String): String {
