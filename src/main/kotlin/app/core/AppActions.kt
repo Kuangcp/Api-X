@@ -48,15 +48,17 @@ fun createCollectionFromDialog(
     repository: CollectionRepository,
     name: String,
     openApiUrl: String,
+    onResult: (Boolean, String?) -> Unit = { _, _ -> },
 ) {
-    val cleanName = name.trim().ifBlank { "New Collection" }
+    val cleanName = name.trim().ifBlank { "新集合" }
     val cleanUrl = openApiUrl.trim()
     if (cleanUrl.isBlank()) {
         val id = repository.createCollection(cleanName)
         treeState.refresh()
         treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
         treeState.treeSelection = TreeSelection.Collection(id)
-        showToast(toastState, "已创建集合 $cleanName")
+        showToast(toastState, "已创建集合：$cleanName")
+        EventQueue.invokeLater { onResult(true, null) }
         return
     }
     thread(name = "openapi-import") {
@@ -64,19 +66,23 @@ fun createCollectionFromDialog(
         try {
             val id = repository.createCollection(cleanName)
             collectionId = id
-            val text = fetchOpenApiJson(cleanUrl)
-            val result = parseOpenApiToPortableCollection(text, cleanUrl, cleanName, id)
+            val normalizedUrl = normalizeOpenApiUrl(cleanUrl)
+            val text = fetchOpenApiJson(normalizedUrl)
+            val result = parseOpenApiToPortableCollection(text, normalizedUrl, cleanName, id)
             repository.mergeOpenApiIntoCollection(id, result.portable)
             EventQueue.invokeLater {
                 treeState.refresh()
                 treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
                 treeState.treeSelection = TreeSelection.Collection(id)
                 showToast(toastState, "已从 OpenAPI 创建集合：${result.requestCount} 个接口")
+                onResult(true, null)
             }
         } catch (e: Exception) {
             collectionId?.let { runCatching { repository.deleteCollection(it) } }
             EventQueue.invokeLater {
-                showToast(toastState, "OpenAPI 导入失败: ${e.message ?: e::class.simpleName}")
+                val message = e.message ?: e::class.simpleName ?: "未知错误"
+                showToast(toastState, "OpenAPI 导入失败: $message")
+                onResult(false, message)
             }
         }
     }
@@ -113,6 +119,13 @@ fun refreshOpenApiCollection(
     }
 }
 
+private fun normalizeOpenApiUrl(url: String): String {
+    val trimmed = url.trim()
+    if (trimmed.startsWith("http://", ignoreCase = true) || trimmed.startsWith("https://", ignoreCase = true)) {
+        return trimmed
+    }
+    return "http://$trimmed"
+}
 private fun fetchOpenApiJson(url: String): String {
     val request = HttpRequest.newBuilder(URI.create(url))
         .GET()

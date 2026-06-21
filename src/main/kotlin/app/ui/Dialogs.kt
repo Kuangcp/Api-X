@@ -39,7 +39,7 @@ fun Dialogs(
     onRefreshTree: () -> Unit,
     showCreateCollection: Boolean,
     onCloseCreateCollection: () -> Unit,
-    onCreateCollection: (String, String) -> Unit,
+    onCreateCollection: (String, String, (Boolean, String?) -> Unit) -> Unit,
 ) {
     if (showCreateCollection) {
         OpenApiImportDialog(
@@ -47,9 +47,11 @@ fun Dialogs(
             isDarkTheme = isDarkTheme,
             typographyBase = typographyFromSettings(appSettings),
             onCloseRequest = onCloseCreateCollection,
-            onCreate = { name, openApiUrl ->
-                onCloseCreateCollection()
-                onCreateCollection(name, openApiUrl)
+            onCreate = { name, openApiUrl, onResult ->
+                onCreateCollection(name, openApiUrl) { success, message ->
+                    onResult(success, message)
+                    if (success) onCloseCreateCollection()
+                }
             },
         )
     }
