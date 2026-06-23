@@ -26,7 +26,6 @@ import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
@@ -85,10 +84,7 @@ internal fun SseEventDetailPanel(
         ssePayload?.let { highlightJsonLinesOrNull(it, darkTheme) }
     }
 
-    var dragHeight by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(Unit) {
-        dragHeight = sseEventPanelHeight
-    }
+    var dragHeight by remember { mutableFloatStateOf(sseEventPanelHeight) }
     val panelHeightDp = with(LocalDensity.current) { dragHeight.toDp() }
 
     Column {
