@@ -371,7 +371,6 @@ fun sendRequestStreaming(
     } catch (e: Exception) {
         if (!control.cancelled) {
             control.requestFailed = true
-            onSseDetected(false)
             val detail = e.message?.ifBlank { null } ?: e.javaClass.simpleName
             onChunk("请求失败: $detail")
         }
