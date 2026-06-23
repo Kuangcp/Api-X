@@ -1,5 +1,7 @@
 package http.response
 
+import androidx.compose.foundation.ContextMenuArea
+import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,6 +44,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import app.core.writeClipboardText
 import http.ExchangeFontMetrics
 
 internal enum class ResponseBodyRenderMode {
@@ -396,49 +399,57 @@ private fun SseOrSearchBody(
                         Spacer(Modifier.fillMaxWidth().height(8.dp))
                     } else {
                         val isDataLine = line.startsWith("data:")
-                        val displayLine = if (isDataLine) "data:  ${line.removePrefix("data:").trimStart()}" else line
+                        val sseDataContent = line.removePrefix("data:").trimStart()
+                        val displayLine = if (isDataLine) "data:  $sseDataContent" else line
                         val isMatch = searchActive && searchQuery.isNotBlank() &&
                                 line.contains(searchQuery, ignoreCase = true)
                         val isCurrentMatch = isMatch &&
                                 matchingLineIndices.getOrNull(currentMatchIndex) == index
                         val isSelectedSseEvent = isSseResponse && isDataLine &&
                                 index == selectedSseEventIndex
-                        Text(
-                            buildAnnotatedString {
-                                if (isDataLine) {
-                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
-                                        append("data:  ")
-                                    }
-                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
-                                        append(line.removePrefix("data:").trimStart())
-                                    }
-                                } else {
-                                    append(displayLine)
-                                }
-                            },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    when {
-                                        isSelectedSseEvent -> MaterialTheme.colors.primary.copy(alpha = 0.18f)
-                                        isCurrentMatch -> MaterialTheme.colors.primary.copy(alpha = 0.25f)
-                                        isMatch -> MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
-                                        else -> MaterialTheme.colors.surface
-                                    }
-                                )
-                                .then(
-                                    if (isSseResponse && isDataLine && !isResponseLoading) {
-                                        Modifier.clickable {
-                                            onSseEventClick(if (selectedSseEventIndex == index) -1 else index)
+                        val textBlock = @Composable {
+                            Text(
+                                buildAnnotatedString {
+                                    if (isDataLine) {
+                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
+                                            append("data:  ")
                                         }
-                                    } else Modifier
+                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
+                                            append(sseDataContent)
+                                        }
+                                    } else {
+                                        append(displayLine)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(
+                                        when {
+                                            isSelectedSseEvent -> MaterialTheme.colors.primary.copy(alpha = 0.18f)
+                                            isCurrentMatch -> MaterialTheme.colors.primary.copy(alpha = 0.25f)
+                                            isMatch -> MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+                                            else -> MaterialTheme.colors.surface
+                                        }
+                                    )
+                                    .then(
+                                        if (isSseResponse && isDataLine && !isResponseLoading) {
+                                            Modifier.clickable {
+                                                onSseEventClick(if (selectedSseEventIndex == index) -1 else index)
+                                            }
+                                        } else Modifier
+                                    ),
+                                style = TextStyle(
+                                    fontSize = exchangeMetrics.body,
+                                    lineHeight = exchangeMetrics.body * 1.35f,
+                                    color = MaterialTheme.colors.onSurface,
                                 ),
-                            style = TextStyle(
-                                fontSize = exchangeMetrics.body,
-                                lineHeight = exchangeMetrics.body * 1.35f,
-                                color = MaterialTheme.colors.onSurface,
-                            ),
-                        )
+                            )
+                        }
+                        if (isDataLine) {
+                            ContextMenuArea(
+                                items = { listOf(ContextMenuItem("Copy") { writeClipboardText(sseDataContent) }) },
+                            ) { textBlock() }
+                        } else { textBlock() }
                     }
                 }
                 responsePartialLine?.let { partial ->
