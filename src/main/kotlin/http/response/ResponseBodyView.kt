@@ -1,7 +1,5 @@
 package http.response
 
-import androidx.compose.foundation.ContextMenuArea
-import androidx.compose.foundation.ContextMenuItem
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -33,17 +31,25 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.PointerButton
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Popup
 import app.core.writeClipboardText
 import http.ExchangeFontMetrics
 
@@ -388,7 +394,15 @@ private fun SseOrSearchBody(
     onSseEventPanelHeightChange: (Float) -> Unit,
     isResponseLoading: Boolean,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    val boxCoordinates = remember { mutableStateOf<LayoutCoordinates?>(null) }
+    val lineCoordinatesMap = remember { mutableMapOf<Int, LayoutCoordinates>() }
+    var contextMenuTarget by remember { mutableStateOf<ContextMenuTarget?>(null) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .onGloballyPositioned { boxCoordinates.value = it }
+    ) {
         SelectionContainer {
             LazyColumn(
                 modifier = Modifier.fillMaxSize().padding(end = 12.dp),
@@ -407,49 +421,71 @@ private fun SseOrSearchBody(
                                 matchingLineIndices.getOrNull(currentMatchIndex) == index
                         val isSelectedSseEvent = isSseResponse && isDataLine &&
                                 index == selectedSseEventIndex
-                        val textBlock = @Composable {
-                            Text(
-                                buildAnnotatedString {
-                                    if (isDataLine) {
-                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
-                                            append("data:  ")
-                                        }
-                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
-                                            append(sseDataContent)
-                                        }
-                                    } else {
-                                        append(displayLine)
+                        val clickable = isSseResponse && isDataLine && !isResponseLoading
+                        Text(
+                            buildAnnotatedString {
+                                if (isDataLine) {
+                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
+                                        append("data:  ")
                                     }
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(
-                                        when {
-                                            isSelectedSseEvent -> MaterialTheme.colors.primary.copy(alpha = 0.18f)
-                                            isCurrentMatch -> MaterialTheme.colors.primary.copy(alpha = 0.25f)
-                                            isMatch -> MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
-                                            else -> MaterialTheme.colors.surface
+                                    withStyle(SpanStyle(color = MaterialTheme.colors.onSurface)) {
+                                        append(sseDataContent)
+                                    }
+                                } else {
+                                    append(displayLine)
+                                }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(
+                                    when {
+                                        isSelectedSseEvent -> MaterialTheme.colors.primary.copy(alpha = 0.18f)
+                                        isCurrentMatch -> MaterialTheme.colors.primary.copy(alpha = 0.25f)
+                                        isMatch -> MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+                                        else -> MaterialTheme.colors.surface
+                                    }
+                                )
+                                .then(
+                                    if (clickable) {
+                                        Modifier.clickable {
+                                            onSseEventClick(if (selectedSseEventIndex == index) -1 else index)
                                         }
-                                    )
-                                    .then(
-                                        if (isSseResponse && isDataLine && !isResponseLoading) {
-                                            Modifier.clickable {
-                                                onSseEventClick(if (selectedSseEventIndex == index) -1 else index)
+                                    } else Modifier
+                                )
+                                .then(
+                                    if (isDataLine) {
+                                        Modifier
+                                            .onGloballyPositioned { lineCoordinatesMap[index] = it }
+                                            .pointerInput(index) {
+                                                @OptIn(ExperimentalComposeUiApi::class)
+                                                awaitPointerEventScope {
+                                                    while (true) {
+                                                        val event = awaitPointerEvent()
+                                                        if (event.type == PointerEventType.Press && event.button == PointerButton.Secondary) {
+                                                            val localPos = event.changes.first().position
+                                                            val lineCoords = lineCoordinatesMap[index]
+                                                            val boxCoords = boxCoordinates.value
+                                                            if (lineCoords != null && boxCoords != null) {
+                                                                val posInBox = boxCoords.localPositionOf(lineCoords, localPos)
+                                                                contextMenuTarget = ContextMenuTarget(
+                                                                    boxRelativeX = posInBox.x,
+                                                                    boxRelativeY = posInBox.y,
+                                                                    content = sseDataContent,
+                                                                )
+                                                            }
+                                                            event.changes.first().consume()
+                                                        }
+                                                    }
+                                                }
                                             }
-                                        } else Modifier
-                                    ),
-                                style = TextStyle(
-                                    fontSize = exchangeMetrics.body,
-                                    lineHeight = exchangeMetrics.body * 1.35f,
-                                    color = MaterialTheme.colors.onSurface,
+                                    } else Modifier
                                 ),
-                            )
-                        }
-                        if (isDataLine) {
-                            ContextMenuArea(
-                                items = { listOf(ContextMenuItem("Copy") { writeClipboardText(sseDataContent) }) },
-                            ) { textBlock() }
-                        } else { textBlock() }
+                            style = TextStyle(
+                                fontSize = exchangeMetrics.body,
+                                lineHeight = exchangeMetrics.body * 1.35f,
+                                color = MaterialTheme.colors.onSurface,
+                            ),
+                        )
                     }
                 }
                 responsePartialLine?.let { partial ->
@@ -470,8 +506,39 @@ private fun SseOrSearchBody(
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
             adapter = rememberScrollbarAdapter(responseListState),
         )
+
+        contextMenuTarget?.let { target ->
+            Popup(
+                alignment = Alignment.TopStart,
+                offset = IntOffset(target.boxRelativeX.toInt(), target.boxRelativeY.toInt()),
+                onDismissRequest = { contextMenuTarget = null },
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(4.dp),
+                    color = MaterialTheme.colors.surface,
+                    elevation = 8.dp,
+                    modifier = Modifier.clickable {
+                        writeClipboardText(target.content)
+                        contextMenuTarget = null
+                    },
+                ) {
+                    Text(
+                        text = "Copy",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        fontSize = exchangeMetrics.body,
+                        color = MaterialTheme.colors.onSurface,
+                    )
+                }
+            }
+        }
     }
 }
+
+private data class ContextMenuTarget(
+    val boxRelativeX: Float,
+    val boxRelativeY: Float,
+    val content: String,
+)
 
 @Composable
 private fun PlainTextBody(
