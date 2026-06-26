@@ -412,8 +412,18 @@ private fun SseOrSearchBody(
                     if (line.isBlank()) {
                         Spacer(Modifier.fillMaxWidth().height(8.dp))
                     } else {
-                        val isDataLine = line.startsWith("data:")
-                        val sseDataContent = line.removePrefix("data:").trimStart()
+                        val timestampSep = " data:"
+                        val isDataLine = line.startsWith("data:") || (isSseResponse && line.contains(timestampSep))
+                        val (timestampPart, sseDataContent) = if (line.startsWith("data:")) {
+                            null to line.removePrefix("data:").trimStart()
+                        } else {
+                            val idx = line.indexOf(timestampSep)
+                            if (idx >= 0) {
+                                line.substring(0, idx) to line.substring(idx + timestampSep.length).trimStart()
+                            } else {
+                                null to ""
+                            }
+                        }
                         val displayLine = if (isDataLine) "data:  $sseDataContent" else line
                         val isMatch = searchActive && searchQuery.isNotBlank() &&
                                 line.contains(searchQuery, ignoreCase = true)
@@ -425,6 +435,11 @@ private fun SseOrSearchBody(
                         Text(
                             buildAnnotatedString {
                                 if (isDataLine) {
+                                    if (timestampPart != null) {
+                                        withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.25f))) {
+                                            append("$timestampPart ")
+                                        }
+                                    }
                                     withStyle(SpanStyle(color = MaterialTheme.colors.onSurface.copy(alpha = 0.45f))) {
                                         append("data:  ")
                                     }

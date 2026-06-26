@@ -328,8 +328,13 @@ fun sendRequestStreaming(
                             }
                             lastLineWasEmpty = false
                         }
-                        onChunk("$line\n")
-                        control.totalBytes += (line + "\n").toByteArray(StandardCharsets.UTF_8).size.toLong()
+                        val chunk = if (line.startsWith("data:")) {
+                            "${LocalTime.now().format(TIME_FORMATTER)} $line\n"
+                        } else {
+                            "$line\n"
+                        }
+                        onChunk(chunk)
+                        control.totalBytes += chunk.toByteArray(StandardCharsets.UTF_8).size.toLong()
                         onProgress(control.totalBytes)
                     }
                 }
