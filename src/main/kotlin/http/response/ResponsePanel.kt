@@ -135,23 +135,24 @@ fun ResponsePanel(
     }
     var aguiRunState by remember { mutableStateOf<AguiRunState?>(null) }
 
-    // Periodic tick — fires every 1s to avoid computation storms during active streaming
-    var aguiTick by remember { mutableStateOf(0L) }
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1000)
-            aguiTick++
-        }
-    }
-
-    LaunchedEffect(aguiTick, sseExtractMode, isSseResponse) {
+    LaunchedEffect(sseExtractMode, isSseResponse) {
         if (!(isSseResponse && sseExtractMode == SseExtractMode.AgUi)) {
             aguiRunState = null
             return@LaunchedEffect
         }
-        aguiRunState = withContext(Dispatchers.Default) {
-            val events = extractAguiEvents(responseLineSnapshot)
-            if (events.isNotEmpty()) buildAguiRunState(events) else null
+        while (true) {
+            delay(1000)
+            val t0 = System.currentTimeMillis()
+            val snapshot = responseLines.toList()
+            aguiRunState = withContext(Dispatchers.Default) {
+                val t1 = System.currentTimeMillis()
+                val events = extractAguiEvents(snapshot)
+                val t2 = System.currentTimeMillis()
+                val result = if (events.isNotEmpty()) buildAguiRunState(events) else null
+                val t3 = System.currentTimeMillis()
+                println("[AGUI] tick: ${snapshot.size} lines → ${events.size} events, extract=${t2-t1}ms build=${t3-t2}ms total=${t3-t0}ms")
+                result
+            }
         }
     }
     val activeBodyLines = if (bodyRenderMode == ResponseBodyRenderMode.Model) modelLines else displayLines

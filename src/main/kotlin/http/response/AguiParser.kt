@@ -60,6 +60,9 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
     var pendingToolCall: MutableToolCall? = null
     var pendingReasoning: MutableReasoning? = null
 
+    var flushCount = 0
+    var reasoningAddCount = 0
+
     for (ev in events) {
         val obj = ev.json
         val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: continue
@@ -76,7 +79,9 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
                 errorMessage = obj["message"]?.jsonPrimitive?.contentOrNull
             }
             "TEXT_MESSAGE_START" -> {
-                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages); flushCount++
+                pendingToolCall = null
+                pendingReasoning = null
                 val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
                 val role = obj["role"]?.jsonPrimitive?.contentOrNull ?: "assistant"
                 pendingTextMessage = MutableTextMessage(msgId, role)
@@ -97,9 +102,13 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
             }
             "TEXT_MESSAGE_CHUNK" -> {
                 handleTextMessageChunk(obj, pendingTextMessage, pendingToolCall, pendingReasoning, messages)?.let { pendingTextMessage = it }
+                pendingToolCall = null
+                pendingReasoning = null
             }
             "TOOL_CALL_START" -> {
                 flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+                pendingTextMessage = null
+                pendingReasoning = null
                 pendingToolCall = MutableToolCall(
                     toolCallId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull,
                     toolName = obj["toolCallName"]?.jsonPrimitive?.contentOrNull,
@@ -118,9 +127,13 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
             }
             "TOOL_CALL_CHUNK" -> {
                 handleToolCallChunk(obj, pendingTextMessage, pendingToolCall, pendingReasoning, messages)?.let { pendingToolCall = it }
+                pendingTextMessage = null
+                pendingReasoning = null
             }
             "REASONING_MESSAGE_START" -> {
                 flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+                pendingTextMessage = null
+                pendingToolCall = null
                 val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
                 pendingReasoning = MutableReasoning(msgId)
             }
@@ -130,11 +143,11 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
             }
             "REASONING_MESSAGE_END" -> {
                 pendingReasoning = pendingReasoning?.copy(isComplete = true)
-                pendingReasoning?.let { messages.add(it.toAguiReasoningBlock()) }
+                pendingReasoning?.let { reasoningAddCount++; messages.add(it.toAguiReasoningBlock()) }
                 pendingReasoning = null
             }
             "REASONING_END" -> {
-                pendingReasoning?.let { messages.add(it.toAguiReasoningBlock()) }
+                pendingReasoning?.let { reasoningAddCount++; messages.add(it.toAguiReasoningBlock()) }
                 pendingReasoning = null
             }
             "REASONING_MESSAGE_CHUNK" -> {
@@ -145,6 +158,12 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
 
     // Flush any pending items
     flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+    if (pendingReasoning != null) reasoningAddCount++
+
+    val reasoningCount = messages.count { it is AguiReasoningBlock }
+    val textCount = messages.count { it is AguiTextMessage }
+    val toolCount = messages.count { it is AguiToolCallMessage }
+    println("[AGUI] buildState: ${events.size} evts → ${messages.size} msgs (T=$textCount TC=$toolCount R=$reasoningCount) flush=$flushCount rAdd=$reasoningAddCount")
 
     return AguiRunState(
         runId = runId,
@@ -178,7 +197,10 @@ private fun handleTextMessageChunk(
     val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
     val role = obj["role"]?.jsonPrimitive?.contentOrNull ?: "assistant"
     return when {
-        msgId != null && current?.messageId != msgId -> MutableTextMessage(msgId, role, text = delta, isComplete = false)
+        msgId != null && current?.messageId != msgId -> {
+            current?.let { messages.add(it.toAguiTextMessage()) }
+            MutableTextMessage(msgId, role, text = delta, isComplete = false)
+        }
         msgId != null && current != null -> current.copy(text = current.text + delta)
         msgId != null -> MutableTextMessage(msgId, role, text = delta, isComplete = false)
         current != null -> current.copy(text = current.text + delta)
