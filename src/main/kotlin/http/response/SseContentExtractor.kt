@@ -49,13 +49,22 @@ private val textRules = listOf(
     JsonTextRule(paths = listOf("completion")),
 )
 
+private const val TIMESTAMP_SEP = " data:"
+
+private fun stripTimestampPrefix(line: String): String {
+    val idx = line.indexOf(TIMESTAMP_SEP)
+    return if (idx >= 0) line.substring(idx + 1) else line
+}
+
 internal fun extractSseRenderableContent(
     responseLines: List<String>,
     responsePartialLine: String?,
     customTextRulePaths: List<String> = emptyList(),
 ): ExtractedSseContent {
-    val events = parseSseEvents(responseLines, responsePartialLine).ifEmpty {
-        parseBareJsonEvents(responseLines, responsePartialLine)
+    val cleanedLines = responseLines.map(::stripTimestampPrefix)
+    val cleanedPartial = responsePartialLine?.let(::stripTimestampPrefix)
+    val events = parseSseEvents(cleanedLines, cleanedPartial).ifEmpty {
+        parseBareJsonEvents(cleanedLines, cleanedPartial)
     }
     val chunks = buildList {
         for (event in events) {
