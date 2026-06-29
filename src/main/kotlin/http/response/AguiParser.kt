@@ -119,16 +119,21 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
             "TOOL_CALL_CHUNK" -> {
                 handleToolCallChunk(obj, pendingTextMessage, pendingToolCall, pendingReasoning, messages)?.let { pendingToolCall = it }
             }
-            "REASONING_MESSAGE_START", "REASONING_START" -> {
+            "REASONING_MESSAGE_START" -> {
                 flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
                 val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
                 pendingReasoning = MutableReasoning(msgId)
             }
+            "REASONING_START" -> { /* marker only, no message created */ }
             "REASONING_MESSAGE_CONTENT" -> {
                 pendingReasoning = pendingReasoning?.copy(text = pendingReasoning.text + (obj["delta"]?.jsonPrimitive?.contentOrNull ?: ""))
             }
-            "REASONING_MESSAGE_END", "REASONING_END" -> {
+            "REASONING_MESSAGE_END" -> {
                 pendingReasoning = pendingReasoning?.copy(isComplete = true)
+                pendingReasoning?.let { messages.add(it.toAguiReasoningBlock()) }
+                pendingReasoning = null
+            }
+            "REASONING_END" -> {
                 pendingReasoning?.let { messages.add(it.toAguiReasoningBlock()) }
                 pendingReasoning = null
             }

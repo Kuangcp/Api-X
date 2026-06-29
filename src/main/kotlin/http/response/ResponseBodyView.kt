@@ -156,18 +156,18 @@ internal fun ResponseBodyView(
                             onClick = { bodyViewMode = BodyViewMode.Raw; onRenderModeChange(ResponseBodyRenderMode.Model) },
                             exchangeMetrics = exchangeMetrics,
                         )
-                        if (isModelSelected) {
-                            AguiExtractModeDropdown(
-                                selectedMode = sseExtractMode,
-                                enabled = !isResponseLoading,
-                                onModeChange = onSseExtractModeChange,
-                                exchangeMetrics = exchangeMetrics,
-                            )
-                        }
                     }
                 }
             }
             Spacer(Modifier.weight(1f))
+            if (modelOutputAvailable && bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Model) {
+                AguiExtractModeDropdown(
+                    selectedMode = sseExtractMode,
+                    enabled = !isResponseLoading,
+                    onModeChange = onSseExtractModeChange,
+                    exchangeMetrics = exchangeMetrics,
+                )
+            }
             Text(
                 text = if (jsonBodyTooLarge && jsonSyntaxHighlightEnabled) "JSON highlight disabled" else "JSON highlight",
                 fontSize = exchangeMetrics.tab,
