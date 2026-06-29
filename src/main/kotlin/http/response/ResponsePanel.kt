@@ -86,6 +86,8 @@ fun ResponsePanel(
     jsonSyntaxHighlightEnabled: Boolean = true,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit = {},
     customSseTextRulePaths: List<String> = emptyList(),
+    initialSseExtractMode: SseExtractMode = SseExtractMode.OpenAiCompat,
+    onSseExtractModePersist: (SseExtractMode) -> Unit = {},
     historyEntries: List<HistoryEntry> = emptyList(),
     selectedHistoryEpochMs: Long? = null,
     onHistorySelected: (Long?) -> Unit = {},
@@ -119,7 +121,7 @@ fun ResponsePanel(
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
     var bodyRenderMode by remember { mutableStateOf(ResponseBodyRenderMode.Raw) }
-    var sseExtractMode by remember { mutableStateOf(SseExtractMode.OpenAiCompat) }
+    var sseExtractMode by remember { mutableStateOf(initialSseExtractMode) }
     val modelContent = remember(responseLineSnapshot, responsePartialLine, isSseResponse, customSseTextRulePaths) {
         if (isSseResponse) {
             extractSseRenderableContent(responseLineSnapshot, responsePartialLine, customSseTextRulePaths)
@@ -304,7 +306,7 @@ fun ResponsePanel(
                             modelOutputAvailable = isSseResponse,
                             modelOutputChunkCount = modelContent.chunkCount,
                             sseExtractMode = sseExtractMode,
-                            onSseExtractModeChange = { sseExtractMode = it },
+                            onSseExtractModeChange = { sseExtractMode = it; onSseExtractModePersist(it) },
                             aguiRunState = aguiRunState,
                             mcpProtocolViewAvailable = showMcpConnectionControls,
                             responseLines = activeBodyLines,
