@@ -379,7 +379,7 @@ fun App(onExitRequest: () -> Unit) {
                         isLoading = currentSession?.isLoading ?: false,
                         isDarkTheme = themeState.isDarkTheme,
                         environmentsState = environmentState.environmentsState,
-                        onActiveEnvironmentChange = { environmentState.environmentsState = environmentState.environmentsState.copy(activeEnvironmentId = it) },
+                        onActiveEnvironmentChange = { environmentState.commit(environmentState.environmentsState.copy(activeEnvironmentId = it)) },
                         onManageEnvironmentsClick = { dialogState.showEnvironmentManager = true },
                         onThemeToggle = { themeState.isDarkTheme = !themeState.isDarkTheme },
                         onSettingsClick = { dialogState.showSettings = true },
