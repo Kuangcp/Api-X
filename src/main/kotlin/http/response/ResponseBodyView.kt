@@ -168,22 +168,24 @@ internal fun ResponseBodyView(
                     exchangeMetrics = exchangeMetrics,
                 )
             }
-            Text(
-                text = if (jsonBodyTooLarge && jsonSyntaxHighlightEnabled) "JSON highlight disabled" else "JSON highlight",
-                fontSize = exchangeMetrics.tab,
-                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-            )
-            Switch(
-                checked = jsonSyntaxHighlightEnabled,
-                onCheckedChange = onJsonSyntaxHighlightEnabledChange,
-                enabled = jsonToggleEnabled,
-                colors = SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colors.primary,
-                    checkedTrackColor = MaterialTheme.colors.primary.copy(alpha = 0.5f),
-                    disabledCheckedThumbColor = MaterialTheme.colors.onSurface.copy(alpha = 0.25f),
-                    disabledCheckedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
-                ),
-            )
+            if (!modelOutputAvailable) {
+                Text(
+                    text = if (jsonBodyTooLarge && jsonSyntaxHighlightEnabled) "JSON highlight disabled" else "JSON highlight",
+                    fontSize = exchangeMetrics.tab,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                )
+                Switch(
+                    checked = jsonSyntaxHighlightEnabled,
+                    onCheckedChange = onJsonSyntaxHighlightEnabledChange,
+                    enabled = jsonToggleEnabled,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colors.primary,
+                        checkedTrackColor = MaterialTheme.colors.primary.copy(alpha = 0.5f),
+                        disabledCheckedThumbColor = MaterialTheme.colors.onSurface.copy(alpha = 0.25f),
+                        disabledCheckedTrackColor = MaterialTheme.colors.onSurface.copy(alpha = 0.12f),
+                    ),
+                )
+            }
         }
 
         // Main body content
