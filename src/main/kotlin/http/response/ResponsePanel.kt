@@ -133,12 +133,20 @@ fun ResponsePanel(
     }
     var aguiRunState by remember { mutableStateOf<AguiRunState?>(null) }
 
-    LaunchedEffect(sseExtractMode, isResponseLoading, responseLineSnapshot.size) {
+    // Periodic tick — fires every 1s to avoid computation storms during active streaming
+    var aguiTick by remember { mutableStateOf(0L) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            aguiTick++
+        }
+    }
+
+    LaunchedEffect(aguiTick, sseExtractMode, isSseResponse) {
         if (!(isSseResponse && sseExtractMode == SseExtractMode.AgUi)) {
             aguiRunState = null
             return@LaunchedEffect
         }
-        if (isResponseLoading && responseLineSnapshot.size > 0) delay(200)
         aguiRunState = withContext(Dispatchers.Default) {
             val events = extractAguiEvents(responseLineSnapshot)
             if (events.isNotEmpty()) buildAguiRunState(events) else null
