@@ -60,9 +60,6 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
     var pendingToolCall: MutableToolCall? = null
     var pendingReasoning: MutableReasoning? = null
 
-    var flushCount = 0
-    var reasoningAddCount = 0
-
     for (ev in events) {
         val obj = ev.json
         val type = obj["type"]?.jsonPrimitive?.contentOrNull ?: continue
@@ -79,7 +76,7 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
                 errorMessage = obj["message"]?.jsonPrimitive?.contentOrNull
             }
             "TEXT_MESSAGE_START" -> {
-                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages); flushCount++
+                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
                 pendingToolCall = null
                 pendingReasoning = null
                 val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
@@ -143,11 +140,11 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
             }
             "REASONING_MESSAGE_END" -> {
                 pendingReasoning = pendingReasoning?.copy(isComplete = true)
-                pendingReasoning?.let { reasoningAddCount++; messages.add(it.toAguiReasoningBlock()) }
+                pendingReasoning?.let { messages.add(it.toAguiReasoningBlock()) }
                 pendingReasoning = null
             }
             "REASONING_END" -> {
-                pendingReasoning?.let { reasoningAddCount++; messages.add(it.toAguiReasoningBlock()) }
+                pendingReasoning?.let { messages.add(it.toAguiReasoningBlock()) }
                 pendingReasoning = null
             }
             "REASONING_MESSAGE_CHUNK" -> {
@@ -158,12 +155,6 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
 
     // Flush any pending items
     flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
-    if (pendingReasoning != null) reasoningAddCount++
-
-    val reasoningCount = messages.count { it is AguiReasoningBlock }
-    val textCount = messages.count { it is AguiTextMessage }
-    val toolCount = messages.count { it is AguiToolCallMessage }
-    println("[AGUI] buildState: ${events.size} evts → ${messages.size} msgs (T=$textCount TC=$toolCount R=$reasoningCount) flush=$flushCount rAdd=$reasoningAddCount")
 
     return AguiRunState(
         runId = runId,
