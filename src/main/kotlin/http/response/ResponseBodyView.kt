@@ -22,6 +22,8 @@ import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.CircularProgressIndicator
 import androidx.compose.material.ContentAlpha
+import androidx.compose.material.DropdownMenu
+import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
@@ -58,6 +60,11 @@ internal enum class ResponseBodyRenderMode {
     Model,
 }
 
+enum class SseExtractMode {
+    OpenAiCompat,
+    AgUi,
+}
+
 private enum class BodyViewMode {
     Raw,
     Messages,
@@ -77,6 +84,9 @@ internal fun ResponseBodyView(
     onRenderModeChange: (ResponseBodyRenderMode) -> Unit,
     modelOutputAvailable: Boolean,
     modelOutputChunkCount: Int,
+    sseExtractMode: SseExtractMode = SseExtractMode.OpenAiCompat,
+    onSseExtractModeChange: (SseExtractMode) -> Unit = {},
+    aguiRunState: AguiRunState? = null,
     mcpProtocolViewAvailable: Boolean,
     responseLines: List<String>,
     responsePartialLine: String?,
@@ -139,12 +149,21 @@ internal fun ResponseBodyView(
                         )
                     }
                     if (modelOutputAvailable) {
+                        val isModelSelected = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Model
                         ResponseBodyModeButton(
                             label = if (modelOutputChunkCount > 0) "Model ($modelOutputChunkCount)" else "Model",
-                            selected = bodyViewMode == BodyViewMode.Raw && renderMode == ResponseBodyRenderMode.Model,
+                            selected = isModelSelected,
                             onClick = { bodyViewMode = BodyViewMode.Raw; onRenderModeChange(ResponseBodyRenderMode.Model) },
                             exchangeMetrics = exchangeMetrics,
                         )
+                        if (isModelSelected) {
+                            AguiExtractModeDropdown(
+                                selectedMode = sseExtractMode,
+                                enabled = !isResponseLoading,
+                                onModeChange = onSseExtractModeChange,
+                                exchangeMetrics = exchangeMetrics,
+                            )
+                        }
                     }
                 }
             }
@@ -180,6 +199,8 @@ internal fun ResponseBodyView(
             JsonReadyBody(exchangeMetrics, jsonHighlightState, responseListState)
         } else if (isCacheLoading) {
             CacheLoadingIndicator(exchangeMetrics)
+        } else if (renderMode == ResponseBodyRenderMode.Model && sseExtractMode == SseExtractMode.AgUi && aguiRunState != null) {
+            AguiCardView(aguiRunState, exchangeMetrics)
         } else {
             Box(modifier = Modifier.fillMaxSize()) {
                 PlainTextOrSseBody(
@@ -245,6 +266,46 @@ private fun ResponseBodyModeButton(
             color = if (selected) MaterialTheme.colors.onSurface
             else MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
         )
+    }
+}
+
+@Composable
+private fun AguiExtractModeDropdown(
+    selectedMode: SseExtractMode,
+    enabled: Boolean,
+    onModeChange: (SseExtractMode) -> Unit,
+    exchangeMetrics: ExchangeFontMetrics,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val label = when (selectedMode) {
+        SseExtractMode.OpenAiCompat -> "OpenAI 兼容"
+        SseExtractMode.AgUi -> "AG-UI"
+    }
+    val textColor = if (enabled) MaterialTheme.colors.onSurface
+        else MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.disabled)
+
+    Box {
+        Text(
+            text = label,
+            modifier = Modifier.clickable(enabled = enabled) { expanded = true }.padding(horizontal = 10.dp),
+            fontSize = exchangeMetrics.tab,
+            color = textColor,
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            DropdownMenuItem(
+                onClick = { onModeChange(SseExtractMode.OpenAiCompat); expanded = false },
+            ) {
+                Text("OpenAI 兼容", fontSize = exchangeMetrics.tab)
+            }
+            DropdownMenuItem(
+                onClick = { onModeChange(SseExtractMode.AgUi); expanded = false },
+            ) {
+                Text("AG-UI", fontSize = exchangeMetrics.tab)
+            }
+        }
     }
 }
 
