@@ -39,17 +39,29 @@ import androidx.compose.ui.unit.dp
 import http.ExchangeFontMetrics
 import http.highlightJsonLinesOrNull
 
+private const val SSE_TIMESTAMP_SEP = " data:"
+
+private fun sseDataContent(line: String): String? {
+    if (line.startsWith("data:")) return line.removePrefix("data:").trimStart()
+    val idx = line.indexOf(SSE_TIMESTAMP_SEP)
+    if (idx < 0) return null
+    return line.substring(idx + SSE_TIMESTAMP_SEP.length).trimStart()
+}
+
+private fun isSseDataLine(line: String): Boolean =
+    line.startsWith("data:") || line.contains(SSE_TIMESTAMP_SEP)
+
 /**
  * 提取 SSE 事件中连续 data: 行的有效负载。
  */
 internal fun extractSseEventData(lines: List<String>, clickedIndex: Int): String? {
     val clickedLine = lines.getOrNull(clickedIndex) ?: return null
-    if (!clickedLine.startsWith("data:")) return null
+    if (!isSseDataLine(clickedLine)) return null
     var start = clickedIndex
     while (start - 1 >= 0) {
         val prev = lines[start - 1]
         if (prev.isBlank()) break
-        if (!prev.startsWith("data:")) break
+        if (!isSseDataLine(prev)) break
         start--
     }
     val parts = mutableListOf<String>()
@@ -57,8 +69,8 @@ internal fun extractSseEventData(lines: List<String>, clickedIndex: Int): String
     while (i < lines.size) {
         val line = lines[i]
         if (line.isBlank()) break
-        if (!line.startsWith("data:")) break
-        parts.add(line.removePrefix("data:").trimStart())
+        val content = sseDataContent(line) ?: break
+        parts.add(content)
         i++
     }
     if (parts.isEmpty()) return null
