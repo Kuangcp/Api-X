@@ -67,6 +67,7 @@ import http.request.RequestSidePanel
 import http.request.RequestTabBar
 import http.request.RequestTopBar
 import http.response.ResponsePanel
+import http.response.SseExtractMode
 import kotlinx.coroutines.delay
 import tree.collectAllFolderIds
 import tree.CollectionTreeSidebar
@@ -540,6 +541,8 @@ fun App(onExitRequest: () -> Unit) {
                                 isSseResponse = currentSession?.isSseResponse ?: false,
                                 isResponseLoading = currentSession?.isLoading ?: false,
                                 isCacheLoading = currentSession?.isCacheLoading ?: false,
+                                initialSseExtractMode = currentSession?.sseExtractMode ?: SseExtractMode.OpenAiCompat,
+                                onSseExtractModePersist = { currentSession?.sseExtractMode = it },
                                 responseListState = currentSession?.responseListState ?: responseState.placeholderListState,
                                 responseHeadersListState = currentSession?.responseHeadersListState ?: responseState.placeholderListState,
                                 copyResponseBodyEnabled = editorState.editorRequestId != null && responseBodyTextForClipboard(currentSession?.responseLines ?: emptyList(), currentSession?.responsePartialLine).isNotBlank(),
@@ -555,6 +558,7 @@ fun App(onExitRequest: () -> Unit) {
                                     s.responsePartialLine = null
                                     s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""
                                     s.isSseResponse = false
+                                    s.sseExtractMode = SseExtractMode.OpenAiCompat
                                     s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
                                 },
                                 showMcpCatalogRefresh = editorState.method.equals("MCP", ignoreCase = true),

@@ -41,7 +41,10 @@ import db.HistoryEntry
 import http.ExchangeFontMetrics
 import http.contentTypeHeaderIndicatesJson
 import http.highlightJsonLinesOrNull
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val MAX_JSON_HIGHLIGHT_BYTES = 100_000
 private const val MAX_PREVIEW_CHARS = 5_000
@@ -83,6 +86,8 @@ fun ResponsePanel(
     jsonSyntaxHighlightEnabled: Boolean = true,
     onJsonSyntaxHighlightEnabledChange: (Boolean) -> Unit = {},
     customSseTextRulePaths: List<String> = emptyList(),
+    initialSseExtractMode: SseExtractMode = SseExtractMode.OpenAiCompat,
+    onSseExtractModePersist: (SseExtractMode) -> Unit = {},
     historyEntries: List<HistoryEntry> = emptyList(),
     selectedHistoryEpochMs: Long? = null,
     onHistorySelected: (Long?) -> Unit = {},
@@ -116,6 +121,7 @@ fun ResponsePanel(
     val darkTheme = !MaterialTheme.colors.isLight
     var jsonHighlightState by remember { mutableStateOf<JsonHighlightState>(JsonHighlightState.Idle) }
     var bodyRenderMode by remember { mutableStateOf(ResponseBodyRenderMode.Raw) }
+    var sseExtractMode by remember { mutableStateOf(initialSseExtractMode) }
     val modelContent = remember(responseLineSnapshot, responsePartialLine, isSseResponse, customSseTextRulePaths) {
         if (isSseResponse) {
             extractSseRenderableContent(responseLineSnapshot, responsePartialLine, customSseTextRulePaths)
@@ -126,6 +132,22 @@ fun ResponsePanel(
     val modelLines = remember(modelContent.text) {
         if (modelContent.text.isBlank()) listOf("No model output extracted")
         else modelContent.text.lines()
+    }
+    var aguiRunState by remember { mutableStateOf<AguiRunState?>(null) }
+
+    LaunchedEffect(sseExtractMode, isSseResponse) {
+        if (!(isSseResponse && sseExtractMode == SseExtractMode.AgUi)) {
+            aguiRunState = null
+            return@LaunchedEffect
+        }
+        while (true) {
+            delay(1000)
+            val snapshot = responseLines.toList()
+            aguiRunState = withContext(Dispatchers.Default) {
+                val events = extractAguiEvents(snapshot)
+                if (events.isNotEmpty()) buildAguiRunState(events) else null
+            }
+        }
     }
     val activeBodyLines = if (bodyRenderMode == ResponseBodyRenderMode.Model) modelLines else displayLines
     val activePartialLine = if (bodyRenderMode == ResponseBodyRenderMode.Model) null else displayPartialLine
@@ -278,6 +300,9 @@ fun ResponsePanel(
                             onRenderModeChange = { bodyRenderMode = it },
                             modelOutputAvailable = isSseResponse,
                             modelOutputChunkCount = modelContent.chunkCount,
+                            sseExtractMode = sseExtractMode,
+                            onSseExtractModeChange = { sseExtractMode = it; onSseExtractModePersist(it) },
+                            aguiRunState = aguiRunState,
                             mcpProtocolViewAvailable = showMcpConnectionControls,
                             responseLines = activeBodyLines,
                             responsePartialLine = activePartialLine,

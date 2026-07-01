@@ -8,11 +8,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import db.HistoryEntry
 import http.RequestControl
+import http.response.SseExtractMode
 
 class RequestSession(val requestId: String) {
     var isLoading by mutableStateOf(false)
     var isCacheLoading by mutableStateOf(false)
     var isSseResponse by mutableStateOf(false)
+    var sseExtractMode by mutableStateOf(SseExtractMode.OpenAiCompat)
     var statusCodeText by mutableStateOf("")
     var responseTimeText by mutableStateOf("")
     var responseSizeText by mutableStateOf("")
