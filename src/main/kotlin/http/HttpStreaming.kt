@@ -257,12 +257,35 @@ fun sendRequestStreaming(
             .timeout(Duration.ofMillis(requestTimeoutMs))
 
         val allowedHeaders = headersAppliedByHttpClient(headersText)
-        allowedHeaders.forEach { (name, value) ->
+        val ctHeader = allowedHeaders.firstOrNull { it.first.equals("Content-Type", ignoreCase = true) }
+        val isFormBody = ctHeader?.second?.contains("form-urlencoded", ignoreCase = true) == true ||
+                ctHeader?.second?.contains("multipart", ignoreCase = true) == true
+        val hasFileFields = isFormBody && body.any { it == '@' && body.lines().any { line -> line.trimStart().startsWith("@") || line.contains(": @") } }
+
+        val boundary: String?
+        val finalBodyBytes: ByteArray
+        val finalAllowedHeaders: List<Pair<String, String>>
+
+        if (hasFileFields && body.isNotBlank()) {
+            boundary = "----ApiXBoundary${System.currentTimeMillis().toString(36)}"
+            finalBodyBytes = buildMultipartBody(body, boundary)
+            finalAllowedHeaders = allowedHeaders.map { (k, v) ->
+                if (k.equals("Content-Type", ignoreCase = true)) k to "multipart/form-data; boundary=$boundary"
+                else k to v
+            }
+        } else {
+            boundary = null
+            finalBodyBytes = body.toByteArray(Charsets.UTF_8)
+            finalAllowedHeaders = allowedHeaders
+        }
+
+        finalAllowedHeaders.forEach { (name, value) ->
             builder.header(name, value)
         }
 
         val m = method.trim().uppercase()
-        val bodyPub = HttpRequest.BodyPublishers.ofString(body)
+        val bodyPub = if (boundary != null) HttpRequest.BodyPublishers.ofByteArray(finalBodyBytes)
+                      else HttpRequest.BodyPublishers.ofString(body)
         val noBody = HttpRequest.BodyPublishers.noBody()
         val request = when (m) {
             "GET" -> builder.GET().build()
@@ -483,4 +506,53 @@ fun closeQuietly(input: InputStream?) {
         input?.close()
     } catch (_: Exception) {
     }
+}
+
+private const val CRLF = "\r\n"
+
+internal fun buildMultipartBody(bodyText: String, boundary: String): ByteArray {
+    val baos = java.io.ByteArrayOutputStream()
+    val crlfBytes = CRLF.toByteArray(Charsets.UTF_8)
+
+    for (line in bodyText.lines()) {
+        val trimmed = line.trim()
+        if (trimmed.isBlank()) continue
+        val idx = trimmed.indexOf(':')
+        if (idx < 0) continue
+
+        val key = trimmed.substring(0, idx).trim()
+        val value = trimmed.substring(idx + 1).trim()
+
+        baos.write("--$boundary".toByteArray(Charsets.UTF_8))
+        baos.write(crlfBytes)
+
+        if (value.startsWith("@")) {
+            val filePath = value.removePrefix("@").trim()
+            val file = java.io.File(filePath)
+            if (file.isFile) {
+                val fileName = file.name
+                baos.write("Content-Disposition: form-data; name=\"$key\"; filename=\"$fileName\"".toByteArray(Charsets.UTF_8))
+                baos.write(crlfBytes)
+                baos.write("Content-Type: application/octet-stream".toByteArray(Charsets.UTF_8))
+                baos.write(crlfBytes)
+                baos.write(crlfBytes)
+                baos.write(file.readBytes())
+            } else {
+                baos.write("Content-Disposition: form-data; name=\"$key\"; filename=\"${file.name}\"".toByteArray(Charsets.UTF_8))
+                baos.write(crlfBytes)
+                baos.write(crlfBytes)
+            }
+        } else {
+            baos.write("Content-Disposition: form-data; name=\"$key\"".toByteArray(Charsets.UTF_8))
+            baos.write(crlfBytes)
+            baos.write(crlfBytes)
+            baos.write(value.toByteArray(Charsets.UTF_8))
+        }
+        baos.write(crlfBytes)
+    }
+
+    baos.write("--$boundary--".toByteArray(Charsets.UTF_8))
+    baos.write(crlfBytes)
+
+    return baos.toByteArray()
 }

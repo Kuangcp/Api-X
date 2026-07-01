@@ -40,6 +40,7 @@ import androidx.compose.material.ripple
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +65,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
 import app.settings.EnvVariable
+import app.ui.CustomIcons
 import http.ExchangeFontMetrics
 import http.filterHeaders
 import http.joinHeadersEditor
@@ -125,6 +127,7 @@ private fun KeyValueTextFormEditor(
     defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
     enableHeaderKeySuggestions: Boolean = false,
     envVars: List<EnvVariable> = emptyList(),
+    showFileToggle: Boolean = false,
 ) {
     var editMode by remember(editorRequestId, defaultEditMode) { mutableStateOf(defaultEditMode) }
     val formRows = remember { mutableStateListOf<Triple<String, String, Boolean>>() }
@@ -587,17 +590,13 @@ private fun KeyValueTextFormEditor(
                                     }
                                     Box(
                                         modifier = Modifier
-                                            .weight(0.50f)
+                                            .weight(if (showFileToggle) 0.42f else 0.50f)
                                             .fillMaxHeight()
                                             .padding(start = 2.dp, end = 4.dp)
                                             .then(
                                                 if (valueFocused) {
                                                     Modifier
-                                                        .border(
-                                                            2.dp,
-                                                            MaterialTheme.colors.primary,
-                                                            RoundedCornerShape(3.dp),
-                                                        )
+                                                        .border(2.dp, MaterialTheme.colors.primary, RoundedCornerShape(3.dp))
                                                         .padding(horizontal = 3.dp)
                                                 } else {
                                                     Modifier
@@ -605,64 +604,107 @@ private fun KeyValueTextFormEditor(
                                             ),
                                         contentAlignment = Alignment.CenterStart,
                                     ) {
-                                        BasicTextField(
-                                            value = valueText,
-                                            onValueChange = { nv ->
-                                                formRows[index] = Triple(row.first, nv, row.third)
-                                                commitForm()
-                                            },
-                                            enabled = !isLoading,
-                                            singleLine = true,
-                                            textStyle = rowFieldStyle,
-                                            cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .fillMaxHeight()
-                                                .onFocusChanged { fc ->
-                                                    if (fc.isFocused) {
-                                                        focusedCell = HeaderFormFocusedCell(index, true)
-                                                    } else if (focusedCell == HeaderFormFocusedCell(index, true)) {
-                                                        focusedCell = null
-                                                    }
-                                                },
-                                            decorationBox = { innerTextField ->
-                                                Box(
-                                                    modifier = Modifier.fillMaxSize(),
-                                                    contentAlignment = Alignment.CenterStart,
-                                                ) {
-                                                    innerTextField()
-                                                }
-                                            },
-                                        )
-
-                                        if (showValEnvVars && envVars.isNotEmpty()) {
-                                            EnvVarAutocompletePopup(
-                                                filterText = valEnvFilter,
-                                                envVars = envVars,
-                                                isDarkTheme = isDarkTheme,
-                                                exchangeMetrics = exchangeMetrics,
-                                                yOffset = 28.dp,
-                                                onSelect = { varName ->
-                                                    val newText = applyEnvVarSelection(valueText, varName)
-                                                    formRows[index] = Triple(row.first, newText, row.third)
+                                        val isFileMode = showFileToggle && valueText.startsWith("@")
+                                        if (isFileMode) {
+                                            val displayPath = valueText.removePrefix("@")
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth().fillMaxHeight(),
+                                            ) {
+                                                Text(
+                                                    text = displayPath.ifBlank { "无文件" },
+                                                    fontSize = exchangeMetrics.compact,
+                                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                    maxLines = 1,
+                                                    modifier = Modifier.weight(1f),
+                                                )
+                                                Text(
+                                                    "…", fontSize = exchangeMetrics.compact,
+                                                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                    modifier = Modifier.clickable(enabled = !isLoading) {
+                                                        val chosen = chooseFileViaSwing()
+                                                        if (chosen != null) {
+                                                            formRows[index] = Triple(row.first, "@$chosen", row.third)
+                                                            commitForm()
+                                                        }
+                                                    }.padding(horizontal = 4.dp),
+                                                )
+                                            }
+                                        } else {
+                                            BasicTextField(
+                                                value = valueText,
+                                                onValueChange = { nv ->
+                                                    formRows[index] = Triple(row.first, nv, row.third)
                                                     commitForm()
-                                                    showValEnvVars = false
                                                 },
-                                                onDismissRequest = { showValEnvVars = false },
+                                                enabled = !isLoading,
+                                                singleLine = true,
+                                                textStyle = rowFieldStyle,
+                                                cursorBrush = if (isDarkTheme) SolidColor(Color.White) else SolidColor(Color.Black),
+                                                modifier = Modifier
+                                                    .fillMaxWidth().fillMaxHeight()
+                                                    .onFocusChanged { fc ->
+                                                        if (fc.isFocused) focusedCell = HeaderFormFocusedCell(index, true)
+                                                        else if (focusedCell == HeaderFormFocusedCell(index, true)) focusedCell = null
+                                                    },
+                                                decorationBox = { innerTextField ->
+                                                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.CenterStart) { innerTextField() }
+                                                },
                                             )
+
+                                            if (showValEnvVars && envVars.isNotEmpty()) {
+                                                EnvVarAutocompletePopup(
+                                                    filterText = valEnvFilter,
+                                                    envVars = envVars,
+                                                    isDarkTheme = isDarkTheme,
+                                                    exchangeMetrics = exchangeMetrics,
+                                                    yOffset = 28.dp,
+                                                    onSelect = { varName ->
+                                                        val newText = applyEnvVarSelection(valueText, varName)
+                                                        formRows[index] = Triple(row.first, newText, row.third)
+                                                        commitForm()
+                                                        showValEnvVars = false
+                                                    },
+                                                    onDismissRequest = { showValEnvVars = false },
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (showFileToggle) {
+                                        // Mode toggle: Text ↔ File
+                                        val isFileMode = valueText.startsWith("@")
+                                        Box(
+                                            modifier = Modifier
+                                                .width(24.dp).fillMaxHeight(),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            IconButton(
+                                                enabled = !isLoading,
+                                                onClick = {
+                                                    if (isFileMode) {
+                                                        formRows[index] = Triple(row.first, valueText.removePrefix("@"), row.third)
+                                                    } else {
+                                                        formRows[index] = Triple(row.first, "@$valueText", row.third)
+                                                    }
+                                                    commitForm()
+                                                },
+                                                modifier = Modifier.size(22.dp),
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (isFileMode) CustomIcons.FileNew else Icons.Filled.Edit,
+                                                    contentDescription = if (isFileMode) "文件模式" else "文本模式",
+                                                    modifier = Modifier.size(14.dp),
+                                                    tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                                )
+                                            }
                                         }
                                     }
                                     Box(
-                                        modifier = Modifier
-                                            .width(22.dp)
-                                            .fillMaxHeight(),
+                                        modifier = Modifier.width(22.dp).fillMaxHeight(),
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         IconButton(
-                                            onClick = {
-                                                formRows.removeAt(index)
-                                                commitForm()
-                                            },
+                                            onClick = { formRows.removeAt(index); commitForm() },
                                             enabled = !isLoading,
                                             modifier = Modifier.size(22.dp),
                                         ) {
@@ -671,11 +713,7 @@ private fun KeyValueTextFormEditor(
                                                 contentDescription = "删除此行",
                                                 modifier = Modifier.size(14.dp),
                                                 tint = MaterialTheme.colors.onSurface.copy(
-                                                    alpha = if (!isLoading) {
-                                                        ContentAlpha.medium
-                                                    } else {
-                                                        ContentAlpha.disabled
-                                                    },
+                                                    alpha = if (!isLoading) ContentAlpha.medium else ContentAlpha.disabled,
                                                 ),
                                             )
                                         }
@@ -722,6 +760,7 @@ internal fun PlainKeyValueEditor(
     modifier: Modifier = Modifier,
     defaultEditMode: KeyValueEditorMode = KeyValueEditorMode.Text,
     envVars: List<EnvVariable> = emptyList(),
+    showFileToggle: Boolean = false,
 ) {
     KeyValueTextFormEditor(
         exchangeMetrics = exchangeMetrics,
@@ -736,6 +775,7 @@ internal fun PlainKeyValueEditor(
         defaultEditMode = defaultEditMode,
         enableHeaderKeySuggestions = false,
         envVars = envVars,
+        showFileToggle = showFileToggle,
     )
 }
 
@@ -768,4 +808,13 @@ internal fun HeadersKeyValueEditor(
         enableHeaderKeySuggestions = true,
         envVars = envVars,
     )
+}
+
+private fun chooseFileViaSwing(): String? {
+    val chooser = javax.swing.JFileChooser()
+    chooser.dialogTitle = "选择文件"
+    val result = chooser.showOpenDialog(null)
+    return if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
+        chooser.selectedFile?.absolutePath
+    } else null
 }

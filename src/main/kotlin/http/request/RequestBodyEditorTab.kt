@@ -101,7 +101,7 @@ private fun BodyContentKindSelector(
     val kind = inferBodyKindFromHeaders(headersText)
     val typeLabel = when (kind) {
         BodyContentKind.NoBody -> "无"
-        BodyContentKind.FormUrlEncoded -> "表单"
+        BodyContentKind.FormUrlEncoded, BodyContentKind.FormData -> "表单"
         BodyContentKind.Json -> "JSON"
         BodyContentKind.Xml -> "XML"
     }
@@ -266,7 +266,7 @@ fun BoxScope.RequestBodyEditorTab(
                 isDarkTheme = isDarkTheme,
                 modifier = Modifier.weight(1f).fillMaxWidth().padding(end = 10.dp),
             )
-        } else if (bodyKind == BodyContentKind.FormUrlEncoded) {
+        } else if (bodyKind == BodyContentKind.FormUrlEncoded || bodyKind == BodyContentKind.FormData) {
             PlainKeyValueEditor(
                 exchangeMetrics = exchangeMetrics,
                 editorRequestId = editorRequestId,
@@ -279,6 +279,7 @@ fun BoxScope.RequestBodyEditorTab(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 defaultEditMode = KeyValueEditorMode.Form,
                 envVars = envVars,
+                showFileToggle = true,
             )
         } else {
             var showBodyEnvVars by remember { mutableStateOf(false) }

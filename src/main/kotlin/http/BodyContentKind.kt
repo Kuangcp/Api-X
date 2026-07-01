@@ -4,6 +4,7 @@ package http
 enum class BodyContentKind {
     NoBody,
     FormUrlEncoded,
+    FormData,
     Json,
     Xml,
 }
@@ -11,6 +12,7 @@ enum class BodyContentKind {
 fun contentTypeValueForBodyKind(kind: BodyContentKind): String? = when (kind) {
     BodyContentKind.NoBody -> null
     BodyContentKind.FormUrlEncoded -> "application/x-www-form-urlencoded"
+    BodyContentKind.FormData -> "multipart/form-data"
     BodyContentKind.Json -> "application/json"
     BodyContentKind.Xml -> "application/xml"
 }
@@ -25,6 +27,7 @@ fun inferBodyKindFromHeaders(headersText: String): BodyContentKind {
     if (ct.isEmpty()) return BodyContentKind.NoBody
     val lower = ct.lowercase()
     return when {
+        lower.contains("multipart") -> BodyContentKind.FormData
         lower.contains("json") -> BodyContentKind.Json
         lower.contains("xml") -> BodyContentKind.Xml
         else -> BodyContentKind.FormUrlEncoded
