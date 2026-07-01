@@ -811,10 +811,7 @@ internal fun HeadersKeyValueEditor(
 }
 
 private fun chooseFileViaSwing(): String? {
-    val chooser = javax.swing.JFileChooser()
-    chooser.dialogTitle = "选择文件"
-    val result = chooser.showOpenDialog(null)
-    return if (result == javax.swing.JFileChooser.APPROVE_OPTION) {
-        chooser.selectedFile?.absolutePath
-    } else null
+    val dialog = java.awt.FileDialog(null as java.awt.Frame?, "选择文件", java.awt.FileDialog.LOAD)
+    dialog.isVisible = true
+    return dialog.file?.let { java.io.File(dialog.directory, it).absolutePath }
 }

@@ -29,9 +29,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
-import javax.swing.JFileChooser
 import javax.swing.JOptionPane
-import javax.swing.filechooser.FileNameExtensionFilter
 import kotlin.concurrent.thread
 import openapi.parseOpenApiToPortableCollection
 import tree.TreeDragPayload
@@ -144,11 +142,11 @@ fun importCollection(
     repository: CollectionRepository,
 ) {
     EventQueue.invokeLater {
-        val chooser = JFileChooser()
-        chooser.dialogTitle = "导入 Postman Collection"
-        chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
-        if (chooser.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
-        val file = chooser.selectedFile ?: return@invokeLater
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "导入 Postman Collection", java.awt.FileDialog.LOAD)
+        dialog.setFilenameFilter { _, name -> name.endsWith(".json", ignoreCase = true) }
+        dialog.isVisible = true
+        if (dialog.file == null) return@invokeLater
+        val file = java.io.File(dialog.directory, dialog.file)
         try {
             val text = Files.readString(file.toPath(), StandardCharsets.UTF_8)
             val portable = parsePostmanCollectionJsonToPortable(text)
@@ -356,13 +354,12 @@ fun exportPostmanCollection(
     val portable = repository.exportPortableCollection(collectionId) ?: return
     val json = portableCollectionToPostmanV21Json(portable)
     EventQueue.invokeLater {
-        val chooser = JFileChooser()
-        chooser.dialogTitle = "导出 Postman Collection v2.1"
-        chooser.fileFilter = FileNameExtensionFilter("JSON (*.json)", "json")
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "导出 Postman Collection v2.1", java.awt.FileDialog.SAVE)
         val safeBase = portable.name.replace(Regex("""[^\w\u4e00-\u9fff\-_. ]"""), "_").trim().ifEmpty { "collection" }
-        chooser.selectedFile = java.io.File("$safeBase.postman_collection.json")
-        if (chooser.showSaveDialog(null) != JFileChooser.APPROVE_OPTION) return@invokeLater
-        var file = chooser.selectedFile
+        dialog.file = "$safeBase.postman_collection.json"
+        dialog.isVisible = true
+        if (dialog.file == null) return@invokeLater
+        var file = java.io.File(dialog.directory, dialog.file)
         if (!file.name.endsWith(".json", ignoreCase = true)) file = java.io.File(file.parentFile, file.name + ".json")
         try {
             Files.writeString(file.toPath(), json, StandardCharsets.UTF_8)
