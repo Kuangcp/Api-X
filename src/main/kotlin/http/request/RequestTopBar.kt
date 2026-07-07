@@ -116,7 +116,7 @@ fun WindowScope.RequestTopBar(
     var envMenuExpanded by remember { mutableStateOf(false) }
     val activeLabel = environmentsState.activeEnvironment()?.name?.trim()?.takeIf { it.isNotEmpty() }
         ?: "无环境"
-    val envButtonText = "环境: $activeLabel"
+    val envButtonText = activeLabel
     val activeEnvColor = environmentsState.activeEnvironment()?.name?.let {
         envItemColor(it, isDarkTheme)
     }
