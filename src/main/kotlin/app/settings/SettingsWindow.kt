@@ -21,6 +21,8 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
+import androidx.compose.material.Icon
+import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
 import androidx.compose.material.RadioButton
@@ -43,10 +45,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
+import app.ui.CustomIcons
 import app.ui.apiXDarkColors
 import app.ui.hexToColor
 import app.ui.parseHexColorOrNull
 import app.ui.validateBackgroundHexField
+import db.AppPaths
+import java.awt.Desktop
 
 @Composable
 fun SettingsDialogWindow(
@@ -274,6 +279,14 @@ private fun SettingsDialogBody(
                                 colors = outlinedFieldColors,
                             )
                         }
+                        DirectoryPathRow(
+                            label = "数据目录",
+                            path = AppPaths.dataDirectory().toString(),
+                        )
+                        DirectoryPathRow(
+                            label = "日志目录",
+                            path = AppPaths.logDirectory().toString(),
+                        )
                     }
                     1 -> {
                         Text(
@@ -530,6 +543,34 @@ private fun validateBypassLines(text: String): String? {
         }
     }
     return null
+}
+
+@Composable
+private fun DirectoryPathRow(label: String, path: String) {
+    val onSurfaceColor = MaterialTheme.colors.onSurface
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = "$label: $path",
+            style = MaterialTheme.typography.caption,
+            color = onSurfaceColor.copy(alpha = ContentAlpha.medium),
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = { runCatching { Desktop.getDesktop().open(java.io.File(path)) } },
+            modifier = Modifier.size(20.dp),
+        ) {
+            Icon(
+                imageVector = CustomIcons.FolderOpen,
+                contentDescription = "打开$label",
+                tint = onSurfaceColor.copy(alpha = ContentAlpha.medium),
+                modifier = Modifier.size(16.dp),
+            )
+        }
+    }
 }
 
 @Composable
