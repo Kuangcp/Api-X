@@ -661,6 +661,7 @@ private fun CollectionTreeBlock(
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onDeleteRequest = onDeleteRequest,
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
                 onTreeDragEnd = onTreeDragEnd,
@@ -865,6 +866,7 @@ private fun FolderTreeBlock(
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onDeleteRequest = onDeleteRequest,
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
                 onTreeDragEnd = onTreeDragEnd,
@@ -900,6 +902,7 @@ private fun RequestTreeRow(
     onExportRequestAsCurl: (String) -> Unit,
     onExportRequestAsGo: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    onDeleteRequest: (TreeSelection) -> Unit,
     onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
     onTreeDragMove: (Offset) -> Unit,
     onTreeDragEnd: () -> Unit,
@@ -925,6 +928,7 @@ private fun RequestTreeRow(
                 ContextMenuItem("Go") { onExportRequestAsGo(req.id) },
                 ContextMenuItem("复制") { onDuplicateRequestBelow(req.id) },
                 ContextMenuItem("重命名") { onBeginTreeRename(TreeSelection.Request(req.id), req.name) },
+                ContextMenuItem("删除") { onDeleteRequest(TreeSelection.Request(req.id)) },
             )
         }
     ) {
