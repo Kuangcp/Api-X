@@ -183,13 +183,13 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
         out
     }
 
-    fun reorderFolderChildren(collectionId: String, parentFolderId: String?, orderedIds: List<String>) = synchronized(lock) {
+    fun reorderFolderChildren(parentFolderId: String?, orderedIds: List<String>) = synchronized(lock) {
         val now = System.currentTimeMillis()
         for ((i, id) in orderedIds.withIndex()) {
             conn.prepareStatement(
                 """
                 UPDATE folders SET parent_folder_id = ?, sort_order = ?, updated_at = ?
-                WHERE id = ? AND collection_id = ?
+                WHERE id = ?
                 """.trimIndent()
             ).use { ps ->
                 if (parentFolderId == null) ps.setNull(1, Types.VARCHAR)
@@ -197,41 +197,69 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
                 ps.setInt(2, i)
                 ps.setLong(3, now)
                 ps.setString(4, id)
-                ps.setString(5, collectionId)
                 ps.executeUpdate()
             }
         }
     }
 
-    fun moveFolder(folderId: String, newParentFolderId: String?, insertIndex: Int): Boolean = synchronized(lock) {
+    fun moveFolder(folderId: String, newParentFolderId: String?, insertIndex: Int, targetCollectionId: String? = null): Boolean = synchronized(lock) {
         val info = getFolderMoveInfo(folderId) ?: return false
         if (newParentFolderId != null) {
             if (newParentFolderId == folderId) return false
-            if (getFolderCollectionId(newParentFolderId) != info.collectionId) return false
             if (isFolderStrictDescendantOf(newParentFolderId, folderId)) return false
         }
         val oldParent = info.parentFolderId
-        val coll = info.collectionId
-        if (oldParent == newParentFolderId) {
-            val s = loadOrderedFolderIds(coll, oldParent).toMutableList()
-            if (!s.remove(folderId)) return false
-            val idx = insertIndex.coerceIn(0, s.size)
-            s.add(idx, folderId)
-            reorderFolderChildren(coll, oldParent, s)
-            return true
-        }
+        val sourceCollectionId = info.collectionId
+        val actualTargetCollectionId = targetCollectionId ?: sourceCollectionId
+        val isCrossCollection = actualTargetCollectionId != sourceCollectionId
+
         val oldAutoCommit = conn.autoCommit
         return try {
             conn.autoCommit = false
-            val newS = loadOrderedFolderIds(coll, newParentFolderId).toMutableList()
-            newS.remove(folderId)
-            val idx = insertIndex.coerceIn(0, newS.size)
-            newS.add(idx, folderId)
-            reorderFolderChildren(coll, newParentFolderId, newS)
 
-            val oldS = loadOrderedFolderIds(coll, oldParent).toMutableList()
-            oldS.remove(folderId)
-            reorderFolderChildren(coll, oldParent, oldS)
+            if (isCrossCollection) {
+                val now = System.currentTimeMillis()
+                conn.prepareStatement(
+                    "UPDATE folders SET collection_id = ?, parent_folder_id = ?, sort_order = ?, updated_at = ? WHERE id = ?"
+                ).use { ps ->
+                    ps.setString(1, actualTargetCollectionId)
+                    if (newParentFolderId == null) ps.setNull(2, Types.VARCHAR) else ps.setString(2, newParentFolderId)
+                    ps.setInt(3, 0)
+                    ps.setLong(4, now)
+                    ps.setString(5, folderId)
+                    ps.executeUpdate()
+                }
+
+                updateCollectionIdForFolderAndDescendants(folderId, actualTargetCollectionId)
+
+                val newS = loadOrderedFolderIds(actualTargetCollectionId, newParentFolderId).toMutableList()
+                newS.remove(folderId)
+                val idx = insertIndex.coerceIn(0, newS.size)
+                newS.add(idx, folderId)
+                reorderFolderChildren(newParentFolderId, newS)
+
+                val oldS = loadOrderedFolderIds(sourceCollectionId, oldParent).toMutableList()
+                oldS.remove(folderId)
+                reorderFolderChildren(oldParent, oldS)
+            } else {
+                if (oldParent == newParentFolderId) {
+                    val s = loadOrderedFolderIds(sourceCollectionId, oldParent).toMutableList()
+                    if (!s.remove(folderId)) return false
+                    val idx = insertIndex.coerceIn(0, s.size)
+                    s.add(idx, folderId)
+                    reorderFolderChildren(oldParent, s)
+                } else {
+                    val newS = loadOrderedFolderIds(sourceCollectionId, newParentFolderId).toMutableList()
+                    newS.remove(folderId)
+                    val idx = insertIndex.coerceIn(0, newS.size)
+                    newS.add(idx, folderId)
+                    reorderFolderChildren(newParentFolderId, newS)
+
+                    val oldS = loadOrderedFolderIds(sourceCollectionId, oldParent).toMutableList()
+                    oldS.remove(folderId)
+                    reorderFolderChildren(oldParent, oldS)
+                }
+            }
 
             conn.commit()
             true
@@ -240,6 +268,31 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
             throw e
         } finally {
             conn.autoCommit = oldAutoCommit
+        }
+    }
+
+    private fun updateCollectionIdForFolderAndDescendants(folderId: String, targetCollectionId: String) {
+        conn.prepareStatement("UPDATE requests SET collection_id = ? WHERE folder_id = ?").use { ps ->
+            ps.setString(1, targetCollectionId)
+            ps.setString(2, folderId)
+            ps.executeUpdate()
+        }
+
+        val childIds = mutableListOf<String>()
+        conn.prepareStatement("SELECT id FROM folders WHERE parent_folder_id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                while (rs.next()) childIds.add(rs.getString("id"))
+            }
+        }
+
+        for (childId in childIds) {
+            conn.prepareStatement("UPDATE folders SET collection_id = ? WHERE id = ?").use { ps ->
+                ps.setString(1, targetCollectionId)
+                ps.setString(2, childId)
+                ps.executeUpdate()
+            }
+            updateCollectionIdForFolderAndDescendants(childId, targetCollectionId)
         }
     }
 

@@ -342,13 +342,13 @@ internal class RequestTable(private val conn: Connection, private val lock: Any)
         out
     }
 
-    fun reorderRequestChildren(collectionId: String, folderId: String?, orderedIds: List<String>) = synchronized(lock) {
+    fun reorderRequestChildren(folderId: String?, orderedIds: List<String>) = synchronized(lock) {
         val now = System.currentTimeMillis()
         for ((i, id) in orderedIds.withIndex()) {
             conn.prepareStatement(
                 """
                 UPDATE requests SET folder_id = ?, sort_order = ?, updated_at = ?
-                WHERE id = ? AND collection_id = ?
+                WHERE id = ?
                 """.trimIndent()
             ).use { ps ->
                 if (folderId == null) ps.setNull(1, Types.VARCHAR)
@@ -356,7 +356,6 @@ internal class RequestTable(private val conn: Connection, private val lock: Any)
                 ps.setInt(2, i)
                 ps.setLong(3, now)
                 ps.setString(4, id)
-                ps.setString(5, collectionId)
                 ps.executeUpdate()
             }
         }
@@ -374,34 +373,58 @@ internal class RequestTable(private val conn: Connection, private val lock: Any)
         }
     }
 
-    fun moveRequest(requestId: String, newFolderId: String?, insertIndex: Int): Boolean = synchronized(lock) {
+    fun moveRequest(requestId: String, newFolderId: String?, insertIndex: Int, targetCollectionId: String? = null): Boolean = synchronized(lock) {
         val info = getRequestMoveInfo(requestId) ?: return false
-        if (newFolderId != null) {
-            val folderTable = FolderTable(conn, lock)
-            if (folderTable.getFolderCollectionId(newFolderId) != info.collectionId) return false
-        }
         val oldFolder = info.folderId
-        val coll = info.collectionId
-        if (oldFolder == newFolderId) {
-            val s = loadOrderedRequestIds(coll, oldFolder).toMutableList()
-            if (!s.remove(requestId)) return false
-            val idx = insertIndex.coerceIn(0, s.size)
-            s.add(idx, requestId)
-            reorderRequestChildren(coll, oldFolder, s)
-            return true
-        }
+        val sourceCollectionId = info.collectionId
+        val actualTargetCollectionId = targetCollectionId ?: sourceCollectionId
+        val isCrossCollection = actualTargetCollectionId != sourceCollectionId
+
         val oldAutoCommit = conn.autoCommit
         return try {
             conn.autoCommit = false
-            val newS = loadOrderedRequestIds(coll, newFolderId).toMutableList()
-            newS.remove(requestId)
-            val idx = insertIndex.coerceIn(0, newS.size)
-            newS.add(idx, requestId)
-            reorderRequestChildren(coll, newFolderId, newS)
 
-            val oldS = loadOrderedRequestIds(coll, oldFolder).toMutableList()
-            oldS.remove(requestId)
-            reorderRequestChildren(coll, oldFolder, oldS)
+            if (isCrossCollection) {
+                val now = System.currentTimeMillis()
+                conn.prepareStatement(
+                    "UPDATE requests SET collection_id = ?, folder_id = ?, sort_order = ?, updated_at = ? WHERE id = ?"
+                ).use { ps ->
+                    ps.setString(1, actualTargetCollectionId)
+                    if (newFolderId == null) ps.setNull(2, Types.VARCHAR) else ps.setString(2, newFolderId)
+                    ps.setInt(3, 0)
+                    ps.setLong(4, now)
+                    ps.setString(5, requestId)
+                    ps.executeUpdate()
+                }
+
+                val newS = loadOrderedRequestIds(actualTargetCollectionId, newFolderId).toMutableList()
+                newS.remove(requestId)
+                val idx = insertIndex.coerceIn(0, newS.size)
+                newS.add(idx, requestId)
+                reorderRequestChildren(newFolderId, newS)
+
+                val oldS = loadOrderedRequestIds(sourceCollectionId, oldFolder).toMutableList()
+                oldS.remove(requestId)
+                reorderRequestChildren(oldFolder, oldS)
+            } else {
+                if (oldFolder == newFolderId) {
+                    val s = loadOrderedRequestIds(sourceCollectionId, oldFolder).toMutableList()
+                    if (!s.remove(requestId)) return false
+                    val idx = insertIndex.coerceIn(0, s.size)
+                    s.add(idx, requestId)
+                    reorderRequestChildren(oldFolder, s)
+                } else {
+                    val newS = loadOrderedRequestIds(sourceCollectionId, newFolderId).toMutableList()
+                    newS.remove(requestId)
+                    val idx = insertIndex.coerceIn(0, newS.size)
+                    newS.add(idx, requestId)
+                    reorderRequestChildren(newFolderId, newS)
+
+                    val oldS = loadOrderedRequestIds(sourceCollectionId, oldFolder).toMutableList()
+                    oldS.remove(requestId)
+                    reorderRequestChildren(oldFolder, oldS)
+                }
+            }
 
             conn.commit()
             true

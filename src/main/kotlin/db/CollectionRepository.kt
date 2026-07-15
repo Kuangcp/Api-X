@@ -138,32 +138,24 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         when (payload) {
             is TreeDragPayload.Folder -> when (target) {
                 is TreeDropTarget.FolderSlot ->
-                    folderTable.moveFolder(payload.id, target.parentFolderId, target.insertIndex)
+                    folderTable.moveFolder(payload.id, target.parentFolderId, target.insertIndex, target.collectionId)
                 is TreeDropTarget.IntoFolder -> {
                     val n = folderTable.loadOrderedFolderIds(target.collectionId, target.folderId).size
-                    folderTable.moveFolder(payload.id, target.folderId, n)
+                    folderTable.moveFolder(payload.id, target.folderId, n, target.collectionId)
                 }
-                is TreeDropTarget.IntoCollection -> {
-                    val info = folderTable.getFolderMoveInfo(payload.id) ?: return false
-                    if (info.collectionId != target.collectionId) return false
-                    val n = folderTable.loadOrderedFolderIds(target.collectionId, null).size
-                    folderTable.moveFolder(payload.id, null, n)
-                }
+                is TreeDropTarget.IntoCollection ->
+                    folderTable.moveFolder(payload.id, null, 0, target.collectionId)
                 is TreeDropTarget.RequestSlot -> false
             }
             is TreeDragPayload.Request -> when (target) {
                 is TreeDropTarget.RequestSlot ->
-                    requestTable.moveRequest(payload.id, target.folderId, target.insertIndex)
+                    requestTable.moveRequest(payload.id, target.folderId, target.insertIndex, target.collectionId)
                 is TreeDropTarget.IntoFolder -> {
                     val n = requestTable.loadOrderedRequestIds(target.collectionId, target.folderId).size
-                    requestTable.moveRequest(payload.id, target.folderId, n)
+                    requestTable.moveRequest(payload.id, target.folderId, n, target.collectionId)
                 }
-                is TreeDropTarget.IntoCollection -> {
-                    val info = requestTable.getRequestMoveInfo(payload.id) ?: return false
-                    if (info.collectionId != target.collectionId) return false
-                    val n = requestTable.loadOrderedRequestIds(target.collectionId, null).size
-                    requestTable.moveRequest(payload.id, null, n)
-                }
+                is TreeDropTarget.IntoCollection ->
+                    requestTable.moveRequest(payload.id, null, 0, target.collectionId)
                 is TreeDropTarget.FolderSlot -> false
             }
         }
