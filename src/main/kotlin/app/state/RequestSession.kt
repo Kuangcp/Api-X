@@ -19,6 +19,8 @@ class RequestSession(val requestId: String) {
     var responseTimeText by mutableStateOf("")
     var responseSizeText by mutableStateOf("")
     var responseSseEventCount by mutableStateOf("")
+    var responseSseTtftText by mutableStateOf("")
+    var responseSseTpotText by mutableStateOf("")
     var responsePartialLine by mutableStateOf<String?>(null)
     var exchangeRequestPlainText by mutableStateOf("请先选择或创建一个请求")
     var rightTabIndex by mutableStateOf(0)

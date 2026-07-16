@@ -532,6 +532,8 @@ fun App(onExitRequest: () -> Unit) {
                                 responseTimeText = currentSession?.responseTimeText ?: "",
                                 responseSizeText = currentSession?.responseSizeText ?: "",
                                 responseSseEventCount = currentSession?.responseSseEventCount ?: "",
+                                responseSseTtftText = currentSession?.responseSseTtftText ?: "",
+                                responseSseTpotText = currentSession?.responseSseTpotText ?: "",
                                 responseLines = currentSession?.responseLines ?: responseState.placeholderResponseLines,
                                 responsePartialLine = currentSession?.responsePartialLine,
                                 responseHeaderLines = currentSession?.responseHeaderLines ?: responseState.placeholderResponseHeaders,
@@ -556,7 +558,7 @@ fun App(onExitRequest: () -> Unit) {
                                     s.responseLines.clear(); s.responseLines.add("响应结果会显示在这里")
                                     s.responseHeaderLines.clear(); s.responseHeaderLines.add("(暂无响应头)")
                                     s.responsePartialLine = null
-                                    s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""
+                                    s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""; s.responseSseTtftText = ""; s.responseSseTpotText = ""
                                     s.isSseResponse = false
                                     s.sseExtractMode = SseExtractMode.OpenAiCompat
                                     s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"

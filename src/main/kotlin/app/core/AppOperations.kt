@@ -140,6 +140,8 @@ fun startRequest(
     session.responseTimeText = ""
     session.responseSizeText = ""
     session.responseSseEventCount = ""
+    session.responseSseTtftText = ""
+    session.responseSseTpotText = ""
     applyBufferUpdate(control.lineBuffer.drainUpdate(), session.responseLines) { session.responsePartialLine = it }
     Logger.info("HTTP") { "startRequest: $boundRequestId gen=$gen, control started" }
     val flusher = thread(isDaemon = true) {
@@ -170,7 +172,8 @@ fun startRequest(
                 onStatusCode = { code -> EventQueue.invokeLater { if (session.control === control) session.statusCodeText = code.toString() } },
                 onResponseTime = { },
                 onProgress = { bytes -> EventQueue.invokeLater { if (session.control === control) session.responseSizeText = formatBytes(bytes) } },
-                onSseEventCount = { count -> EventQueue.invokeLater { if (session.control === control) session.responseSseEventCount = "${count}个事件" } },
+                onSseEventCount = { count -> EventQueue.invokeLater { if (session.control === control) session.responseSseEventCount = "Event ${count}" } },
+                onSseTiming = { ttftMs, tpotMs -> EventQueue.invokeLater { if (session.control === control) { session.responseSseTtftText = formatDuration(ttftMs); session.responseSseTpotText = formatDuration(tpotMs) } } },
                 onResponseHeaders = { lines -> EventQueue.invokeLater { if (session.control === control) { session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines) } } },
                 onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } }
             )
@@ -333,6 +336,8 @@ private fun startMcpLiveRequest(
     session.responseTimeText = ""
     session.responseSizeText = ""
     session.responseSseEventCount = ""
+    session.responseSseTtftText = ""
+    session.responseSseTpotText = ""
     session.exchangeRequestPlainText = buildString {
         appendLine("MCP live call")
         appendLine(liveConnection.transportLabel)
@@ -456,6 +461,8 @@ fun connectMcpSession(
     session.responseTimeText = ""
     session.responseSizeText = ""
     session.responseSseEventCount = ""
+    session.responseSseTtftText = ""
+    session.responseSseTpotText = ""
     session.exchangeRequestPlainText = buildString {
         appendLine(if (forceReconnect) "Reconnect MCP" else "Connect MCP")
         appendLine(commandLine)
@@ -623,6 +630,8 @@ private fun startMcpLiveCatalogRefresh(
     session.responseTimeText = ""
     session.responseSizeText = ""
     session.responseSseEventCount = ""
+    session.responseSseTtftText = ""
+    session.responseSseTpotText = ""
     session.exchangeRequestPlainText = buildString {
         appendLine("MCP live catalog refresh")
         appendLine(liveConnection.transportLabel)
@@ -740,6 +749,8 @@ private fun startMcpStdioRequest(
     session.responseTimeText = ""
     session.responseSizeText = ""
     session.responseSseEventCount = ""
+    session.responseSseTtftText = ""
+    session.responseSseTpotText = ""
     session.exchangeRequestPlainText = buildString {
         appendLine(transportLabel)
         appendLine(commandLine)

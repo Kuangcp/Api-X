@@ -37,6 +37,8 @@ internal fun ResponseToolbar(
     responseTimeText: String,
     responseSizeText: String,
     responseSseEventCount: String,
+    responseSseTtftText: String = "",
+    responseSseTpotText: String = "",
     searchActive: Boolean,
     onToggleSearch: () -> Unit,
     copyResponseBodyEnabled: Boolean,
@@ -87,7 +89,11 @@ internal fun ResponseToolbar(
             Text(" ", fontSize = tab, color = metaColor)
             Text("$responseTimeText ", fontSize = tab, color = metaColor)
             if (responseSseEventCount.isNotBlank()) {
-                Text("$responseSizeText $responseSseEventCount", fontSize = tab, color = metaColor)
+                val timingPart = buildString {
+                    if (responseSseTtftText.isNotBlank()) append("  TTFT $responseSseTtftText")
+                    if (responseSseTpotText.isNotBlank()) append("  TPOT $responseSseTpotText")
+                }
+                Text("$responseSizeText $responseSseEventCount$timingPart", fontSize = tab, color = metaColor)
             } else {
                 Text(responseSizeText, fontSize = tab, color = metaColor)
             }

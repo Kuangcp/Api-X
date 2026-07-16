@@ -232,6 +232,7 @@ fun sendRequestStreaming(
     onResponseHeaders: (List<String>) -> Unit,
     onChunk: (String) -> Unit,
     onSseEventCount: (Int) -> Unit = {},
+    onSseTiming: (ttftMs: Long, tpotMs: Long) -> Unit = { _, _ -> },
 ) {
     try {
         if (control.cancelled) return
@@ -329,6 +330,9 @@ fun sendRequestStreaming(
                 var firstSseEventArrived = false
                 var sseEventCount = 0
                 var lastLineWasEmpty = true
+                var sseTtftMs = 0L
+                var sseTpotAccumMs = 0L
+                var ssePrevEventEndMs = 0L
                 BufferedReader(InputStreamReader(stream)).use { reader ->
                     while (true) {
                         if (control.cancelled || Thread.currentThread().isInterrupted) break
@@ -341,13 +345,20 @@ fun sendRequestStreaming(
                         if (line.isEmpty()) {
                             if (!lastLineWasEmpty) {
                                 sseEventCount++
+                                val now = System.currentTimeMillis()
+                                if (sseEventCount > 1) {
+                                    sseTpotAccumMs += now - ssePrevEventEndMs
+                                    onSseTiming(sseTtftMs, sseTpotAccumMs / (sseEventCount - 1))
+                                }
+                                ssePrevEventEndMs = now
                                 onSseEventCount(sseEventCount)
                             }
                             lastLineWasEmpty = true
                         } else {
                             if (!firstSseEventArrived) {
                                 firstSseEventArrived = true
-                                onResponseTime(System.currentTimeMillis() - control.startTimeMs)
+                                sseTtftMs = System.currentTimeMillis() - control.startTimeMs
+                                onResponseTime(sseTtftMs)
                             }
                             lastLineWasEmpty = false
                         }
