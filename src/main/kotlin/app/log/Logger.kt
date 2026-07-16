@@ -42,7 +42,7 @@ object Logger {
 
     fun configure() {
         val logDir = AppPaths.logDirectory().toString().replace('\\', '/')
-        val filePattern = "$logDir/{date: yyyy-MM-dd}/api-x_{count}.log"
+        val filePattern = "$logDir/{date: yyyy-MM}/{date: yyyy-MM-dd}_{count}.log"
         Configuration.set("writer.file", filePattern)
         Tinylog.info { "[APP] Api-X log initialized, dir: $logDir" }
     }
