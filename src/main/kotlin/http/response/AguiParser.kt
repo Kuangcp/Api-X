@@ -57,7 +57,7 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
     val messages = mutableListOf<AguiMessage>()
 
     var pendingTextMessage: MutableTextMessage? = null
-    var pendingToolCall: MutableToolCall? = null
+    var pendingToolCalls = mutableMapOf<String, MutableToolCall>()
     var pendingReasoning: MutableReasoning? = null
 
     for (ev in events) {
@@ -76,8 +76,7 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
                 errorMessage = obj["message"]?.jsonPrimitive?.contentOrNull
             }
             "TEXT_MESSAGE_START" -> {
-                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
-                pendingToolCall = null
+                flushPending(pendingTextMessage, null, pendingReasoning, messages)
                 pendingReasoning = null
                 val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
                 val role = obj["role"]?.jsonPrimitive?.contentOrNull ?: "assistant"
@@ -98,39 +97,45 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
                 pendingTextMessage = null
             }
             "TEXT_MESSAGE_CHUNK" -> {
-                handleTextMessageChunk(obj, pendingTextMessage, pendingToolCall, pendingReasoning, messages)?.let { pendingTextMessage = it }
-                pendingToolCall = null
+                handleTextMessageChunk(obj, pendingTextMessage, pendingReasoning, messages)?.let { pendingTextMessage = it }
                 pendingReasoning = null
             }
             "TOOL_CALL_START" -> {
-                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+                flushPending(pendingTextMessage, null, pendingReasoning, messages)
                 pendingTextMessage = null
                 pendingReasoning = null
-                pendingToolCall = MutableToolCall(
-                    toolCallId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull,
+                val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+                pendingToolCalls[tcId] = MutableToolCall(
+                    toolCallId = tcId,
                     toolName = obj["toolCallName"]?.jsonPrimitive?.contentOrNull,
                 )
             }
             "TOOL_CALL_ARGS" -> {
-                pendingToolCall = pendingToolCall?.copy(args = pendingToolCall.args + (obj["delta"]?.jsonPrimitive?.contentOrNull ?: ""))
+                val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull ?: continue
+                val tc = pendingToolCalls[tcId] ?: continue
+                pendingToolCalls[tcId] = tc.copy(args = tc.args + (obj["delta"]?.jsonPrimitive?.contentOrNull ?: ""))
             }
             "TOOL_CALL_END" -> {
-                pendingToolCall = pendingToolCall?.copy(argsComplete = true)
+                val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull ?: continue
+                val tc = pendingToolCalls[tcId] ?: continue
+                pendingToolCalls[tcId] = tc.copy(argsComplete = true)
             }
             "TOOL_CALL_RESULT" -> {
-                pendingToolCall = pendingToolCall?.copy(result = obj["content"]?.jsonPrimitive?.contentOrNull, isComplete = true)
-                pendingToolCall?.let { messages.add(it.toAguiToolCallMessage()) }
-                pendingToolCall = null
+                val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull ?: continue
+                val tc = pendingToolCalls[tcId]?.copy(result = obj["content"]?.jsonPrimitive?.contentOrNull, isComplete = true)
+                if (tc != null) {
+                    messages.add(tc.toAguiToolCallMessage())
+                    pendingToolCalls.remove(tcId)
+                }
             }
             "TOOL_CALL_CHUNK" -> {
-                handleToolCallChunk(obj, pendingTextMessage, pendingToolCall, pendingReasoning, messages)?.let { pendingToolCall = it }
+                handleToolCallChunk(obj, pendingTextMessage, pendingToolCalls, pendingReasoning, messages)
                 pendingTextMessage = null
                 pendingReasoning = null
             }
             "REASONING_MESSAGE_START" -> {
-                flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+                flushPending(pendingTextMessage, null, pendingReasoning, messages)
                 pendingTextMessage = null
-                pendingToolCall = null
                 val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
                 pendingReasoning = MutableReasoning(msgId)
             }
@@ -154,7 +159,11 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
     }
 
     // Flush any pending items
-    flushPending(pendingTextMessage, pendingToolCall, pendingReasoning, messages)
+    flushPending(pendingTextMessage, null, pendingReasoning, messages)
+    // Flush any remaining pending tool calls
+    for (tc in pendingToolCalls.values) {
+        messages.add(tc.toAguiToolCallMessage())
+    }
 
     return AguiRunState(
         runId = runId,
@@ -179,11 +188,10 @@ private fun flushPending(
 private fun handleTextMessageChunk(
     obj: JsonObject,
     current: MutableTextMessage?,
-    pendingToolCall: MutableToolCall?,
     pendingReasoning: MutableReasoning?,
     messages: MutableList<AguiMessage>,
 ): MutableTextMessage? {
-    flushPending(null, pendingToolCall, pendingReasoning, messages)
+    flushPending(null, null, pendingReasoning, messages)
     val delta = obj["delta"]?.jsonPrimitive?.contentOrNull ?: ""
     val msgId = obj["messageId"]?.jsonPrimitive?.contentOrNull
     val role = obj["role"]?.jsonPrimitive?.contentOrNull ?: "assistant"
@@ -202,16 +210,17 @@ private fun handleTextMessageChunk(
 private fun handleToolCallChunk(
     obj: JsonObject,
     textMsg: MutableTextMessage?,
-    current: MutableToolCall?,
+    pendingToolCalls: MutableMap<String, MutableToolCall>,
     reasoning: MutableReasoning?,
     messages: MutableList<AguiMessage>,
-): MutableToolCall? {
+) {
     flushPending(textMsg, null, reasoning, messages)
-    val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull
+    val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull ?: return
     val name = obj["toolCallName"]?.jsonPrimitive?.contentOrNull
     val delta = obj["delta"]?.jsonPrimitive?.contentOrNull ?: ""
-    return if (current?.toolCallId == tcId && current != null) {
-        current.copy(args = current.args + delta)
+    val existing = pendingToolCalls[tcId]
+    pendingToolCalls[tcId] = if (existing != null) {
+        existing.copy(args = existing.args + delta)
     } else {
         MutableToolCall(toolCallId = tcId, toolName = name, args = delta)
     }
