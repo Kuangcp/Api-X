@@ -1,10 +1,18 @@
 package http.response
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.TooltipPlacement
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
@@ -12,6 +20,7 @@ import androidx.compose.material.DropdownMenuItem
 import androidx.compose.material.Icon
 import androidx.compose.material.IconButton
 import androidx.compose.material.MaterialTheme
+import androidx.compose.material.Surface
 import androidx.compose.material.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -24,12 +33,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import app.ui.CustomIcons
 import db.HistoryEntry
 import http.ExchangeFontMetrics
 import http.HttpExchangeErrorStatusMark
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ResponseToolbar(
     exchangeMetrics: ExchangeFontMetrics,
@@ -87,14 +99,27 @@ internal fun ResponseToolbar(
                 }
             )
             Text(" ", fontSize = tab, color = metaColor)
-            Text("$responseTimeText ", fontSize = tab, color = metaColor)
             if (responseSseEventCount.isNotBlank()) {
-                val timingPart = buildString {
-                    if (responseSseTtftText.isNotBlank()) append("  TTFT $responseSseTtftText")
-                    if (responseSseTpotText.isNotBlank()) append("  TPOT $responseSseTpotText")
+                TooltipArea(
+                    tooltip = {
+                        SseTimingTooltip(
+                            eventCount = responseSseEventCount,
+                            ttft = responseSseTtftText,
+                            tpot = responseSseTpotText,
+                        )
+                    },
+                    delayMillis = 350,
+                    tooltipPlacement = TooltipPlacement.CursorPoint(offset = DpOffset(12.dp, 12.dp)),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("$responseTimeText ", fontSize = tab, color = metaColor)
+                        Text(responseSizeText, fontSize = tab, color = metaColor)
+                    }
                 }
-                Text("$responseSizeText $responseSseEventCount$timingPart", fontSize = tab, color = metaColor)
             } else {
+                Text("$responseTimeText ", fontSize = tab, color = metaColor)
                 Text(responseSizeText, fontSize = tab, color = metaColor)
             }
         }
@@ -219,6 +244,36 @@ internal fun ResponseToolbar(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SseTimingTooltip(
+    eventCount: String,
+    ttft: String,
+    tpot: String,
+) {
+    Surface(
+        color = MaterialTheme.colors.surface,
+        contentColor = MaterialTheme.colors.onSurface,
+        elevation = 6.dp,
+        shape = RoundedCornerShape(4.dp),
+    ) {
+        val lines = buildList {
+            add(eventCount)
+            if (ttft.isNotBlank()) add("TTFT $ttft")
+            if (tpot.isNotBlank()) add("TPOT $tpot")
+        }
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+            lines.forEach { line ->
+                Text(
+                    text = line,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp,
+                    color = MaterialTheme.colors.onSurface,
+                )
             }
         }
     }
