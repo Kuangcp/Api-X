@@ -420,7 +420,7 @@ private fun PlainTextOrSseBody(
                     isResponseLoading = isResponseLoading,
                 )
             } else {
-                PlainTextBody(exchangeMetrics, responseLines, responseListState)
+                PlainTextBody(exchangeMetrics, responseLines, responsePartialLine, responseListState)
             }
         }
 
@@ -622,6 +622,7 @@ private data class ContextMenuTarget(
 private fun PlainTextBody(
     exchangeMetrics: ExchangeFontMetrics,
     responseLines: List<String>,
+    responsePartialLine: String?,
     listState: LazyListState,
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
@@ -639,6 +640,18 @@ private fun PlainTextBody(
                             color = MaterialTheme.colors.onSurface,
                         ),
                     )
+                }
+                responsePartialLine?.let { partial ->
+                    item("partial") {
+                        Text(
+                            text = partial,
+                            style = TextStyle(
+                                fontFamily = FontFamily.Monospace,
+                                fontSize = exchangeMetrics.body,
+                                color = MaterialTheme.colors.onSurface,
+                            ),
+                        )
+                    }
                 }
             }
         }
