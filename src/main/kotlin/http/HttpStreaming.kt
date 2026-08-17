@@ -206,6 +206,31 @@ private fun wrapResponseBodyStream(
 
 private val DECODING_CHAIN = setOf("gzip", "x-gzip", "deflate")
 
+/** 判断响应正文是否形似 SSE：首个非空行以 `data:` 或 `event:` 开头（容忍 BOM）。 */
+fun bodyLooksLikeSse(lines: List<String>): Boolean {
+    val first = lines.firstOrNull { it.isNotBlank() } ?: return false
+    val t = first.trimStart().removePrefix("\uFEFF").trimStart()
+    return t.startsWith("data:") || t.startsWith("event:")
+}
+
+/**
+ * 部分服务端以 SSE 流式返回（正文以 `data:` / `event:` 行开头），却未声明 `Content-Type: text/event-stream`
+ * （甚至不返回 Content-Type）。此时依据正文首行嗅探，避免被误判为普通响应而截断显示并丢失 Model 视图。
+ */
+private fun sniffSseContent(raw: InputStream): Boolean {
+    return try {
+        val buf = BufferedInputStream(raw)
+        buf.mark(64 * 1024)
+        val bytes = ByteArray(16 * 1024)
+        val n = buf.read(bytes)
+        buf.reset()
+        if (n <= 0) return false
+        bodyLooksLikeSse(String(bytes, 0, n, StandardCharsets.UTF_8).lines())
+    } catch (e: Exception) {
+        false
+    }
+}
+
 fun joinHeadersEditor(validRows: List<Triple<String, String, Boolean>>, orphanLines: List<String>): String {
     val rowsPart = validRows.joinToString("\n") { (k, v, enabled) ->
         if (enabled) "$k: $v" else "! $k: $v"
@@ -309,20 +334,20 @@ fun sendRequestStreaming(
         val headerLines = formatHttpResponseHeaders(response.headers())
         control.responseHeaderSnapshot = headerLines
         onResponseHeaders(headerLines)
-        val contentType = response.headers().firstValue("Content-Type").orElse("")
-        val isSse = contentType.contains("text/event-stream", ignoreCase = true)
-        control.responseWasSse = isSse
-        onSseDetected(isSse)
         val code = response.statusCode()
         control.responseStatusCode = code
         onStatusCode(code)
+        val contentType = response.headers().firstValue("Content-Type").orElse("")
+        val rawBody = response.body()
+        val isSse = contentType.contains("text/event-stream", ignoreCase = true) || sniffSseContent(rawBody)
+        control.responseWasSse = isSse
+        onSseDetected(isSse)
         if (!isSse) {
             onResponseTime(System.currentTimeMillis() - control.startTimeMs)
         } else {
             onChunk("${LocalTime.now().format(TIME_FORMATTER)} [SSE 连接已建立]\n\n")
         }
 
-        val rawBody = response.body()
         val stream = if (isSse) rawBody else wrapResponseBodyStream(rawBody, response.headers(), control)
         try {
             control.activeInput = stream

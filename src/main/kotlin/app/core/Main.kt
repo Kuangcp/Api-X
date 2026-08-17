@@ -61,6 +61,7 @@ import db.McpCatalogStore
 import db.McpSessionLogStore
 import db.RequestResponseStore
 import http.ExchangeFontMetrics
+import http.bodyLooksLikeSse
 import http.exchangeFontMetrics
 import http.request.RequestEditorProps
 import http.request.RequestSidePanel
@@ -233,7 +234,7 @@ fun App(onExitRequest: () -> Unit) {
                 session.statusCodeText = cached.statusCodeText
                 session.responseTimeText = cached.responseTimeText
                 session.responseSizeText = cached.responseSizeText
-                session.isSseResponse = cached.isSseResponse
+                session.isSseResponse = cached.isSseResponse || bodyLooksLikeSse(cached.responseBodyLines)
                 session.responseSseEventCount = cached.responseSseEventCount
                 session.rightTabIndex = cached.rightTabIndex.coerceIn(0, 2)
                 session.exchangeRequestPlainText = cached.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" }
