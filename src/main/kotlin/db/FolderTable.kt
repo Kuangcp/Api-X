@@ -107,6 +107,32 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
         }
     }
 
+    fun getFolderColor(folderId: String): String? = synchronized(lock) {
+        conn.prepareStatement("SELECT meta_json FROM folders WHERE id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) return@synchronized extractColorFromMetaJson(rs.getString("meta_json") ?: "{}")
+            }
+        }
+        null
+    }
+
+    fun updateFolderColor(folderId: String, colorHex: String?) = synchronized(lock) {
+        val oldMeta = conn.prepareStatement("SELECT meta_json FROM folders WHERE id = ?").use { ps ->
+            ps.setString(1, folderId)
+            ps.executeQuery().use { rs ->
+                if (rs.next()) rs.getString("meta_json") ?: "{}" else "{}"
+            }
+        }
+        val newMeta = mergeColorIntoMetaJson(oldMeta, colorHex)
+        conn.prepareStatement("UPDATE folders SET meta_json = ?, updated_at = ? WHERE id = ?").use { ps ->
+            ps.setString(1, newMeta)
+            ps.setLong(2, System.currentTimeMillis())
+            ps.setString(3, folderId)
+            ps.executeUpdate()
+        }
+    }
+
     fun folderCollectionAndParent(folderId: String): Pair<String, String?>? = synchronized(lock) {
         conn.prepareStatement("SELECT collection_id, parent_folder_id FROM folders WHERE id = ?").use { ps ->
             ps.setString(1, folderId)
@@ -319,16 +345,16 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
     fun buildFolderTree(collectionId: String, parentFolderId: String?): List<UiFolder> = synchronized(lock) {
         val rows = mutableListOf<UiFolderRow>()
         val sql = if (parentFolderId == null) {
-            "SELECT id, name, sort_order FROM folders WHERE collection_id = ? AND parent_folder_id IS NULL ORDER BY sort_order ASC, name ASC"
+            "SELECT id, name, sort_order, meta_json FROM folders WHERE collection_id = ? AND parent_folder_id IS NULL ORDER BY sort_order ASC, name ASC"
         } else {
-            "SELECT id, name, sort_order FROM folders WHERE collection_id = ? AND parent_folder_id = ? ORDER BY sort_order ASC, name ASC"
+            "SELECT id, name, sort_order, meta_json FROM folders WHERE collection_id = ? AND parent_folder_id = ? ORDER BY sort_order ASC, name ASC"
         }
         conn.prepareStatement(sql).use { ps ->
             ps.setString(1, collectionId)
             if (parentFolderId != null) ps.setString(2, parentFolderId)
             ps.executeQuery().use { rs ->
                 while (rs.next()) {
-                    rows += UiFolderRow(rs.getString("id"), rs.getString("name"), rs.getInt("sort_order"))
+                    rows += UiFolderRow(rs.getString("id"), rs.getString("name"), rs.getInt("sort_order"), rs.getString("meta_json") ?: "{}")
                 }
             }
         }
@@ -338,11 +364,12 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
                 name = row.name,
                 children = buildFolderTree(collectionId, row.id),
                 requests = RequestTable(conn, lock).loadRequestSummariesInFolder(collectionId, row.id),
+                color = extractColorFromMetaJson(row.metaJson),
             )
         }
     }
 
-    private data class UiFolderRow(val id: String, val name: String, val sortOrder: Int)
+    private data class UiFolderRow(val id: String, val name: String, val sortOrder: Int, val metaJson: String = "{}")
 
     // ── Portable (import/export) ────────────────────────────
 

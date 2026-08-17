@@ -64,3 +64,29 @@ internal fun extractOpenApiSourceFromMetaJson(metaJson: String): String? {
         null
     }
 }
+
+internal fun mergeColorIntoMetaJson(oldMetaJson: String, colorHex: String?): String {
+    val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+    val meta = try {
+        json.decodeFromString<JsonObject>(oldMetaJson.ifBlank { "{}" }).toMutableMap()
+    } catch (e: Exception) {
+        mutableMapOf<String, kotlinx.serialization.json.JsonElement>()
+    }
+    val normalized = colorHex?.trim()?.takeIf { it.isNotEmpty() }
+    if (normalized == null) {
+        meta.remove("color")
+    } else {
+        meta["color"] = kotlinx.serialization.json.JsonPrimitive(normalized)
+    }
+    return json.encodeToString(JsonObject(meta))
+}
+
+internal fun extractColorFromMetaJson(metaJson: String): String? {
+    val json = Json { ignoreUnknownKeys = true }
+    return try {
+        val meta = json.decodeFromString<JsonObject>(metaJson.ifBlank { "{}" })
+        meta["color"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    } catch (e: Exception) {
+        null
+    }
+}

@@ -45,6 +45,7 @@ import androidx.compose.material.Surface
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import app.ui.CustomIcons
+import app.ui.parseHexColorOrNull
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import mcp.McpCatalogSummary
@@ -541,6 +542,7 @@ private fun CollectionTreeBlock(
             )
     ) {
         val collSel = TreeSelection.Collection(collection.id)
+        val nodeColor = parseHexColorOrNull(collection.color.orEmpty())
         ContextMenuArea(
             items = {
                 buildList {
@@ -556,12 +558,13 @@ private fun CollectionTreeBlock(
         ) {
             TreeRow(
                 depth = depth,
+                contentColor = nodeColor,
                 icon = {
                     Icon(
                         CustomIcons.LibraryBooks,
                         contentDescription = null,
                         modifier = Modifier.size(19.dp),
-                        tint = MaterialTheme.colors.primary.copy(alpha = 0.9f)
+                        tint = nodeColor ?: MaterialTheme.colors.primary.copy(alpha = 0.9f)
                     )
                 },
                 expandIcon = {
@@ -710,6 +713,8 @@ private fun FolderTreeBlock(
     onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
     onTreeDragMove: (Offset) -> Unit,
     onTreeDragEnd: () -> Unit,
+    /** 从祖先文件夹继承下来的颜色（已解析），用于请求与未设置颜色的子文件夹。 */
+    inheritedColor: Color? = null,
 ) {
     val expanded = expandedFolderIds.contains(folder.id)
     val isSelected = selectedNode is TreeSelection.Folder && selectedNode.id == folder.id
@@ -723,6 +728,7 @@ private fun FolderTreeBlock(
     }
     val payload = TreeDragPayload.Folder(folder.id)
     val folderSel = TreeSelection.Folder(folder.id)
+    val nodeColor = parseHexColorOrNull(folder.color.orEmpty()) ?: inheritedColor
     ContextMenuArea(
         items = {
             listOf(
@@ -735,12 +741,13 @@ private fun FolderTreeBlock(
     ) {
         TreeRow(
             depth = depth,
+            contentColor = nodeColor,
             icon = {
                 Icon(
                     if (expanded) CustomIcons.FolderOpen else CustomIcons.Folder,
                     contentDescription = null,
                     modifier = Modifier.size(14.dp),
-                    tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
+                    tint = nodeColor ?: MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
                 )
             },
             expandIcon = {
@@ -830,6 +837,7 @@ private fun FolderTreeBlock(
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
                 onTreeDragEnd = onTreeDragEnd,
+                inheritedColor = nodeColor,
             )
             TreeDropGap(
                 active = dragActive,
@@ -870,6 +878,7 @@ private fun FolderTreeBlock(
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
                 onTreeDragEnd = onTreeDragEnd,
+                inheritedColor = nodeColor,
             )
             TreeDropGap(
                 active = dragActive,
@@ -906,6 +915,8 @@ private fun RequestTreeRow(
     onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
     onTreeDragMove: (Offset) -> Unit,
     onTreeDragEnd: () -> Unit,
+    /** 从最近父级文件夹继承的颜色；null 表示跟随主题。 */
+    inheritedColor: Color? = null,
 ) {
     val isTreeSelected = selectedNode is TreeSelection.Request && selectedNode.id == req.id
     val editingThis = editorBoundRequestId == req.id
@@ -946,6 +957,7 @@ private fun RequestTreeRow(
             depth = depth,
             iconColumnWidth = methodIconColumnW,
             iconNameSpacing = 6.dp,
+            contentColor = inheritedColor,
             icon = {
                 Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.CenterStart) {
                     if (isRunning) {
@@ -1175,6 +1187,8 @@ private fun TreeRow(
     iconColumnWidth: Dp = 42.dp,
     /** 图标与标题名之间的留白。 */
     iconNameSpacing: Dp = 0.dp,
+    /** 名称文字颜色；null 时回退到主题 onSurface。 */
+    contentColor: Color? = null,
 ) {
     val doubleTapMs = LocalViewConfiguration.current.doubleTapTimeoutMillis
     var lastClickMs by remember { mutableStateOf(0L) }
@@ -1231,7 +1245,7 @@ private fun TreeRow(
             ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colors.onSurface,
+            color = contentColor ?: MaterialTheme.colors.onSurface,
             modifier = Modifier.weight(1f)
         )
     }

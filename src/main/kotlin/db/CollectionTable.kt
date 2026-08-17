@@ -99,6 +99,21 @@ internal class CollectionTable(private val conn: Connection, private val lock: A
         extractOpenApiSourceFromMetaJson(getCollectionMetaJson(collectionId))
     }
 
+    fun getCollectionColor(collectionId: String): String? = synchronized(lock) {
+        extractColorFromMetaJson(getCollectionMetaJson(collectionId))
+    }
+
+    fun updateCollectionColor(collectionId: String, colorHex: String?) = synchronized(lock) {
+        val oldMeta = getCollectionMetaJson(collectionId)
+        val newMeta = mergeColorIntoMetaJson(oldMeta, colorHex)
+        conn.prepareStatement("UPDATE collections SET meta_json = ?, updated_at = ? WHERE id = ?").use { ps ->
+            ps.setString(1, newMeta)
+            ps.setLong(2, System.currentTimeMillis())
+            ps.setString(3, collectionId)
+            ps.executeUpdate()
+        }
+    }
+
     fun getCollectionMetaJson(id: String): String = synchronized(lock) {
         conn.prepareStatement("SELECT meta_json FROM collections WHERE id = ?").use { ps ->
             ps.setString(1, id)

@@ -62,6 +62,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 folders = folderTable.buildFolderTree(id, null),
                 rootRequests = requestTable.loadRequestSummariesInFolder(id, null),
                 openApiSourceUrl = collectionTable.getCollectionOpenApiSource(id),
+                color = collectionTable.getCollectionColor(id),
             )
         }
     }
@@ -97,6 +98,10 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     fun updateCollectionOpenApiSource(collectionId: String, sourceUrl: String?) = collectionTable.updateCollectionOpenApiSource(collectionId, sourceUrl)
     fun getFolderAuth(folderId: String) = folderTable.getFolderAuth(folderId)
     fun updateFolderAuth(folderId: String, auth: tree.PostmanAuth?) = folderTable.updateFolderAuth(folderId, auth)
+    fun getCollectionColor(collectionId: String) = collectionTable.getCollectionColor(collectionId)
+    fun updateCollectionColor(collectionId: String, colorHex: String?) = collectionTable.updateCollectionColor(collectionId, colorHex)
+    fun getFolderColor(folderId: String) = folderTable.getFolderColor(folderId)
+    fun updateFolderColor(folderId: String, colorHex: String?) = folderTable.updateFolderColor(folderId, colorHex)
     fun resolveEffectiveAuth(requestId: String) = requestTable.resolveEffectiveAuth(requestId, folderTable, collectionTable)
 
     fun getFolderCollectionId(folderId: String) = folderTable.getFolderCollectionId(folderId)

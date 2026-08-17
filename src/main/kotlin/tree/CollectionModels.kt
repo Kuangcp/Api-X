@@ -7,6 +7,7 @@ data class UiCollection(
     val folders: List<UiFolder>,
     val rootRequests: List<UiRequestSummary>,
     val openApiSourceUrl: String? = null,
+    val color: String? = null,
 )
 
 data class UiFolder(
@@ -14,6 +15,7 @@ data class UiFolder(
     val name: String,
     val children: List<UiFolder>,
     val requests: List<UiRequestSummary>,
+    val color: String? = null,
 )
 
 data class UiRequestSummary(

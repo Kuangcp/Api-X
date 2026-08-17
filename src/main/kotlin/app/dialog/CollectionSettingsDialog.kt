@@ -1,17 +1,21 @@
 package app.dialog
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import app.ui.apiXDarkColors
+import app.ui.parseHexColorOrNull
 import db.CollectionRepository
 import http.request.AuthEditor
 import http.ExchangeFontMetrics
@@ -88,6 +92,17 @@ private fun CollectionSettingsBody(
             }
         )
     }
+    val initialColor = remember(target) {
+        when (target) {
+            is TreeSelection.Collection -> repository.getCollectionColor(target.id)
+            is TreeSelection.Folder -> repository.getFolderColor(target.id)
+            else -> null
+        }
+    }
+    var colorHex by remember(target) { mutableStateOf(initialColor) }
+
+    val isCollection = target is TreeSelection.Collection
+    val colorSection = if (isCollection) 2 else 1
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
         Row(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -104,13 +119,18 @@ private fun CollectionSettingsBody(
                     selected = section == 0,
                     onClick = { section = 0 },
                 )
-                if (target is TreeSelection.Collection) {
+                if (isCollection) {
                     NavRow(
                         label = "OpenAPI",
                         selected = section == 1,
                         onClick = { section = 1 },
                     )
                 }
+                NavRow(
+                    label = "颜色",
+                    selected = section == colorSection,
+                    onClick = { section = colorSection },
+                )
             }
 
             Divider(
@@ -125,8 +145,8 @@ private fun CollectionSettingsBody(
                     .fillMaxHeight()
                     .padding(start = 16.dp),
             ) {
-                when (section) {
-                    0 -> {
+                when {
+                    section == 0 -> {
                         AuthEditor(
                             auth = authState,
                             onAuthChange = { authState = it },
@@ -135,7 +155,7 @@ private fun CollectionSettingsBody(
                             modifier = Modifier.fillMaxSize()
                         )
                     }
-                    1 -> if (target is TreeSelection.Collection) {
+                    section == 1 && isCollection -> {
                         Column(modifier = Modifier.fillMaxSize()) {
                             Text("OpenAPI source URL", color = MaterialTheme.colors.onSurface)
                             Spacer(Modifier.height(8.dp))
@@ -154,6 +174,12 @@ private fun CollectionSettingsBody(
                                 style = MaterialTheme.typography.caption,
                             )
                         }
+                    }
+                    section == colorSection -> {
+                        ColorSettingsContent(
+                            colorHex = colorHex,
+                            onColorChange = { colorHex = it },
+                        )
                     }
                 }
             }
@@ -175,8 +201,12 @@ private fun CollectionSettingsBody(
                         is TreeSelection.Collection -> {
                             repository.updateCollectionAuth(target.id, authState)
                             repository.updateCollectionOpenApiSource(target.id, openApiSourceState.trim().takeIf { it.isNotBlank() })
+                            repository.updateCollectionColor(target.id, resolveColorValue(colorHex, initialColor))
                         }
-                        is TreeSelection.Folder -> repository.updateFolderAuth(target.id, authState)
+                        is TreeSelection.Folder -> {
+                            repository.updateFolderAuth(target.id, authState)
+                            repository.updateFolderColor(target.id, resolveColorValue(colorHex, initialColor))
+                        }
                         else -> {}
                     }
                     onSave()
@@ -185,6 +215,86 @@ private fun CollectionSettingsBody(
                 Text("保存")
             }
         }
+    }
+}
+
+private val presetColorHexes = listOf(
+    "#E53935",
+    "#FB8C00",
+    "#FDD835",
+    "#43A047",
+    "#00897B",
+    "#1E88E5",
+    "#3949AB",
+    "#8E24AA",
+    "#D81B60",
+    "#6D4C41",
+)
+
+private val hexColorPattern = Regex("^#?[0-9a-fA-F]{6}$")
+
+private fun resolveColorValue(input: String?, fallback: String?): String? {
+    val t = input?.trim().orEmpty()
+    if (t.isEmpty()) return null
+    if (!hexColorPattern.matches(t)) return fallback
+    return if (t.startsWith("#")) t else "#$t"
+}
+
+@Composable
+private fun ColorSettingsContent(
+    colorHex: String?,
+    onColorChange: (String?) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text("名称与图标颜色", color = MaterialTheme.colors.onSurface)
+        Spacer(Modifier.height(12.dp))
+
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            presetColorHexes.forEach { hex ->
+                val selected = colorHex?.equals(hex, ignoreCase = true) == true
+                Box(
+                    modifier = Modifier
+                        .size(26.dp)
+                        .clip(CircleShape)
+                        .background(parseHexColorOrNull(hex) ?: Color.Transparent)
+                        .border(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) MaterialTheme.colors.primary else MaterialTheme.colors.onSurface.copy(alpha = 0.25f),
+                            shape = CircleShape,
+                        )
+                        .clickable { onColorChange(hex) },
+                )
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
+        Text(
+            "自定义颜色（#RRGGBB）",
+            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            style = MaterialTheme.typography.caption,
+        )
+        Spacer(Modifier.height(8.dp))
+        OutlinedTextField(
+            value = colorHex.orEmpty(),
+            onValueChange = { onColorChange(it.ifBlank { null }) },
+            label = { Text("颜色值") },
+            placeholder = { Text("#1E88E5") },
+            singleLine = true,
+            modifier = Modifier.widthIn(max = 220.dp),
+        )
+
+        Spacer(Modifier.height(16.dp))
+        TextButton(onClick = { onColorChange(null) }) {
+            Text("跟随主题")
+        }
+        Text(
+            "跟随主题时，图标与名称使用当前日/夜主题的默认配色；手动设置后不再随主题切换。",
+            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            style = MaterialTheme.typography.caption,
+        )
     }
 }
 
