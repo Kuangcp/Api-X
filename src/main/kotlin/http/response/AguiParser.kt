@@ -12,6 +12,19 @@ import kotlinx.serialization.json.long
 private val aguiJson = Json { ignoreUnknownKeys = true; isLenient = true }
 private val timestampSep = " data:"
 
+private val lineTimestampPattern = Regex("""^(\d{2}):(\d{2}):(\d{2})\.(\d{3}) """)
+
+/** 事件时刻：优先取事件 JSON 里的 `time`（epoch 毫秒），否则解析行首的 `HH:mm:ss.SSS` 时间戳。 */
+private fun eventTimeMs(ev: AguiEventArgs): Long? {
+    ev.json["time"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()?.let { return it }
+    val m = lineTimestampPattern.find(ev.line) ?: return null
+    val h = m.groupValues[1].toInt()
+    val min = m.groupValues[2].toInt()
+    val s = m.groupValues[3].toInt()
+    val ms = m.groupValues[4].toInt()
+    return (h * 3600L + min * 60L + s) * 1000L + ms
+}
+
 internal data class AguiEventArgs(
     val line: String,
     val json: JsonObject,
@@ -108,6 +121,7 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
                 pendingToolCalls[tcId] = MutableToolCall(
                     toolCallId = tcId,
                     toolName = obj["toolCallName"]?.jsonPrimitive?.contentOrNull,
+                    startTimeMs = eventTimeMs(ev),
                 )
             }
             "TOOL_CALL_ARGS" -> {
@@ -122,11 +136,14 @@ internal fun buildAguiRunState(events: List<AguiEventArgs>): AguiRunState {
             }
             "TOOL_CALL_RESULT" -> {
                 val tcId = obj["toolCallId"]?.jsonPrimitive?.contentOrNull ?: continue
-                val tc = pendingToolCalls[tcId]?.copy(result = obj["content"]?.jsonPrimitive?.contentOrNull, isComplete = true)
-                if (tc != null) {
-                    messages.add(tc.toAguiToolCallMessage())
-                    pendingToolCalls.remove(tcId)
-                }
+                val base = pendingToolCalls[tcId] ?: continue
+                val resultTime = eventTimeMs(ev)
+                val durationMs = if (base.startTimeMs != null && resultTime != null && resultTime >= base.startTimeMs) {
+                    resultTime - base.startTimeMs
+                } else null
+                val tc = base.copy(result = obj["content"]?.jsonPrimitive?.contentOrNull, isComplete = true, durationMs = durationMs)
+                messages.add(tc.toAguiToolCallMessage())
+                pendingToolCalls.remove(tcId)
             }
             "TOOL_CALL_CHUNK" -> {
                 handleToolCallChunk(obj, pendingTextMessage, pendingToolCalls, pendingReasoning, messages)
@@ -242,9 +259,11 @@ private data class MutableToolCall(
     val argsComplete: Boolean = false,
     val result: String? = null,
     val isComplete: Boolean = false,
+    val startTimeMs: Long? = null,
+    val durationMs: Long? = null,
 ) {
     fun toAguiToolCallMessage() = AguiToolCallMessage(
-        messageId = null, toolCallId, toolName, args, argsComplete, result, isComplete,
+        messageId = null, toolCallId, toolName, args, argsComplete, result, isComplete, durationMs,
     )
 }
 

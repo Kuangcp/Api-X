@@ -215,6 +215,15 @@ private fun AguiToolCallCard(
                         fontSize = exchangeMetrics.tiny,
                         color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                     )
+                    toolCall.durationMs?.let { durationMs ->
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "· ${formatToolDuration(durationMs)}",
+                            fontSize = exchangeMetrics.tiny,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colors.primary,
+                        )
+                    }
                 }
             }
             Text(
@@ -250,6 +259,18 @@ private fun AguiToolCallCard(
             }
         }
     }
+}
+
+private fun formatToolDuration(ms: Long): String {
+    if (ms < 1000) return "${ms}ms"
+    val totalSec = ms / 1000
+    if (totalSec < 60) {
+        val tenths = (ms % 1000) / 100
+        return "${totalSec}.${tenths}s"
+    }
+    val min = totalSec / 60
+    val sec = totalSec % 60
+    return "${min}m${sec.toString().padStart(2, '0')}s"
 }
 
 @Composable

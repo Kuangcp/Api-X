@@ -19,6 +19,8 @@ data class AguiToolCallMessage(
     val argsComplete: Boolean,
     val result: String?,
     val isComplete: Boolean,
+    /** 工具执行耗时（毫秒）：TOOL_CALL_RESULT 时刻 - TOOL_CALL_START 时刻；缺失时为 null。 */
+    val durationMs: Long? = null,
 ) : AguiMessage
 
 data class AguiReasoningBlock(
