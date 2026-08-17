@@ -151,6 +151,19 @@ fun App(onExitRequest: () -> Unit) {
     var contentRowWidthPx by remember { mutableStateOf(1f) }
 
     val currentSession = editorState.editorRequestId?.let { responseState.getOrCreateSession(it) }
+    val requestMetaText = remember(editorState.editorRequestId) {
+        val id = editorState.editorRequestId
+        if (id == null) null else {
+            val r = repository.getRequest(id)
+            buildString {
+                append("Request: ").append(id)
+                if (r != null) {
+                    append("\nCollection: ").append(r.collectionId)
+                    append("\nFolder: ").append(r.folderId ?: "(无)")
+                }
+            }
+        }
+    }
     val mcpSelectionState = remember { McpSelectionState() }
     val mcpConnectionState = remember { McpConnectionState() }
     val isCurrentMcpConnected = isCurrentMcpConnectionActive(editorState, environmentState, mcpConnectionState)
@@ -538,6 +551,7 @@ fun App(onExitRequest: () -> Unit) {
                                 responsePartialLine = currentSession?.responsePartialLine,
                                 responseHeaderLines = currentSession?.responseHeaderLines ?: responseState.placeholderResponseHeaders,
                                 requestPlainText = currentSession?.exchangeRequestPlainText ?: "请先选择或创建一个请求",
+                                requestMetaText = requestMetaText,
                                 rightTabIndex = currentSession?.rightTabIndex ?: 0,
                                 onRightTabIndexChange = { currentSession?.rightTabIndex = it.coerceIn(0, 2) },
                                 isSseResponse = currentSession?.isSseResponse ?: false,

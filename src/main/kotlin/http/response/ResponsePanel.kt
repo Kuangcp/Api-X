@@ -63,6 +63,7 @@ fun ResponsePanel(
     responsePartialLine: String?,
     responseHeaderLines: List<String>,
     requestPlainText: String,
+    requestMetaText: String? = null,
     rightTabIndex: Int,
     onRightTabIndexChange: (Int) -> Unit,
     isSseResponse: Boolean,
@@ -281,7 +282,7 @@ fun ResponsePanel(
                     .background(MaterialTheme.colors.surface).padding(12.dp),
             ) {
                 when (rightTabIndex) {
-                    2 -> ResponseRequestView(exchangeMetrics, requestPlainText)
+                    2 -> ResponseRequestView(exchangeMetrics, requestPlainText, requestMetaText)
                     1 -> ResponseHeadersView(exchangeMetrics, responseHeaderLines, responseHeadersListState)
                     else -> Column(modifier = Modifier.fillMaxSize()) {
                         // Search bar
