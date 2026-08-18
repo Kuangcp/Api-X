@@ -213,15 +213,21 @@ fun bodyLooksLikeSse(lines: List<String>): Boolean {
     return t.startsWith("data:") || t.startsWith("event:")
 }
 
+/** 嗅探用的共享缓冲流缓冲区大小，必须能装下整个嗅探读取量，保证 mark/reset 后仍在缓冲区起点。 */
+private const val SNIFF_BUFFER_SIZE = 64 * 1024
+private const val SNIFF_READ_BYTES = 16 * 1024
+
 /**
  * 部分服务端以 SSE 流式返回（正文以 `data:` / `event:` 行开头），却未声明 `Content-Type: text/event-stream`
  * （甚至不返回 Content-Type）。此时依据正文首行嗅探，避免被误判为普通响应而截断显示并丢失 Model 视图。
+ *
+ * 必须在调用方共用的 [BufferedInputStream]（缓冲区不小于 [SNIFF_BUFFER_SIZE]）上执行 mark/reset，
+ * 否则新套一层缓冲流会消费底层流，导致嗅探后正文丢失（小响应直接读空）。
  */
-private fun sniffSseContent(raw: InputStream): Boolean {
+private fun sniffSseContent(buf: BufferedInputStream): Boolean {
     return try {
-        val buf = BufferedInputStream(raw)
-        buf.mark(64 * 1024)
-        val bytes = ByteArray(16 * 1024)
+        buf.mark(SNIFF_BUFFER_SIZE)
+        val bytes = ByteArray(SNIFF_READ_BYTES)
         val n = buf.read(bytes)
         buf.reset()
         if (n <= 0) return false
@@ -338,7 +344,7 @@ fun sendRequestStreaming(
         control.responseStatusCode = code
         onStatusCode(code)
         val contentType = response.headers().firstValue("Content-Type").orElse("")
-        val rawBody = response.body()
+        val rawBody = BufferedInputStream(response.body(), SNIFF_BUFFER_SIZE)
         val isSse = contentType.contains("text/event-stream", ignoreCase = true) || sniffSseContent(rawBody)
         control.responseWasSse = isSse
         onSseDetected(isSse)

@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.github.kuangcp"
-version = "1.4.1"
+version = "1.4.2"
 
 val appIconPng = layout.projectDirectory.file("api.png").asFile
 val appIconIco = layout.projectDirectory.file("api.ico").asFile
