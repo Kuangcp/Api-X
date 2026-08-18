@@ -293,7 +293,9 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         val oldAutoCommit = conn.autoCommit
         conn.autoCommit = false
         try {
-            val metaJson = mergeAuthIntoMetaJson(portable.collectionMetaJson, portable.auth)
+            val auth = portable.auth ?: collectionTable.getCollectionAuth(targetCollectionId)
+            val color = extractColorFromMetaJson(portable.collectionMetaJson) ?: collectionTable.getCollectionColor(targetCollectionId)
+            val metaJson = mergeColorIntoMetaJson(mergeAuthIntoMetaJson(portable.collectionMetaJson, auth), color)
             conn.prepareStatement(
                 "UPDATE collections SET name = ?, meta_json = ?, updated_at = ? WHERE id = ?"
             ).use { ps ->

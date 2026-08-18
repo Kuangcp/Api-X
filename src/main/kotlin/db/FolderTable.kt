@@ -460,7 +460,9 @@ internal class FolderTable(private val conn: Connection, private val lock: Any) 
         pf: PortableFolder,
         now: Long,
     ) {
-        val metaJson = mergeAuthIntoMetaJson(pf.metaJson, pf.auth)
+        val auth = pf.auth ?: getFolderAuth(folderId)
+        val color = extractColorFromMetaJson(pf.metaJson) ?: getFolderColor(folderId)
+        val metaJson = mergeColorIntoMetaJson(mergeAuthIntoMetaJson(pf.metaJson, auth), color)
         conn.prepareStatement(
             """
             UPDATE folders SET name = ?, parent_folder_id = ?, sort_order = ?, updated_at = ?, meta_json = ?
