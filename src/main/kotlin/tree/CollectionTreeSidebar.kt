@@ -237,37 +237,12 @@ fun CollectionTreeSidebar(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = onAddCollection,
-                modifier = Modifier.size(30.dp)
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = "新建集合",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium)
-                )
-            }
-            IconButton(
-                onClick = onAddFolder,
-                enabled = folderAddEnabled,
-                modifier = Modifier.size(30.dp)
-            ) {
-                Icon(
-                    CustomIcons.CreateNewFolder,
-                    contentDescription = "新建文件夹",
-                    modifier = Modifier.size(18.dp),
-                    tint = MaterialTheme.colors.onSurface.copy(
-                        alpha = if (folderAddEnabled) ContentAlpha.medium else ContentAlpha.disabled
-                    )
-                )
-            }
-            IconButton(
                 onClick = onAddRequest,
                 enabled = requestAddEnabled,
                 modifier = Modifier.size(30.dp)
             ) {
                 Icon(
-                    CustomIcons.FileNew,
+                    Icons.Filled.Add,
                     contentDescription = "新建请求",
                     modifier = Modifier.size(18.dp),
                     tint = MaterialTheme.colors.onSurface.copy(
@@ -318,6 +293,13 @@ fun CollectionTreeSidebar(
         )
         val scroll = rememberScrollState()
         val scrollWhileNotDragging = treeDragPayload == null
+        ContextMenuArea(
+            items = {
+                buildList {
+                    add(ContextMenuItem("新建集合") { onAddCollection() })
+                }
+            }
+        ) {
         Box(
             modifier = Modifier
                 .weight(1f)
@@ -329,12 +311,19 @@ fun CollectionTreeSidebar(
                     .verticalScroll(scroll, enabled = scrollWhileNotDragging)
             ) {
                 if (tree.isEmpty()) {
-                    Text(
-                        "暂无集合",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                        modifier = Modifier.padding(6.dp)
-                    )
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Text(
+                            "暂无集合",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        TextButton(onClick = onAddCollection) {
+                            Text("新建集合", fontSize = 14.sp)
+                        }
+                    }
                 } else {
                     tree.forEach { coll ->
                         CollectionTreeBlock(
@@ -398,6 +387,7 @@ fun CollectionTreeSidebar(
                     .fillMaxHeight(),
                 adapter = rememberScrollbarAdapter(scroll)
             )
+        }
         }
     }
 
