@@ -242,19 +242,23 @@ private fun AguiToolCallCard(
                 if (toolCall.args.isNotBlank()) {
                     Text("Arguments:", fontSize = exchangeMetrics.tiny, fontWeight = FontWeight.Medium, color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium))
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        toolCall.args,
-                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface),
-                    )
+                    SelectionContainer {
+                        Text(
+                            toolCall.args,
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface),
+                        )
+                    }
                 }
                 if (toolCall.result != null) {
                     Spacer(Modifier.height(8.dp))
                     Text("Result:", fontSize = exchangeMetrics.tiny, fontWeight = FontWeight.Medium, color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium))
                     Spacer(Modifier.height(4.dp))
-                    Text(
-                        toolCall.result,
-                        style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface),
-                    )
+                    SelectionContainer {
+                        Text(
+                            toolCall.result,
+                            style = TextStyle(fontFamily = FontFamily.Monospace, fontSize = exchangeMetrics.body, color = MaterialTheme.colors.onSurface),
+                        )
+                    }
                 }
             }
         }
