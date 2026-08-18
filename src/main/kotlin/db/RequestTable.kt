@@ -110,8 +110,8 @@ internal class RequestTable(private val conn: Connection, private val lock: Any)
         val id = newId()
         val now = System.currentTimeMillis()
         val sort = nextRequestSortOrder(collectionId, folderId)
-        val defaultHeaders = "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
-        val defaultBody = "key: value"
+        val defaultHeaders = "Accept: */*"
+        val defaultBody = ""
         conn.prepareStatement(
             """
             INSERT INTO requests (id, collection_id, folder_id, name, method, url, headers_text, params_text, body_text, sort_order, created_at, updated_at, meta_json)
@@ -217,8 +217,8 @@ internal class RequestTable(private val conn: Connection, private val lock: Any)
         val newId = newId()
         val insertAt = row.sortOrder + 1
         val now = System.currentTimeMillis()
-        val defaultHeaders = "Content-Type: application/x-www-form-urlencoded\nAccept: */*"
-        val defaultBody = "key: value"
+        val defaultHeaders = "Accept: */*"
+        val defaultBody = ""
         val oldAutoCommit = conn.autoCommit
         return try {
             conn.autoCommit = false
