@@ -197,6 +197,8 @@ fun CollectionTreeSidebar(
     onRefreshOpenApiCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
     onApplyTreeDrop: (TreeDragPayload, TreeDropTarget) -> Boolean,
+    /** 右键菜单：解析剪贴板 cURL 并在指定 Folder / Request 下新建请求。 */
+    onImportCurlAt: (TreeSelection) -> Unit = { _ -> },
     folderAddEnabled: Boolean,
     requestAddEnabled: Boolean,
     modifier: Modifier = Modifier,
@@ -364,6 +366,7 @@ fun CollectionTreeSidebar(
                             onExportPostmanCollection = onExportPostmanCollection,
                             onRefreshOpenApiCollection = onRefreshOpenApiCollection,
                             onDuplicateRequestBelow = onDuplicateRequestBelow,
+                            onImportCurlAt = onImportCurlAt,
                             dragging = treeDragPayload,
                             dropRegistry = dropRegistry,
                             hoveredDropTarget = hoveredDropTarget,
@@ -508,6 +511,7 @@ private fun CollectionTreeBlock(
     onExportPostmanCollection: (String) -> Unit,
     onRefreshOpenApiCollection: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    onImportCurlAt: (TreeSelection) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
     hoveredDropTarget: TreeDropTarget?,
@@ -627,6 +631,7 @@ private fun CollectionTreeBlock(
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onImportCurlAt = onImportCurlAt,
                 dragging = dragging,
                 dropRegistry = dropRegistry,
                 hoveredDropTarget = hoveredDropTarget,
@@ -669,6 +674,7 @@ private fun CollectionTreeBlock(
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onImportCurlAt = onImportCurlAt,
                 onDeleteRequest = onDeleteRequest,
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
@@ -712,6 +718,7 @@ private fun FolderTreeBlock(
     onExportRequestAsCurl: (String) -> Unit,
     onExportRequestAsGo: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    onImportCurlAt: (TreeSelection) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
     hoveredDropTarget: TreeDropTarget?,
@@ -739,6 +746,7 @@ private fun FolderTreeBlock(
             listOf(
                 ContextMenuItem("新建文件夹") { onContextAddFolder(folderSel) },
                 ContextMenuItem("新建请求") { onContextAddRequest(folderSel) },
+                ContextMenuItem("解析 cURL") { onImportCurlAt(folderSel) },
                 ContextMenuItem("删除") { onDeleteRequest(folderSel) },
                 ContextMenuItem("设置") { onSettings(folderSel) },
             )
@@ -836,6 +844,7 @@ private fun FolderTreeBlock(
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onImportCurlAt = onImportCurlAt,
                 dragging = dragging,
                 dropRegistry = dropRegistry,
                 hoveredDropTarget = hoveredDropTarget,
@@ -879,6 +888,7 @@ private fun FolderTreeBlock(
                 onExportRequestAsCurl = onExportRequestAsCurl,
                 onExportRequestAsGo = onExportRequestAsGo,
                 onDuplicateRequestBelow = onDuplicateRequestBelow,
+                onImportCurlAt = onImportCurlAt,
                 onDeleteRequest = onDeleteRequest,
                 onTreeDragStart = onTreeDragStart,
                 onTreeDragMove = onTreeDragMove,
@@ -916,6 +926,7 @@ private fun RequestTreeRow(
     onExportRequestAsCurl: (String) -> Unit,
     onExportRequestAsGo: (String) -> Unit,
     onDuplicateRequestBelow: (String) -> Unit,
+    onImportCurlAt: (TreeSelection) -> Unit,
     onDeleteRequest: (TreeSelection) -> Unit,
     onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
     onTreeDragMove: (Offset) -> Unit,
@@ -940,6 +951,7 @@ private fun RequestTreeRow(
     ContextMenuArea(
         items = {
             listOf(
+                ContextMenuItem("解析 cURL") { onImportCurlAt(TreeSelection.Request(req.id)) },
                 ContextMenuItem("cURL") { onExportRequestAsCurl(req.id) },
                 ContextMenuItem("Go") { onExportRequestAsGo(req.id) },
                 ContextMenuItem("复制") { onDuplicateRequestBelow(req.id) },

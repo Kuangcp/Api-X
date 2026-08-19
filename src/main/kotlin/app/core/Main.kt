@@ -465,6 +465,7 @@ fun App(onExitRequest: () -> Unit) {
                                 onExportPostmanCollection = { exportPostmanCollection(repository, toastState, responseState, it) },
                                 onRefreshOpenApiCollection = { refreshOpenApiCollection(treeState, toastState, repository, it) },
                                 onDuplicateRequestBelow = { duplicateRequest(treeState, editorState, repository, it) },
+                                onImportCurlAt = { importCurl(treeState, editorState, responseState, toastState, repository, target = it) },
                                 onApplyTreeDrop = { payload, target -> applyTreeDrop(treeState, repository, payload, target) },
                             )
                             var treeDragStartRatio by remember { mutableStateOf(0f) }

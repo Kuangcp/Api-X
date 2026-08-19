@@ -169,6 +169,8 @@ fun importCurl(
     responseState: ResponseState,
     toastState: ToastState,
     repository: CollectionRepository,
+    /** 显式指定新建请求的位置；null 时回退到当前选中/编辑器逻辑。 */
+    target: TreeSelection? = null,
 ) {
     try {
         val clipboardText = readClipboardText()
@@ -178,26 +180,37 @@ fun importCurl(
         val newId: String
         val urlIfCurlUrlBlank: String
 
-        val treeSel = treeState.treeSelection
-        if (treeSel is TreeSelection.Folder) {
-            val target = repository.newRequestTarget(treeSel)
-            if (target == null) { showToast(toastState, "无法在选中文件夹下创建请求"); return }
-            val (cid, fid) = target
-            newId = repository.createRequest(cid, fid, "新请求")
-            treeState.refresh()
-            val placed = repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
-            treeState.expandedCollectionIds = treeState.expandedCollectionIds + placed.collectionId
-            if (fid != null) treeState.expandedFolderIds = treeState.expandedFolderIds + fid
-            urlIfCurlUrlBlank = ""
-        } else {
-            val activeId = editorState.editorRequestId
-            if (activeId == null) { showToast(toastState, "请先在编辑器中打开一个请求后再导入 cURL"); return }
-            urlIfCurlUrlBlank = editorState.url
-            newId = repository.createRequestBelow(activeId) ?: throw IllegalStateException("无法在当前请求下新建条目")
-            treeState.refresh()
-            val placed = repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
-            treeState.expandedCollectionIds = treeState.expandedCollectionIds + placed.collectionId
-            if (placed.folderId != null) treeState.expandedFolderIds = treeState.expandedFolderIds + placed.folderId
+        val place = target ?: treeState.treeSelection
+        when (place) {
+            is TreeSelection.Folder -> {
+                val placement = repository.newRequestTarget(place)
+                if (placement == null) { showToast(toastState, "无法在选中文件夹下创建请求"); return }
+                val (cid, fid) = placement
+                newId = repository.createRequest(cid, fid, "新请求")
+                treeState.refresh()
+                val placed = repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
+                treeState.expandedCollectionIds = treeState.expandedCollectionIds + placed.collectionId
+                if (fid != null) treeState.expandedFolderIds = treeState.expandedFolderIds + fid
+                urlIfCurlUrlBlank = ""
+            }
+            is TreeSelection.Request -> {
+                urlIfCurlUrlBlank = ""
+                newId = repository.createRequestBelow(place.id) ?: throw IllegalStateException("无法在当前请求下新建条目")
+                treeState.refresh()
+                val placed = repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
+                treeState.expandedCollectionIds = treeState.expandedCollectionIds + placed.collectionId
+                if (placed.folderId != null) treeState.expandedFolderIds = treeState.expandedFolderIds + placed.folderId
+            }
+            else -> {
+                val activeId = editorState.editorRequestId
+                if (activeId == null) { showToast(toastState, "请先在编辑器中打开一个请求后再导入 cURL"); return }
+                urlIfCurlUrlBlank = editorState.url
+                newId = repository.createRequestBelow(activeId) ?: throw IllegalStateException("无法在当前请求下新建条目")
+                treeState.refresh()
+                val placed = repository.getRequest(newId) ?: throw IllegalStateException("新建请求后无法读取")
+                treeState.expandedCollectionIds = treeState.expandedCollectionIds + placed.collectionId
+                if (placed.folderId != null) treeState.expandedFolderIds = treeState.expandedFolderIds + placed.folderId
+            }
         }
 
         val rawUrl = parsed.url.ifBlank { urlIfCurlUrlBlank }
