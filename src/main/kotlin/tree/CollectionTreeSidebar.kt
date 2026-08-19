@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.VerticalScrollbar
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -69,6 +70,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.Key
@@ -89,6 +91,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.LayoutCoordinates
@@ -325,11 +328,12 @@ fun CollectionTreeSidebar(
                         }
                     }
                 } else {
-                    tree.forEach { coll ->
+                    tree.forEachIndexed { index, coll ->
                         CollectionTreeBlock(
                             collection = coll,
                             depth = 0,
                             selectedNode = selectedNode,
+                            showDivider = index != 0,
                             treeScrollToRequestId = treeScrollToRequestId,
                             onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
                             editorBoundRequestId = editorBoundRequestId,
@@ -479,6 +483,8 @@ private fun CollectionTreeBlock(
     selectedNode: TreeSelection?,
     treeScrollToRequestId: String?,
     onTreeScrollToRequestHandled: () -> Unit,
+    /** 是否在行上方绘制分隔线，用于区分多个 Collection。 */
+    showDivider: Boolean = false,
     editorBoundRequestId: String?,
     expandedCollectionIds: Set<String>,
     expandedFolderIds: Set<String>,
@@ -518,6 +524,12 @@ private fun CollectionTreeBlock(
     LaunchedEffect(dragActive, collection.id) {
         if (!dragActive) dropRegistry.removeKey(intoCollKey)
     }
+    if (showDivider) {
+        Divider(
+            modifier = Modifier.padding(vertical = 3.dp),
+            color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
+        )
+    }
     Box(
         Modifier
             .fillMaxWidth()
@@ -553,7 +565,7 @@ private fun CollectionTreeBlock(
                     Icon(
                         CustomIcons.LibraryBooks,
                         contentDescription = null,
-                        modifier = Modifier.size(19.dp),
+                        modifier = Modifier.size(20.dp),
                         tint = nodeColor ?: MaterialTheme.colors.primary.copy(alpha = 0.9f)
                     )
                 },
@@ -573,6 +585,9 @@ private fun CollectionTreeBlock(
                     onBeginTreeRename(collSel, collection.name)
                 },
                 dropTargetHighlight = intoCollHighlight,
+                rowHeight = 28.dp,
+                labelFontSize = 16.sp,
+                edgeBarColor = MaterialTheme.colors.onSurface.copy(alpha = 0.35f),
             )
         }
     }
@@ -1179,6 +1194,12 @@ private fun TreeRow(
     iconNameSpacing: Dp = 0.dp,
     /** 名称文字颜色；null 时回退到主题 onSurface。 */
     contentColor: Color? = null,
+    /** 行高，Collection 等层级行可调大以更显眼。 */
+    rowHeight: Dp = 24.dp,
+    /** 名称字号，lineHeight 随之缩放。 */
+    labelFontSize: TextUnit = 15.sp,
+    /** 行最左的窄竖条颜色；null 时不绘制，用于区分层级行。 */
+    edgeBarColor: Color? = null,
 ) {
     val doubleTapMs = LocalViewConfiguration.current.doubleTapTimeoutMillis
     var lastClickMs by remember { mutableStateOf(0L) }
@@ -1207,37 +1228,48 @@ private fun TreeRow(
     } else {
         rowModifier.clickable(onClick = onClick)
     }
-    Row(
+    Box(
         modifier = rowExtraModifier
             .then(clickableModifier)
             .then(dragModifier)
-            .height(24.dp)
-            .padding(horizontal = 0.dp)
-            .padding(start = (depth * 6).dp),
-        verticalAlignment = Alignment.CenterVertically
+            .height(rowHeight),
     ) {
-        Box(Modifier.width(23.dp), contentAlignment = Alignment.Center) {
-            expandIcon()
-        }
-        Box(Modifier.width(iconColumnWidth), contentAlignment = Alignment.Center) {
-            icon()
-        }
-        Spacer(Modifier.width(iconNameSpacing))
-        Text(
-            label,
-            style = TextStyle(
-                fontSize = 15.sp,
-                lineHeight = 18.sp,
-                lineHeightStyle = LineHeightStyle(
-                    alignment = LineHeightStyle.Alignment.Center,
-                    trim = LineHeightStyle.Trim.Both,
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(start = (depth * 6).dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.width(23.dp), contentAlignment = Alignment.Center) {
+                expandIcon()
+            }
+            Box(Modifier.width(iconColumnWidth), contentAlignment = Alignment.Center) {
+                icon()
+            }
+            Spacer(Modifier.width(iconNameSpacing))
+            Text(
+                label,
+                style = TextStyle(
+                    fontSize = labelFontSize,
+                    lineHeight = labelFontSize * 1.2f,
+                    lineHeightStyle = LineHeightStyle(
+                        alignment = LineHeightStyle.Alignment.Center,
+                        trim = LineHeightStyle.Trim.Both,
+                    ),
                 ),
-            ),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = contentColor ?: MaterialTheme.colors.onSurface,
-            modifier = Modifier.weight(1f)
-        )
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = contentColor ?: MaterialTheme.colors.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+        }
+        val barColor = edgeBarColor
+        if (barColor != null) {
+            Canvas(Modifier.matchParentSize()) {
+                val barWidth = 3.dp.toPx()
+                drawRect(barColor, topLeft = Offset.Zero, size = Size(barWidth, size.height))
+            }
+        }
     }
 }
 
