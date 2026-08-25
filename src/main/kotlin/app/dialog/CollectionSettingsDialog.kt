@@ -30,6 +30,7 @@ fun CollectionSettingsDialog(
     isDarkTheme: Boolean,
     typographyBase: Typography,
     exchangeMetrics: ExchangeFontMetrics,
+    envKeys: List<String> = emptyList(),
     onCloseRequest: () -> Unit,
 ) {
     if (!visible || target == null) return
@@ -55,6 +56,7 @@ fun CollectionSettingsDialog(
                     repository = repository,
                     exchangeMetrics = exchangeMetrics,
                     isDarkTheme = isDarkTheme,
+                    envKeys = envKeys,
                     onCancel = onCloseRequest,
                     onSave = {
                         onCloseRequest()
@@ -71,6 +73,7 @@ private fun CollectionSettingsBody(
     repository: CollectionRepository,
     exchangeMetrics: ExchangeFontMetrics,
     isDarkTheme: Boolean,
+    envKeys: List<String>,
     onCancel: () -> Unit,
     onSave: () -> Unit,
 ) {
@@ -89,6 +92,14 @@ private fun CollectionSettingsBody(
             when (target) {
                 is TreeSelection.Collection -> repository.getCollectionOpenApiSource(target.id).orEmpty()
                 else -> ""
+            }
+        )
+    }
+    var openApiRootState by remember(target) {
+        mutableStateOf(
+            when (target) {
+                is TreeSelection.Collection -> repository.getCollectionOpenApiRoot(target.id)
+                else -> null
             }
         )
     }
@@ -173,6 +184,14 @@ private fun CollectionSettingsBody(
                                 color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                                 style = MaterialTheme.typography.caption,
                             )
+                            Spacer(Modifier.height(16.dp))
+                            Text("请求 URL 的 root 来源", color = MaterialTheme.colors.onSurface)
+                            Spacer(Modifier.height(8.dp))
+                            OpenApiRootEditor(
+                                root = openApiRootState,
+                                envKeys = envKeys,
+                                onRootChange = { openApiRootState = it },
+                            )
                         }
                     }
                     section == colorSection -> {
@@ -201,6 +220,7 @@ private fun CollectionSettingsBody(
                         is TreeSelection.Collection -> {
                             repository.updateCollectionAuth(target.id, authState)
                             repository.updateCollectionOpenApiSource(target.id, openApiSourceState.trim().takeIf { it.isNotBlank() })
+                            repository.updateCollectionOpenApiRoot(target.id, openApiRootState)
                             repository.updateCollectionColor(target.id, resolveColorValue(colorHex, initialColor))
                         }
                         is TreeSelection.Folder -> {

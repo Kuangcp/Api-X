@@ -7,6 +7,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.encodeToJsonElement
+import openapi.OpenApiRoot
 import tree.PostmanAuth
 import java.util.UUID
 
@@ -60,6 +61,37 @@ internal fun extractOpenApiSourceFromMetaJson(metaJson: String): String? {
     return try {
         val meta = json.decodeFromString<JsonObject>(metaJson.ifBlank { "{}" })
         meta["openapi"]?.jsonObject?.get("sourceUrl")?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    } catch (e: Exception) {
+        null
+    }
+}
+
+internal fun mergeOpenApiRootIntoMetaJson(oldMetaJson: String, root: OpenApiRoot?): String {
+    val json = Json { ignoreUnknownKeys = true; prettyPrint = false }
+    val meta = try {
+        json.decodeFromString<JsonObject>(oldMetaJson.ifBlank { "{}" }).toMutableMap()
+    } catch (e: Exception) {
+        mutableMapOf<String, kotlinx.serialization.json.JsonElement>()
+    }
+    val oldOpenApi = (meta["openapi"] as? JsonObject)?.toMutableMap() ?: mutableMapOf()
+    if (root == null) {
+        oldOpenApi.remove("root")
+    } else {
+        oldOpenApi["root"] = json.encodeToJsonElement(root)
+    }
+    if (oldOpenApi.isEmpty()) {
+        meta.remove("openapi")
+    } else {
+        meta["openapi"] = JsonObject(oldOpenApi)
+    }
+    return json.encodeToString(JsonObject(meta))
+}
+
+internal fun extractOpenApiRootFromMetaJson(metaJson: String): OpenApiRoot? {
+    val json = Json { ignoreUnknownKeys = true }
+    return try {
+        val meta = json.decodeFromString<JsonObject>(metaJson.ifBlank { "{}" })
+        meta["openapi"]?.jsonObject?.get("root")?.let { json.decodeFromJsonElement(OpenApiRoot.serializer(), it) }
     } catch (e: Exception) {
         null
     }

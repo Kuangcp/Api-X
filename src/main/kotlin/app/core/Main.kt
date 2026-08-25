@@ -650,7 +650,7 @@ fun App(onExitRequest: () -> Unit) {
                     onRefreshTree = { treeState.refresh() },
                     showCreateCollection = dialogState.showCreateCollection,
                     onCloseCreateCollection = { dialogState.showCreateCollection = false },
-                    onCreateCollection = { name, openApiUrl, onResult -> createCollectionFromDialog(treeState, toastState, repository, name, openApiUrl, onResult) },
+                    onCreateCollection = { name, openApiUrl, root, onResult -> createCollectionFromDialog(treeState, toastState, repository, name, openApiUrl, root, onResult) },
                 )
             }
         }

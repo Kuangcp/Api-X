@@ -30,20 +30,22 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
 import app.ui.apiXDarkColors
+import openapi.OpenApiRoot
 
 @Composable
 fun OpenApiImportDialog(
     visible: Boolean,
     isDarkTheme: Boolean,
     typographyBase: androidx.compose.material.Typography,
+    envKeys: List<String> = emptyList(),
     onCloseRequest: () -> Unit,
-    onCreate: (name: String, openApiUrl: String, onResult: (Boolean, String?) -> Unit) -> Unit,
+    onCreate: (name: String, openApiUrl: String, root: OpenApiRoot?, onResult: (Boolean, String?) -> Unit) -> Unit,
 ) {
     if (!visible) return
     DialogWindow(
         onCloseRequest = onCloseRequest,
         title = "新建集合",
-        state = rememberDialogState(width = 560.dp, height = 380.dp),
+        state = rememberDialogState(width = 560.dp, height = 640.dp),
     ) {
         MaterialTheme(
             colors = if (isDarkTheme) apiXDarkColors() else lightColors(background = Color(0xFFF2F2F2)),
@@ -52,6 +54,7 @@ fun OpenApiImportDialog(
             Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colors.background) {
                 var name by remember { mutableStateOf("新集合") }
                 var openApiUrl by remember { mutableStateOf("") }
+                var root by remember { mutableStateOf<OpenApiRoot?>(null) }
                 var isCreating by remember { mutableStateOf(false) }
                 var errorText by remember { mutableStateOf<String?>(null) }
                 Column(modifier = Modifier.fillMaxSize().padding(18.dp)) {
@@ -79,6 +82,14 @@ fun OpenApiImportDialog(
                         color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
                         modifier = Modifier.padding(top = 6.dp),
                     )
+                    Spacer(Modifier.height(12.dp))
+                    Text("请求 URL 的 root 来源", style = MaterialTheme.typography.body2, color = MaterialTheme.colors.onSurface)
+                    Spacer(Modifier.height(6.dp))
+                    OpenApiRootEditor(
+                        root = root,
+                        envKeys = envKeys,
+                        onRootChange = { root = it },
+                    )
                     errorText?.let { message ->
                         Spacer(Modifier.height(8.dp))
                         Text(
@@ -102,7 +113,7 @@ fun OpenApiImportDialog(
                                 val cleanUrl = openApiUrl.trim()
                                 errorText = null
                                 if (cleanUrl.isNotEmpty()) isCreating = true
-                                onCreate(name.trim(), cleanUrl) { success, message ->
+                                onCreate(name.trim(), cleanUrl, root) { success, message ->
                                     isCreating = false
                                     if (!success) {
                                         errorText = message ?: "OpenAPI 导入失败"

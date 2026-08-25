@@ -9,6 +9,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import openapi.openApiSyncKey
+import openapi.OpenApiRoot
 import tree.PortableCollection
 import tree.PortableFolder
 import tree.PortableRequest
@@ -96,6 +97,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
     fun updateCollectionAuth(collectionId: String, auth: tree.PostmanAuth?) = collectionTable.updateCollectionAuth(collectionId, auth)
     fun getCollectionOpenApiSource(collectionId: String) = collectionTable.getCollectionOpenApiSource(collectionId)
     fun updateCollectionOpenApiSource(collectionId: String, sourceUrl: String?) = collectionTable.updateCollectionOpenApiSource(collectionId, sourceUrl)
+    fun getCollectionOpenApiRoot(collectionId: String) = collectionTable.getCollectionOpenApiRoot(collectionId)
+    fun updateCollectionOpenApiRoot(collectionId: String, root: OpenApiRoot?) = collectionTable.updateCollectionOpenApiRoot(collectionId, root)
     fun getFolderAuth(folderId: String) = folderTable.getFolderAuth(folderId)
     fun updateFolderAuth(folderId: String, auth: tree.PostmanAuth?) = folderTable.updateFolderAuth(folderId, auth)
     fun getCollectionColor(collectionId: String) = collectionTable.getCollectionColor(collectionId)
@@ -295,7 +298,8 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
         try {
             val auth = portable.auth ?: collectionTable.getCollectionAuth(targetCollectionId)
             val color = extractColorFromMetaJson(portable.collectionMetaJson) ?: collectionTable.getCollectionColor(targetCollectionId)
-            val metaJson = mergeColorIntoMetaJson(mergeAuthIntoMetaJson(portable.collectionMetaJson, auth), color)
+            val root = extractOpenApiRootFromMetaJson(portable.collectionMetaJson) ?: collectionTable.getCollectionOpenApiRoot(targetCollectionId)
+            val metaJson = mergeOpenApiRootIntoMetaJson(mergeColorIntoMetaJson(mergeAuthIntoMetaJson(portable.collectionMetaJson, auth), color), root)
             conn.prepareStatement(
                 "UPDATE collections SET name = ?, meta_json = ?, updated_at = ? WHERE id = ?"
             ).use { ps ->

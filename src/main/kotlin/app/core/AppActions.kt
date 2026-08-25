@@ -32,6 +32,7 @@ import java.nio.file.Files
 import javax.swing.JOptionPane
 import kotlin.concurrent.thread
 import openapi.parseOpenApiToPortableCollection
+import openapi.OpenApiRoot
 import tree.TreeDragPayload
 import tree.TreeDropTarget
 import tree.PostmanAuth
@@ -46,12 +47,14 @@ fun createCollectionFromDialog(
     repository: CollectionRepository,
     name: String,
     openApiUrl: String,
+    root: OpenApiRoot?,
     onResult: (Boolean, String?) -> Unit = { _, _ -> },
 ) {
     val cleanName = name.trim().ifBlank { "新集合" }
     val cleanUrl = openApiUrl.trim()
     if (cleanUrl.isBlank()) {
         val id = repository.createCollection(cleanName)
+        repository.updateCollectionOpenApiRoot(id, root)
         treeState.refresh()
         treeState.expandedCollectionIds = treeState.expandedCollectionIds + id
         treeState.treeSelection = TreeSelection.Collection(id)
@@ -64,9 +67,10 @@ fun createCollectionFromDialog(
         try {
             val id = repository.createCollection(cleanName)
             collectionId = id
+            repository.updateCollectionOpenApiRoot(id, root)
             val normalizedUrl = normalizeOpenApiUrl(cleanUrl)
             val text = fetchOpenApiJson(normalizedUrl)
-            val result = parseOpenApiToPortableCollection(text, normalizedUrl, cleanName, id)
+            val result = parseOpenApiToPortableCollection(text, normalizedUrl, cleanName, id, root)
             repository.mergeOpenApiIntoCollection(id, result.portable)
             EventQueue.invokeLater {
                 treeState.refresh()
@@ -97,11 +101,12 @@ fun refreshOpenApiCollection(
         showToast(toastState, "当前集合没有绑定 OpenAPI 地址")
         return
     }
+    val root = repository.getCollectionOpenApiRoot(collectionId)
     thread(name = "openapi-refresh") {
         try {
             val name = repository.exportPortableCollection(collectionId)?.name ?: "OpenAPI Collection"
             val text = fetchOpenApiJson(sourceUrl)
-            val result = parseOpenApiToPortableCollection(text, sourceUrl, name, collectionId)
+            val result = parseOpenApiToPortableCollection(text, sourceUrl, name, collectionId, root)
             repository.mergeOpenApiIntoCollection(collectionId, result.portable.copy(auth = repository.getCollectionAuth(collectionId)))
             EventQueue.invokeLater {
                 treeState.refresh()

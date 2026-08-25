@@ -3,6 +3,7 @@ package openapi
 import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.UUID
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -12,6 +13,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -35,17 +37,29 @@ data class OpenApiImportResult(
     val folderCount: Int,
 )
 
+@Serializable
+data class OpenApiRoot(
+    val mode: String = MODE_BASE_URL,
+    val envKey: String? = null,
+) {
+    companion object {
+        const val MODE_BASE_URL = "baseUrl"
+        const val MODE_ENV = "env"
+    }
+}
+
 fun parseOpenApiToPortableCollection(
     text: String,
     sourceUrl: String,
     collectionName: String,
     collectionId: String,
+    root: OpenApiRoot? = null,
 ): OpenApiImportResult {
-    val root = runCatching { openApiJson.parseToJsonElement(text).jsonObject }
+    val rootObj = runCatching { openApiJson.parseToJsonElement(text).jsonObject }
         .getOrElse { throw IllegalArgumentException("OpenAPI 内容不是合法 JSON: ${it.message}") }
-    val paths = root["paths"] as? JsonObject
+    val paths = rootObj["paths"] as? JsonObject
         ?: throw IllegalArgumentException("OpenAPI 内容缺少 paths")
-    val baseUrl = inferBaseUrl(root, sourceUrl)
+    val baseUrl = inferBaseUrl(rootObj, sourceUrl)
     val grouped = linkedMapOf<String, MutableList<PortableRequest>>()
     var sort = 0
     paths.forEach { (path, pathItem) ->
@@ -56,7 +70,8 @@ fun parseOpenApiToPortableCollection(
             val operation = operationValue as? JsonObject ?: return@forEach
             val tag = firstTag(operation) ?: "Default"
             grouped.getOrPut(tag) { mutableListOf() } += operationToRequest(
-                root = root,
+                openApiRoot = root,
+                rootObj = rootObj,
                 collectionId = collectionId,
                 baseUrl = baseUrl,
                 sourceUrl = sourceUrl,
@@ -79,7 +94,7 @@ fun parseOpenApiToPortableCollection(
     }
     val portable = PortableCollection(
         name = collectionName,
-        collectionMetaJson = openApiCollectionMetaJson(sourceUrl, baseUrl),
+        collectionMetaJson = openApiCollectionMetaJson(sourceUrl, baseUrl, root),
         folders = folders,
     )
     return OpenApiImportResult(
@@ -89,18 +104,20 @@ fun parseOpenApiToPortableCollection(
     )
 }
 
-fun openApiCollectionMetaJson(sourceUrl: String, baseUrl: String? = null): String {
+fun openApiCollectionMetaJson(sourceUrl: String, baseUrl: String? = null, root: OpenApiRoot? = null): String {
     return openApiJson.encodeToString(JsonElement.serializer(), buildJsonObject {
         put("openapi", buildJsonObject {
             put("sourceUrl", sourceUrl)
             if (!baseUrl.isNullOrBlank()) put("baseUrl", baseUrl)
+            if (root != null) put("root", openApiJson.encodeToJsonElement(root))
             put("refreshedAt", System.currentTimeMillis())
         })
     })
 }
 
 private fun operationToRequest(
-    root: JsonObject,
+    openApiRoot: OpenApiRoot?,
+    rootObj: JsonObject,
     collectionId: String,
     baseUrl: String?,
     sourceUrl: String,
@@ -113,7 +130,7 @@ private fun operationToRequest(
     val operationId = operation["operationId"]?.jsonPrimitive?.contentOrNull
     val summary = operation["summary"]?.jsonPrimitive?.contentOrNull
     val name = summary?.takeIf { it.isNotBlank() } ?: operationId?.takeIf { it.isNotBlank() } ?: "$method $path"
-    val params = collectParameters(root, operation)
+    val params = collectParameters(rootObj, operation)
     val queryText = params
         .filter { it.location == "query" }
         .joinToString("\n") { "${it.name}: ${it.example}" }
@@ -123,8 +140,8 @@ private fun operationToRequest(
         if (contentType != null && method !in setOf("GET", "HEAD")) add("Content-Type: $contentType")
         params.filter { it.location == "header" }.forEach { add("${it.name}: ${it.example}") }
     }.distinct().joinToString("\n")
-    val body = requestBodyExample(root, operation)
-    val url = listOfNotNull(baseUrl?.trimEnd('/'), path.ensureLeadingSlash()).joinToString("")
+    val body = requestBodyExample(rootObj, operation)
+    val url = buildRequestUrl(baseUrl, path, openApiRoot)
     return PortableRequest(
         id = deterministicId("openapi:$collectionId:request:${openApiSyncKey(method, path)}"),
         name = name,
@@ -205,6 +222,14 @@ private fun resolveRef(root: JsonObject, element: JsonElement?): JsonElement? {
 
 private fun firstTag(operation: JsonObject): String? {
     return (operation["tags"] as? JsonArray)?.firstOrNull()?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+private fun buildRequestUrl(baseUrl: String?, path: String, openApiRoot: OpenApiRoot?): String {
+    val rootKey = openApiRoot?.envKey?.trim()?.takeIf { it.isNotEmpty() }
+    if (openApiRoot?.mode == OpenApiRoot.MODE_ENV && rootKey != null) {
+        return "{{$rootKey}}${path.ensureLeadingSlash()}"
+    }
+    return listOfNotNull(baseUrl?.trimEnd('/'), path.ensureLeadingSlash()).joinToString("")
 }
 
 private fun inferBaseUrl(root: JsonObject, sourceUrl: String): String? {

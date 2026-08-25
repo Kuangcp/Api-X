@@ -1,6 +1,7 @@
 package db
 
 import java.sql.Connection
+import openapi.OpenApiRoot
 import tree.PostmanAuth
 
 internal class CollectionTable(private val conn: Connection, private val lock: Any) {
@@ -97,6 +98,21 @@ internal class CollectionTable(private val conn: Connection, private val lock: A
 
     fun getCollectionOpenApiSource(collectionId: String): String? = synchronized(lock) {
         extractOpenApiSourceFromMetaJson(getCollectionMetaJson(collectionId))
+    }
+
+    fun getCollectionOpenApiRoot(collectionId: String): OpenApiRoot? = synchronized(lock) {
+        extractOpenApiRootFromMetaJson(getCollectionMetaJson(collectionId))
+    }
+
+    fun updateCollectionOpenApiRoot(collectionId: String, root: OpenApiRoot?) = synchronized(lock) {
+        val oldMeta = getCollectionMetaJson(collectionId)
+        val newMeta = mergeOpenApiRootIntoMetaJson(oldMeta, root)
+        conn.prepareStatement("UPDATE collections SET meta_json = ?, updated_at = ? WHERE id = ?").use { ps ->
+            ps.setString(1, newMeta)
+            ps.setLong(2, System.currentTimeMillis())
+            ps.setString(3, collectionId)
+            ps.executeUpdate()
+        }
     }
 
     fun getCollectionColor(collectionId: String): String? = synchronized(lock) {

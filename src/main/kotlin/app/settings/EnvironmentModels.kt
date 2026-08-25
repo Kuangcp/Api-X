@@ -31,6 +31,19 @@ data class EnvironmentsState(
         activeEnvironmentId?.let { id -> environments.find { it.id == id } }
 
     /**
+     * OpenAPI root 环境变量候选：优先当前激活环境，无激活环境（或其无变量）时回退到全部环境。
+     * 返回去重后的非空 key 列表。
+     */
+    fun envKeyOptions(): List<String> {
+        val activeVars = activeEnvironment()?.variables.orEmpty()
+            .mapNotNull { it.key.trim().takeIf { k -> k.isNotEmpty() } }
+        if (activeVars.isNotEmpty()) return activeVars.distinct()
+        return collectAllVariables()
+            .mapNotNull { it.key.trim().takeIf { k -> k.isNotEmpty() } }
+            .distinct()
+    }
+
+    /**
      * 收集所有环境中的变量用于自动补全下拉列表。
      * 非激活环境按列表顺序（后覆盖前），激活环境的变量最终覆盖同名项。
      */

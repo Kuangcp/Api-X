@@ -12,6 +12,7 @@ import app.ui.typographyFromSettings
 import androidx.compose.runtime.Composable
 import db.CollectionRepository
 import http.ExchangeFontMetrics
+import openapi.OpenApiRoot
 import tree.TreeSelection
 import tree.UiCollection
 
@@ -39,16 +40,18 @@ fun Dialogs(
     onRefreshTree: () -> Unit,
     showCreateCollection: Boolean,
     onCloseCreateCollection: () -> Unit,
-    onCreateCollection: (String, String, (Boolean, String?) -> Unit) -> Unit,
+    onCreateCollection: (String, String, OpenApiRoot?, (Boolean, String?) -> Unit) -> Unit,
 ) {
+    val envKeys = environmentsState.envKeyOptions()
     if (showCreateCollection) {
         OpenApiImportDialog(
             visible = showCreateCollection,
             isDarkTheme = isDarkTheme,
             typographyBase = typographyFromSettings(appSettings),
+            envKeys = envKeys,
             onCloseRequest = onCloseCreateCollection,
-            onCreate = { name, openApiUrl, onResult ->
-                onCreateCollection(name, openApiUrl) { success, message ->
+            onCreate = { name, openApiUrl, root, onResult ->
+                onCreateCollection(name, openApiUrl, root) { success, message ->
                     onResult(success, message)
                     if (success) onCloseCreateCollection()
                 }
@@ -99,6 +102,7 @@ fun Dialogs(
             isDarkTheme = isDarkTheme,
             typographyBase = typographyFromSettings(appSettings),
             exchangeMetrics = exchangeMetrics,
+            envKeys = envKeys,
             onCloseRequest = {
                 onCloseCollectionSettings()
                 onRefreshTree()
