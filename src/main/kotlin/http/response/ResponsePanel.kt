@@ -38,6 +38,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import db.HistoryEntry
+import db.BinaryResponseInfo
 import http.ExchangeFontMetrics
 import http.contentTypeHeaderIndicatesJson
 import http.highlightJsonLinesOrNull
@@ -94,6 +95,9 @@ fun ResponsePanel(
     historyEntries: List<HistoryEntry> = emptyList(),
     selectedHistoryEpochMs: Long? = null,
     onHistorySelected: (Long?) -> Unit = {},
+    binaryInfo: BinaryResponseInfo? = null,
+    onSaveBinaryResponse: () -> Unit = {},
+    onOpenBinaryResponse: () -> Unit = {},
 ) {
     // ── State ────────────────────────────────────────────────
     val headersSnapshot = responseHeaderLines.toList()
@@ -286,7 +290,7 @@ fun ResponsePanel(
                     1 -> ResponseHeadersView(exchangeMetrics, responseHeaderLines, responseHeadersListState)
                     else -> Column(modifier = Modifier.fillMaxSize()) {
                         // Search bar
-                        if (searchActive) {
+                        if (searchActive && binaryInfo == null) {
                             ResponseSearchBar(
                                 exchangeMetrics = exchangeMetrics,
                                 searchQuery = searchQuery,
@@ -299,41 +303,51 @@ fun ResponsePanel(
                             )
                         }
                         // Body content
-                        ResponseBodyView(
-                            exchangeMetrics = exchangeMetrics,
-                            renderMode = bodyRenderMode,
-                            onRenderModeChange = { bodyRenderMode = it },
-                            modelOutputAvailable = isSseResponse,
-                            modelOutputChunkCount = modelContent.chunkCount,
-                            sseExtractMode = sseExtractMode,
-                            onSseExtractModeChange = { sseExtractMode = it; onSseExtractModePersist(it) },
-                            aguiRunState = aguiRunState,
-                            mcpProtocolViewAvailable = showMcpConnectionControls,
-                            responseLines = activeBodyLines,
-                            responsePartialLine = activePartialLine,
-                            responseListState = responseListState,
-                            jsonHighlightState = jsonHighlightState,
-                            jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
-                            onJsonSyntaxHighlightEnabledChange = onJsonSyntaxHighlightEnabledChange,
-                            jsonBodyTooLarge = jsonBodyTooLarge,
-                            isSseResponse = isSseResponse && bodyRenderMode == ResponseBodyRenderMode.Raw,
-                            isResponseLoading = isResponseLoading,
-                            isCacheLoading = isCacheLoading,
-                            searchActive = searchActive,
-                            searchQuery = searchQuery,
-                            matchingLineIndices = matchingLineIndices,
-                            currentMatchIndex = currentMatchIndex,
-                            selectedSseEventIndex = selectedSseEventIndex,
-                            onSseEventClick = { index ->
-                                selectedSseEventIndex = index
-                                if (index >= 0 && sseEventPanelHeight < 1f) sseEventPanelHeight = 200f
-                            },
-                            sseContentHeightPx = sseContentHeightPx,
-                            onSseContentHeightChange = { sseContentHeightPx = it },
-                            sseEventPanelHeight = sseEventPanelHeight,
-                            onSseEventPanelHeightChange = { sseEventPanelHeight = it },
-                            sseDetailListState = sseDetailListState,
-                        )
+                        if (binaryInfo != null) {
+                            BinaryResponseCard(
+                                exchangeMetrics = exchangeMetrics,
+                                binaryInfo = binaryInfo,
+                                responseSizeText = responseSizeText,
+                                onSave = onSaveBinaryResponse,
+                                onOpen = onOpenBinaryResponse,
+                            )
+                        } else {
+                            ResponseBodyView(
+                                exchangeMetrics = exchangeMetrics,
+                                renderMode = bodyRenderMode,
+                                onRenderModeChange = { bodyRenderMode = it },
+                                modelOutputAvailable = isSseResponse,
+                                modelOutputChunkCount = modelContent.chunkCount,
+                                sseExtractMode = sseExtractMode,
+                                onSseExtractModeChange = { sseExtractMode = it; onSseExtractModePersist(it) },
+                                aguiRunState = aguiRunState,
+                                mcpProtocolViewAvailable = showMcpConnectionControls,
+                                responseLines = activeBodyLines,
+                                responsePartialLine = activePartialLine,
+                                responseListState = responseListState,
+                                jsonHighlightState = jsonHighlightState,
+                                jsonSyntaxHighlightEnabled = jsonSyntaxHighlightEnabled,
+                                onJsonSyntaxHighlightEnabledChange = onJsonSyntaxHighlightEnabledChange,
+                                jsonBodyTooLarge = jsonBodyTooLarge,
+                                isSseResponse = isSseResponse && bodyRenderMode == ResponseBodyRenderMode.Raw,
+                                isResponseLoading = isResponseLoading,
+                                isCacheLoading = isCacheLoading,
+                                searchActive = searchActive,
+                                searchQuery = searchQuery,
+                                matchingLineIndices = matchingLineIndices,
+                                currentMatchIndex = currentMatchIndex,
+                                selectedSseEventIndex = selectedSseEventIndex,
+                                onSseEventClick = { index ->
+                                    selectedSseEventIndex = index
+                                    if (index >= 0 && sseEventPanelHeight < 1f) sseEventPanelHeight = 200f
+                                },
+                                sseContentHeightPx = sseContentHeightPx,
+                                onSseContentHeightChange = { sseContentHeightPx = it },
+                                sseEventPanelHeight = sseEventPanelHeight,
+                                onSseEventPanelHeightChange = { sseEventPanelHeight = it },
+                                sseDetailListState = sseDetailListState,
+                            )
+                        }
                     }
                 }
 

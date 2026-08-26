@@ -577,6 +577,7 @@ fun App(onExitRequest: () -> Unit) {
                                     s.statusCodeText = ""; s.responseTimeText = ""; s.responseSizeText = ""; s.responseSseEventCount = ""; s.responseSseTtftText = ""; s.responseSseTpotText = ""
                                     s.isSseResponse = false
                                     s.sseExtractMode = SseExtractMode.OpenAiCompat
+                                    s.binaryInfo = null
                                     s.exchangeRequestPlainText = "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。"
                                 },
                                 showMcpCatalogRefresh = editorState.method.equals("MCP", ignoreCase = true),
@@ -596,6 +597,9 @@ fun App(onExitRequest: () -> Unit) {
                                 historyEntries = currentSession?.historyEntries ?: emptyList(),
                                 selectedHistoryEpochMs = currentSession?.selectedHistoryEpochMs,
                                 onHistorySelected = { loadHistory(editorState, responseState, it) },
+                                binaryInfo = currentSession?.binaryInfo,
+                                onSaveBinaryResponse = { currentSession?.binaryInfo?.let { saveBinaryResponse(it, toastState) } },
+                                onOpenBinaryResponse = { currentSession?.binaryInfo?.let { openBinaryResponse(it, toastState) } },
                             )
                         }
                     }

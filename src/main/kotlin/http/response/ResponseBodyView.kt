@@ -28,6 +28,8 @@ import androidx.compose.material.MaterialTheme
 import androidx.compose.material.Switch
 import androidx.compose.material.SwitchDefaults
 import androidx.compose.material.Text
+import androidx.compose.material.TextButton
+import androidx.compose.material.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.window.Popup
 import app.core.writeClipboardText
+import db.BinaryResponseInfo
 import http.ExchangeFontMetrics
 
 internal enum class ResponseBodyRenderMode {
@@ -659,5 +662,55 @@ private fun PlainTextBody(
             modifier = Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
             adapter = rememberScrollbarAdapter(listState),
         )
+    }
+}
+
+@Composable
+internal fun BinaryResponseCard(
+    exchangeMetrics: ExchangeFontMetrics,
+    binaryInfo: BinaryResponseInfo,
+    responseSizeText: String,
+    onSave: () -> Unit,
+    onOpen: () -> Unit,
+) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                "二进制响应",
+                fontSize = exchangeMetrics.body,
+                color = MaterialTheme.colors.onSurface,
+            )
+            Spacer(Modifier.height(8.dp))
+            Text(
+                binaryInfo.fileName,
+                fontSize = exchangeMetrics.tab,
+                color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+            )
+            if (binaryInfo.contentType.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    binaryInfo.contentType,
+                    fontSize = exchangeMetrics.tiny,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                )
+            }
+            if (responseSizeText.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "大小 $responseSizeText",
+                    fontSize = exchangeMetrics.tiny,
+                    color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                )
+            }
+            Spacer(Modifier.height(16.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(onClick = onSave) {
+                    Text("保存到文件", fontSize = exchangeMetrics.tab)
+                }
+                OutlinedButton(onClick = onOpen) {
+                    Text("打开", fontSize = exchangeMetrics.tab)
+                }
+            }
+        }
     }
 }
