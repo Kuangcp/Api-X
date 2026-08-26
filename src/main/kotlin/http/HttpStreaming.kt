@@ -12,6 +12,7 @@ import java.net.http.HttpClient
 import java.net.http.HttpHeaders
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.Charset
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
 import java.nio.file.Path
@@ -291,12 +292,69 @@ private fun mimeExtension(contentType: String): String {
 
 private fun deriveBinaryFileName(headers: HttpHeaders, url: String, contentType: String): String {
     headers.firstValue("Content-Disposition").orElse("")?.let { cd ->
-        val m = Regex("""filename\*?=(?:UTF-8'')?"?([^";]+)""", RegexOption.IGNORE_CASE).find(cd)
-        m?.groupValues?.get(1)?.trim()?.trim('"')?.takeIf { it.isNotBlank() }?.let { return it }
+        parseContentDispositionFileName(cd)?.takeIf { it.isNotBlank() }?.let { return it }
     }
     val seg = url.substringBefore('?').substringAfterLast('/').trim()
     if (seg.isNotBlank() && seg.contains('.')) return seg
     return "response${mimeExtension(contentType)}"
+}
+
+/**
+ * 从 Content-Disposition 解析文件名。优先 RFC 5987 的 `filename*`（charset + percent-encoding），
+ * 其次普通 `filename`（HTTP 头按 Latin-1 传输，中文等 UTF-8 字节会变乱码，这里按 UTF-8 复原）。
+ */
+private fun parseContentDispositionFileName(cd: String): String? {
+    val starMatch = Regex("""filename\*\s*=\s*(?:"([^"]*)"|([^;]+))""", RegexOption.IGNORE_CASE).find(cd)
+    starMatch?.let { m ->
+        val raw = (m.groupValues[1].ifBlank { m.groupValues[2] }).trim()
+        if (raw.isNotBlank()) {
+            decodeRfc5987(raw)?.takeIf { it.isNotBlank() }?.let { return it }
+        }
+    }
+    val plainMatch = Regex("""filename\s*=\s*(?:"([^"]*)"|([^;]+))""", RegexOption.IGNORE_CASE).find(cd)
+    val raw = plainMatch?.let { (it.groupValues[1].ifBlank { it.groupValues[2] }).trim() } ?: return null
+    if (raw.isBlank()) return null
+    return decodeHeaderFileName(raw)
+}
+
+private fun decodeRfc5987(raw: String): String? {
+    val cleaned = raw.trim().removeSurrounding("\"")
+    val parts = cleaned.split("'", limit = 3)
+    return if (parts.size == 3) {
+        val charset = parts[0].takeIf { it.isNotBlank() } ?: "UTF-8"
+        percentDecode(parts[2], charset)
+    } else {
+        percentDecode(cleaned, "UTF-8")
+    }
+}
+
+private fun percentDecode(value: String, charsetName: String): String? = runCatching {
+    val cs = Charset.forName(charsetName)
+    val out = java.io.ByteArrayOutputStream()
+    var i = 0
+    while (i < value.length) {
+        val c = value[i]
+        if (c == '%' && i + 2 < value.length) {
+            val h = value.substring(i + 1, i + 3)
+            if (h.all { it in '0'..'9' || it.lowercaseChar() in 'a'..'f' }) {
+                out.write(h.toInt(16))
+                i += 3
+                continue
+            }
+        }
+        out.write(c.code)
+        i++
+    }
+    String(out.toByteArray(), cs)
+}.getOrNull()
+
+private fun decodeHeaderFileName(raw: String): String {
+    if (raw.all { it.code <= 0xFF }) {
+        val bytes = ByteArray(raw.length) { raw[it].code.toByte() }
+        val decoded = String(bytes, StandardCharsets.UTF_8)
+        if (!decoded.contains('\uFFFD')) return decoded
+    }
+    return raw
 }
 
 fun joinHeadersEditor(validRows: List<Triple<String, String, Boolean>>, orphanLines: List<String>): String {
