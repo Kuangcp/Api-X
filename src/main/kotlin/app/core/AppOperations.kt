@@ -124,13 +124,15 @@ fun startRequest(
     val reqBodySnap = bodyWirePayloadForHttp(applyEnvironmentVariables(editorState.bodyText, varMap), finalHeaders)
     session.exchangeRequestPlainText = formatActualRequestPlainText(reqMethodSnap, effectiveRequestUrl, finalHeaders, reqBodySnap)
     val control = RequestControl()
-    control.startTimeMs = System.currentTimeMillis()
+    val exchangeEpochMs = System.currentTimeMillis()
+    control.startTimeMs = exchangeEpochMs
     session.control = control
     session.requestGen++
     val gen = session.requestGen
     session.isLoading = true
     session.isCacheLoading = false
     session.isSseResponse = false
+    session.binaryInfo = null
     responseState.addRunningRequest(boundRequestId)
     session.responseLines.clear()
     session.responsePartialLine = null
@@ -175,7 +177,9 @@ fun startRequest(
                 onSseEventCount = { count -> EventQueue.invokeLater { if (session.control === control) session.responseSseEventCount = "Event ${count}" } },
                 onSseTiming = { ttftMs, tpotMs -> EventQueue.invokeLater { if (session.control === control) { session.responseSseTtftText = formatDuration(ttftMs); session.responseSseTpotText = formatDuration(tpotMs) } } },
                 onResponseHeaders = { lines -> EventQueue.invokeLater { if (session.control === control) { session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines) } } },
-                onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } }
+                onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } },
+                binaryTempFile = RequestResponseStore.binaryTempPath(boundRequestId, exchangeEpochMs),
+                onBinaryDetected = { info -> EventQueue.invokeLater { if (session.control === control) session.binaryInfo = info } },
             )
         } catch (e: Exception) {
             Logger.error("HTTP", e) { "sendRequestStreaming exception for $boundRequestId: ${e.message}" }
@@ -189,7 +193,7 @@ fun startRequest(
                 val code = control.responseStatusCode
                 try {
                     RequestResponseStore.save(boundRequestId, HarSnapshot(
-                        savedAtEpochMs = System.currentTimeMillis(), requestMethod = reqMethodSnap, requestUrl = effectiveRequestUrl,
+                        savedAtEpochMs = exchangeEpochMs, requestMethod = reqMethodSnap, requestUrl = effectiveRequestUrl,
                         requestHeadersFullText = reqHeadersFullSnap, requestBody = reqBodySnap, requestHeadersSent = parseHeadersForSend(reqHeadersFullSnap),
                         responseStatus = if (code >= 0) code else 0,
                         responseStatusText = if (code >= 0) HarLogCodec.responseStatusPhrase(code) else "",
@@ -198,6 +202,7 @@ fun startRequest(
                         responseTimeLabel = timeText, responseSizeLabel = formatBytes(control.totalBytes),
                         rightTabIndex = tabAtStart.coerceIn(0, 2), isSseResponse = control.responseWasSse,
                         responseSseEventCountText = session.responseSseEventCount,
+                        binaryInfo = control.binaryInfoSnapshot(),
                     ))
                     Logger.info("HTTP") { "Saved response for $boundRequestId, status=$code, time=${elapsed}ms, bytes=${control.totalBytes}" }
                 } catch (e: Exception) {

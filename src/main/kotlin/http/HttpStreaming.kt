@@ -2,6 +2,7 @@ package http
 
 import app.settings.AppSettings
 import app.settings.AppSettingsBridge
+import db.BinaryResponseInfo
 import java.io.BufferedInputStream
 import java.io.BufferedReader
 import java.io.InputStream
@@ -12,6 +13,8 @@ import java.net.http.HttpHeaders
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
+import java.nio.file.Files
+import java.nio.file.Path
 import java.time.Duration
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
@@ -237,6 +240,65 @@ private fun sniffSseContent(buf: BufferedInputStream): Boolean {
     }
 }
 
+/** 依据 Content-Type 判断是否为二进制类型；含文本特征标记的类型一律视为非二进制。 */
+fun isBinaryContentType(mime: String): Boolean {
+    val m = mime.substringBefore(';').trim().lowercase()
+    if (m.isEmpty()) return false
+    val textMarkers = listOf("json", "xml", "javascript", "x-www-form-urlencoded", "text", "graphql", "csv", "event-stream")
+    if (textMarkers.any { m.contains(it) }) return false
+    return m.startsWith("image/") || m.startsWith("audio/") || m.startsWith("video/") || m.startsWith("font/") ||
+        m == "application/octet-stream" || m == "application/pdf" || m == "application/zip" ||
+        m == "application/gzip" || m == "application/x-gzip" || m == "application/x-tar" ||
+        m == "application/x-7z-compressed" || m == "application/x-rar-compressed" ||
+        m == "application/x-bzip2" || m == "application/x-xz" || m == "application/x-msdownload" ||
+        m.startsWith("application/vnd.ms-")
+}
+
+/** 嗅探前 N 字节是否形似二进制：含 NUL 字节，或控制字节比例异常。 */
+private fun sniffBinaryContent(buf: BufferedInputStream): Boolean {
+    return try {
+        buf.mark(SNIFF_BUFFER_SIZE)
+        val bytes = ByteArray(SNIFF_READ_BYTES)
+        val n = buf.read(bytes)
+        buf.reset()
+        if (n <= 0) return false
+        var control = 0
+        for (i in 0 until n) {
+            val b = bytes[i].toInt() and 0xFF
+            if (b == 0) return true
+            if (b < 0x09 || (b in 0x0E..0x1F)) control++
+        }
+        control > n / 100
+    } catch (e: Exception) {
+        false
+    }
+}
+
+private fun mimeExtension(contentType: String): String {
+    val m = contentType.substringBefore(';').trim().lowercase()
+    return when {
+        m.contains("png") -> ".png"
+        m.contains("jpeg") || m.contains("jpg") -> ".jpg"
+        m.contains("gif") -> ".gif"
+        m.contains("svg") -> ".svg"
+        m.contains("webp") -> ".webp"
+        m.contains("pdf") -> ".pdf"
+        m.contains("zip") -> ".zip"
+        m.contains("gzip") || m.contains("tar") -> ".gz"
+        else -> ".bin"
+    }
+}
+
+private fun deriveBinaryFileName(headers: HttpHeaders, url: String, contentType: String): String {
+    headers.firstValue("Content-Disposition").orElse("")?.let { cd ->
+        val m = Regex("""filename\*?=(?:UTF-8'')?"?([^";]+)""", RegexOption.IGNORE_CASE).find(cd)
+        m?.groupValues?.get(1)?.trim()?.trim('"')?.takeIf { it.isNotBlank() }?.let { return it }
+    }
+    val seg = url.substringBefore('?').substringAfterLast('/').trim()
+    if (seg.isNotBlank() && seg.contains('.')) return seg
+    return "response${mimeExtension(contentType)}"
+}
+
 fun joinHeadersEditor(validRows: List<Triple<String, String, Boolean>>, orphanLines: List<String>): String {
     val rowsPart = validRows.joinToString("\n") { (k, v, enabled) ->
         if (enabled) "$k: $v" else "! $k: $v"
@@ -264,6 +326,8 @@ fun sendRequestStreaming(
     onChunk: (String) -> Unit,
     onSseEventCount: (Int) -> Unit = {},
     onSseTiming: (ttftMs: Long, tpotMs: Long) -> Unit = { _, _ -> },
+    binaryTempFile: Path,
+    onBinaryDetected: (BinaryResponseInfo) -> Unit,
 ) {
     try {
         if (control.cancelled) return
@@ -348,6 +412,15 @@ fun sendRequestStreaming(
         val isSse = contentType.contains("text/event-stream", ignoreCase = true) || sniffSseContent(rawBody)
         control.responseWasSse = isSse
         onSseDetected(isSse)
+        val isBinary = !isSse && (isBinaryContentType(contentType) || sniffBinaryContent(rawBody))
+        control.responseWasBinary = isBinary
+        if (isBinary) {
+            val fileNameHint = deriveBinaryFileName(response.headers(), url, contentType)
+            control.binaryTempFile = binaryTempFile
+            control.binaryFileName = fileNameHint
+            control.binaryContentType = contentType
+            onBinaryDetected(BinaryResponseInfo(fileNameHint, contentType, binaryTempFile.toString(), 0L))
+        }
         if (!isSse) {
             onResponseTime(System.currentTimeMillis() - control.startTimeMs)
         } else {
@@ -408,6 +481,29 @@ fun sendRequestStreaming(
                     onSseEventCount(sseEventCount)
                 }
                 if (!control.cancelled) onChunk("\n${LocalTime.now().format(TIME_FORMATTER)} [SSE 连接已结束]")
+            } else if (isBinary) {
+                Files.createDirectories(binaryTempFile.parent)
+                val bodyReadStart = System.currentTimeMillis()
+                Files.newOutputStream(binaryTempFile).use { out ->
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        if (control.cancelled || Thread.currentThread().isInterrupted) break
+                        if (requestWallClockExceeded(control, requestTimeoutMs)) {
+                            control.requestFailed = true
+                            break
+                        }
+                        if (System.currentTimeMillis() - bodyReadStart > bodyReadLimitMs) {
+                            control.requestFailed = true
+                            break
+                        }
+                        val n = stream.read(buffer)
+                        if (n <= 0) break
+                        out.write(buffer, 0, n)
+                        control.totalBytes += n.toLong()
+                        onProgress(control.totalBytes)
+                    }
+                }
+                control.binarySizeBytes = control.totalBytes
             } else {
                 val reader = InputStreamReader(stream, StandardCharsets.UTF_8)
                 val buffer = CharArray(2048)
@@ -526,6 +622,29 @@ class RequestControl {
 
     @Volatile
     var responseWasSse: Boolean = false
+
+    @Volatile
+    var responseWasBinary: Boolean = false
+
+    @Volatile
+    var binaryTempFile: Path? = null
+
+    @Volatile
+    var binaryFileName: String = ""
+
+    @Volatile
+    var binaryContentType: String = ""
+
+    @Volatile
+    var binarySizeBytes: Long = 0L
+
+    fun binaryInfoSnapshot(): BinaryResponseInfo? =
+        if (responseWasBinary) BinaryResponseInfo(
+            fileName = binaryFileName,
+            contentType = binaryContentType,
+            tempFilePath = binaryTempFile?.toString() ?: "",
+            sizeBytes = binarySizeBytes,
+        ) else null
 
     /** 为 true 时 HAR 中应去掉 content-encoding 等头，与解压后的正文一致。 */
     @Volatile

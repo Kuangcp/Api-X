@@ -7,6 +7,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import db.HistoryEntry
+import db.BinaryResponseInfo
 import http.RequestControl
 import http.response.SseExtractMode
 
@@ -26,6 +27,7 @@ class RequestSession(val requestId: String) {
     var rightTabIndex by mutableStateOf(0)
     var historyEntries by mutableStateOf<List<HistoryEntry>>(emptyList())
     var selectedHistoryEpochMs by mutableStateOf<Long?>(null)
+    var binaryInfo by mutableStateOf<BinaryResponseInfo?>(null)
 
     val responseLines: SnapshotStateList<String> = mutableStateListOf()
     val responseHeaderLines: SnapshotStateList<String> = mutableStateListOf()
@@ -47,6 +49,7 @@ class RequestSession(val requestId: String) {
         responseLines.clear()
         responseHeaderLines.clear()
         historyEntries = emptyList()
+        binaryInfo = null
         isLoading = false
         isCacheLoading = false
     }

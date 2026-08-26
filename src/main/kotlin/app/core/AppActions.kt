@@ -11,6 +11,7 @@ import app.settings.EnvironmentStore
 import app.settings.RecentRequestUsageStore
 import app.settings.AppSettings
 import db.AppPaths
+import db.BinaryResponseInfo
 import db.CollectionRepository
 import db.RequestResponseStore
 import http.applyEnvironmentVariables
@@ -29,6 +30,7 @@ import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.nio.file.Files
+import java.nio.file.StandardCopyOption
 import javax.swing.JOptionPane
 import kotlin.concurrent.thread
 import openapi.parseOpenApiToPortableCollection
@@ -455,10 +457,56 @@ fun loadHistory(
                 session.responseSseEventCount = response.responseSseEventCount
                 session.rightTabIndex = response.rightTabIndex.coerceIn(0, 2)
                 session.exchangeRequestPlainText = response.requestPlainText.ifBlank { "尚无已发送请求记录；发送后将显示实际发出的请求头与正文。" }
+                session.binaryInfo = response.binaryInfo
             } else {
                 session.responseLines.clear()
                 session.responseLines.add("(加载失败)")
             }
+        }
+    }
+}
+
+fun saveBinaryResponse(
+    binaryInfo: BinaryResponseInfo,
+    toastState: ToastState,
+) {
+    EventQueue.invokeLater {
+        val dialog = java.awt.FileDialog(null as java.awt.Frame?, "保存响应文件", java.awt.FileDialog.SAVE)
+        dialog.file = binaryInfo.fileName
+        dialog.isVisible = true
+        if (dialog.file == null) return@invokeLater
+        val target = java.io.File(dialog.directory, dialog.file)
+        try {
+            Files.copy(
+                java.nio.file.Paths.get(binaryInfo.tempFilePath),
+                target.toPath(),
+                StandardCopyOption.REPLACE_EXISTING,
+            )
+            showToast(toastState, "已保存：${target.absolutePath}")
+        } catch (e: Exception) {
+            JOptionPane.showMessageDialog(null, e.message ?: e.toString(), "保存失败", JOptionPane.ERROR_MESSAGE)
+        }
+    }
+}
+
+fun openBinaryResponse(
+    binaryInfo: BinaryResponseInfo,
+    toastState: ToastState,
+) {
+    EventQueue.invokeLater {
+        val f = java.io.File(binaryInfo.tempFilePath)
+        if (!f.exists()) {
+            JOptionPane.showMessageDialog(null, "临时文件已不存在，无法打开", "打开失败", JOptionPane.ERROR_MESSAGE)
+            return@invokeLater
+        }
+        try {
+            if (java.awt.Desktop.isDesktopSupported()) {
+                java.awt.Desktop.getDesktop().open(f)
+            } else {
+                JOptionPane.showMessageDialog(null, "当前系统不支持用默认程序打开文件", "打开失败", JOptionPane.ERROR_MESSAGE)
+            }
+        } catch (e: Exception) {
+            JOptionPane.showMessageDialog(null, e.message ?: e.toString(), "打开失败", JOptionPane.ERROR_MESSAGE)
         }
     }
 }
