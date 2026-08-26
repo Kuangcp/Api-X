@@ -101,8 +101,7 @@ object RequestResponseStore {
         Files.createDirectories(benchDir(id))
     }
 
-    fun binaryTempPath(requestId: String, epochMs: Long): Path =
-        responseDir(requestId).resolve("$epochMs.bin")
+    fun binaryTempDir(requestId: String): Path = responseDir(requestId)
 
     fun loadLatest(requestId: String): CachedHttpResponse? {
         val id = requestId.trim()
@@ -169,10 +168,16 @@ object RequestResponseStore {
             }.reversed()
         )
         if (files.size > MAX_FILES_PER_REQUEST) {
+            val droppedStems = files.drop(MAX_FILES_PER_REQUEST)
+                .mapNotNull { responseLogStemEpochMs(it.fileName.toString()) }
+                .filter { it > 0 }
+                .toSet()
             files.drop(MAX_FILES_PER_REQUEST).forEach { p ->
                 runCatching { Files.deleteIfExists(p) }
-                val stem = responseLogStemEpochMs(p.fileName.toString())
-                if (stem > 0) runCatching { Files.deleteIfExists(dir.resolve("$stem.bin")) }
+            }
+            listBinaryFiles(dir).forEach { bin ->
+                val stem = binaryFileStem(bin.fileName.toString()) ?: return@forEach
+                if (stem in droppedStems) runCatching { Files.deleteIfExists(bin) }
             }
         }
         val keptStems = files.take(MAX_FILES_PER_REQUEST)
@@ -180,16 +185,21 @@ object RequestResponseStore {
             .filter { it > 0 }
             .toSet()
         listBinaryFiles(dir).forEach { bin ->
-            val stem = bin.fileName.toString().removeSuffix(".bin").toLongOrNull() ?: return@forEach
+            val stem = binaryFileStem(bin.fileName.toString()) ?: return@forEach
             if (stem !in keptStems) runCatching { Files.deleteIfExists(bin) }
         }
     }
+
+    private fun binaryFileStem(fileName: String): Long? =
+        fileName.substringBefore('.').toLongOrNull()
 
     private fun listBinaryFiles(dir: Path): List<Path> {
         if (dir.notExists() || !dir.isDirectory()) return emptyList()
         return Files.list(dir).use { stream ->
             stream.filter { p ->
-                Files.isRegularFile(p) && p.fileName.toString().endsWith(".bin", ignoreCase = true)
+                if (!Files.isRegularFile(p)) return@filter false
+                val name = p.fileName.toString().lowercase()
+                !name.endsWith(".har") && !name.endsWith(".json")
             }.collect(Collectors.toList())
         }
     }

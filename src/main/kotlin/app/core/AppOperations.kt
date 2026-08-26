@@ -178,7 +178,8 @@ fun startRequest(
                 onSseTiming = { ttftMs, tpotMs -> EventQueue.invokeLater { if (session.control === control) { session.responseSseTtftText = formatDuration(ttftMs); session.responseSseTpotText = formatDuration(tpotMs) } } },
                 onResponseHeaders = { lines -> EventQueue.invokeLater { if (session.control === control) { session.responseHeaderLines.clear(); session.responseHeaderLines.addAll(lines) } } },
                 onChunk = { chunk -> if (session.control === control && !control.cancelled) { control.lineBuffer.append(chunk); control.appendRawResponse(chunk) } },
-                binaryTempFile = RequestResponseStore.binaryTempPath(boundRequestId, exchangeEpochMs),
+                binaryTempDir = RequestResponseStore.binaryTempDir(boundRequestId),
+                binaryStem = exchangeEpochMs.toString(),
                 onBinaryDetected = { info -> EventQueue.invokeLater { if (session.control === control) session.binaryInfo = info } },
             )
         } catch (e: Exception) {

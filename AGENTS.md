@@ -10,4 +10,6 @@ JDK25 JBR + Compose1.11.1 + Kotlin 2.4.0
 - 添加新的组件时都需要考虑 Dark和Light的主题配色问题, 主要是字体的颜色.
 
 # 提交规则
+- 不要主动执行 git commit，仅在用户明确要求提交时才做提交
+
 - 提交信息必须遵循 Conventional Commits，格式：`<type>: <中文描述>`，type 如 feat / fix / refactor / chore / docs 等。

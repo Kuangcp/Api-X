@@ -290,6 +290,12 @@ private fun mimeExtension(contentType: String): String {
     }
 }
 
+/** 提取文件名最后一个后缀（含点）；无后缀或点在最前时回退 `.bin`。 */
+private fun fileNameExtension(fileName: String): String {
+    val dot = fileName.lastIndexOf('.')
+    return if (dot > 0 && dot < fileName.length - 1) fileName.substring(dot) else ".bin"
+}
+
 private fun deriveBinaryFileName(headers: HttpHeaders, url: String, contentType: String): String {
     headers.firstValue("Content-Disposition").orElse("")?.let { cd ->
         parseContentDispositionFileName(cd)?.takeIf { it.isNotBlank() }?.let { return it }
@@ -384,7 +390,8 @@ fun sendRequestStreaming(
     onChunk: (String) -> Unit,
     onSseEventCount: (Int) -> Unit = {},
     onSseTiming: (ttftMs: Long, tpotMs: Long) -> Unit = { _, _ -> },
-    binaryTempFile: Path,
+    binaryTempDir: Path,
+    binaryStem: String,
     onBinaryDetected: (BinaryResponseInfo) -> Unit,
 ) {
     try {
@@ -474,10 +481,11 @@ fun sendRequestStreaming(
         control.responseWasBinary = isBinary
         if (isBinary) {
             val fileNameHint = deriveBinaryFileName(response.headers(), url, contentType)
-            control.binaryTempFile = binaryTempFile
+            val tempFile = binaryTempDir.resolve(binaryStem + fileNameExtension(fileNameHint))
+            control.binaryTempFile = tempFile
             control.binaryFileName = fileNameHint
             control.binaryContentType = contentType
-            onBinaryDetected(BinaryResponseInfo(fileNameHint, contentType, binaryTempFile.toString(), 0L))
+            onBinaryDetected(BinaryResponseInfo(fileNameHint, contentType, tempFile.toString(), 0L))
         }
         if (!isSse) {
             onResponseTime(System.currentTimeMillis() - control.startTimeMs)
@@ -540,9 +548,10 @@ fun sendRequestStreaming(
                 }
                 if (!control.cancelled) onChunk("\n${LocalTime.now().format(TIME_FORMATTER)} [SSE 连接已结束]")
             } else if (isBinary) {
-                Files.createDirectories(binaryTempFile.parent)
+                val outFile = control.binaryTempFile!!
+                Files.createDirectories(outFile.parent)
                 val bodyReadStart = System.currentTimeMillis()
-                Files.newOutputStream(binaryTempFile).use { out ->
+                Files.newOutputStream(outFile).use { out ->
                     val buffer = ByteArray(8192)
                     while (true) {
                         if (control.cancelled || Thread.currentThread().isInterrupted) break
