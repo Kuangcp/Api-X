@@ -4,6 +4,7 @@ package db
 
 import http.parseHeaderLine
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -19,6 +20,14 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.time.Instant
 import java.time.format.DateTimeFormatter
+
+@Serializable
+data class BinaryResponseInfo(
+    val fileName: String,
+    val contentType: String,
+    val tempFilePath: String,
+    val sizeBytes: Long,
+)
 
 /** 一次 HTTP 交换，用于生成 HAR 1.2 文件（可导入 Chrome DevTools 等）。 */
 data class HarSnapshot(
@@ -41,6 +50,7 @@ data class HarSnapshot(
     val rightTabIndex: Int,
     val isSseResponse: Boolean,
     val responseSseEventCountText: String = "",
+    val binaryInfo: BinaryResponseInfo? = null,
 )
 
 private val harJson = kotlinx.serialization.json.Json {
@@ -234,6 +244,14 @@ object HarLogCodec {
         put("responseSseEventCountText", JsonPrimitive(s.responseSseEventCountText))
         put("requestHeadersFullText", JsonPrimitive(s.requestHeadersFullText))
         put("requestBodyText", JsonPrimitive(s.requestBody))
+        s.binaryInfo?.let { bin ->
+            put("binary", buildJsonObject {
+                put("fileName", JsonPrimitive(bin.fileName))
+                put("contentType", JsonPrimitive(bin.contentType))
+                put("tempFilePath", JsonPrimitive(bin.tempFilePath))
+                put("sizeBytes", JsonPrimitive(bin.sizeBytes))
+            })
+        }
     }
 
     /** 从 HAR 或旧版 CachedHttpResponse JSON 还原右侧响应区展示数据。 */
@@ -266,6 +284,14 @@ object HarLogCodec {
             val tab = apiX?.get("rightTabIndex")?.jsonPrimitive?.intOrNull ?: 0
             val sse = apiX?.get("isSseResponse")?.jsonPrimitive?.booleanOrNull ?: false
             val sseEventCount = apiX?.get("responseSseEventCountText")?.jsonPrimitive?.contentOrNull ?: ""
+            val binaryInfo = apiX?.get("binary")?.jsonObject?.let { bin ->
+                BinaryResponseInfo(
+                    fileName = bin["fileName"]?.jsonPrimitive?.contentOrNull ?: "",
+                    contentType = bin["contentType"]?.jsonPrimitive?.contentOrNull ?: "",
+                    tempFilePath = bin["tempFilePath"]?.jsonPrimitive?.contentOrNull ?: "",
+                    sizeBytes = bin["sizeBytes"]?.jsonPrimitive?.longOrNull ?: 0L,
+                )
+            }
             return CachedHttpResponse(
                 savedAtEpochMs = savedAt,
                 statusCodeText = if (status > 0) status.toString() else "",
@@ -277,6 +303,7 @@ object HarLogCodec {
                 responseSseEventCount = sseEventCount,
                 rightTabIndex = tab,
                 requestPlainText = requestPlain,
+                binaryInfo = binaryInfo,
             )
         }
         return runCatching {

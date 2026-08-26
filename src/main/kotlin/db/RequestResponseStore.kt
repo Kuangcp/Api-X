@@ -48,6 +48,7 @@ data class CachedHttpResponse(
     val rightTabIndex: Int,
     /** 最近一次交换中实际发出的请求（纯文本），从 HAR 的 request 段还原。 */
     val requestPlainText: String = "",
+    val binaryInfo: BinaryResponseInfo? = null,
 )
 
 object RequestResponseStore {
@@ -99,6 +100,9 @@ object RequestResponseStore {
         Files.createDirectories(responseDir(id))
         Files.createDirectories(benchDir(id))
     }
+
+    fun binaryTempPath(requestId: String, epochMs: Long): Path =
+        responseDir(requestId).resolve("$epochMs.bin")
 
     fun loadLatest(requestId: String): CachedHttpResponse? {
         val id = requestId.trim()
@@ -164,9 +168,29 @@ object RequestResponseStore {
                 responseLogStemEpochMs(p.fileName.toString())
             }.reversed()
         )
-        if (files.size <= MAX_FILES_PER_REQUEST) return
-        files.drop(MAX_FILES_PER_REQUEST).forEach { p ->
-            runCatching { Files.deleteIfExists(p) }
+        if (files.size > MAX_FILES_PER_REQUEST) {
+            files.drop(MAX_FILES_PER_REQUEST).forEach { p ->
+                runCatching { Files.deleteIfExists(p) }
+                val stem = responseLogStemEpochMs(p.fileName.toString())
+                if (stem > 0) runCatching { Files.deleteIfExists(dir.resolve("$stem.bin")) }
+            }
+        }
+        val keptStems = files.take(MAX_FILES_PER_REQUEST)
+            .mapNotNull { responseLogStemEpochMs(it.fileName.toString()) }
+            .filter { it > 0 }
+            .toSet()
+        listBinaryFiles(dir).forEach { bin ->
+            val stem = bin.fileName.toString().removeSuffix(".bin").toLongOrNull() ?: return@forEach
+            if (stem !in keptStems) runCatching { Files.deleteIfExists(bin) }
+        }
+    }
+
+    private fun listBinaryFiles(dir: Path): List<Path> {
+        if (dir.notExists() || !dir.isDirectory()) return emptyList()
+        return Files.list(dir).use { stream ->
+            stream.filter { p ->
+                Files.isRegularFile(p) && p.fileName.toString().endsWith(".bin", ignoreCase = true)
+            }.collect(Collectors.toList())
         }
     }
 
