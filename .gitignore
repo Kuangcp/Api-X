@@ -54,3 +54,7 @@ bin/
 ### Mac OS ###
 .DS_Store
 .worktrees/
+
+### Signing ###
+cert.pfx
+*.pfx

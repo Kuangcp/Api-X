@@ -75,11 +75,13 @@ compose.desktop {
             windows {
                 // Keep this UUID stable forever. Windows Installer uses it to detect
                 // that a newer MSI should upgrade the existing api-x installation.
+                
                 upgradeUuid = "7f3f1ab5-8205-4db2-90b4-6f2c5fdd8e7d"
+
                 msiPackageVersion = packageVersion
                 menuGroup = "Api-X"
                 shortcut = true
-                // 设置为false后就会自动安装到C盘程序, 能实现升级
+                // 设置为false后就会自动安装到C盘程序, 能实现不选择目录就升级, 但是少了选目录的功能, 所以不能关, 但是这样就是会有点迷惑的提示说目录已存在 点确认即可
                 // dirChooser = false
                 if (appIconIco.exists()) {
                     iconFile.set(appIconIco)
@@ -133,4 +135,100 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
     compilerOptions {
         allWarningsAsErrors.set(true)
     }
+}
+
+// ---------- MSI 签名 ----------
+// 用法: gradle signMsi
+// 证书配置: 在 gradle.properties 中设置 signCertPfx / signCertPassword
+//   或者在项目根目录放 cert.pfx + gradle.properties 中写 signCertPassword=xxx
+val signCertPfx = layout.projectDirectory.file("cert.pfx").asFile
+val signCertPassword: String = project.findProperty("signCertPassword")?.toString() ?: ""
+
+val signMsi by tasks.registering {
+    dependsOn("packageMsi")
+    description = "Sign the MSI package with a code signing certificate"
+    group = "distribution"
+
+    doLast {
+        if (!signCertPfx.exists()) {
+            logger.warn("cert.pfx not found at ${signCertPfx.absolutePath}, skipping signing")
+            return@doLast
+        }
+        if (signCertPassword.isEmpty()) {
+            logger.warn("signCertPassword not set in gradle.properties, skipping signing")
+            return@doLast
+        }
+
+        val msiDir = layout.buildDirectory.dir("compose/binaries/main/msi").get().asFile
+        val msiFile = msiDir.listFiles()?.firstOrNull { it.extension == "msi" }
+            ?: error("No MSI file found in $msiDir")
+
+        logger.lifecycle("Signing ${msiFile.name} ...")
+
+        val signtool = findSigntool()
+        if (signtool == null) {
+            logger.error("signtool.exe not found. Install Windows SDK or set SigntoolPath in gradle.properties")
+            return@doLast
+        }
+
+        val cmd = listOf(
+            signtool.absolutePath, "sign",
+            "/f", signCertPfx.absolutePath,
+            "/p", signCertPassword,
+            "/tr", "http://timestamp.digicert.com",
+            "/td", "sha256",
+            "/fd", "sha256",
+            msiFile.absolutePath
+        )
+        logger.lifecycle("  > ${cmd.joinToString(" ") { if (it.contains(' ') || it.contains('\\')) "\"$it\"" else it }}")
+
+        val proc = ProcessBuilder(cmd)
+            .redirectErrorStream(true)
+            .start()
+        val output = proc.inputStream.bufferedReader().readText()
+        proc.waitFor()
+
+        if (proc.exitValue() == 0) {
+            logger.lifecycle("MSI signed successfully: ${msiFile.name}")
+            logger.lifecycle(output)
+        } else {
+            error("signtool failed (exit code ${proc.exitValue()}):\n$output")
+        }
+    }
+}
+
+fun findSigntool(): java.io.File? {
+    // 1. gradle.properties 中手动指定
+    val customPath = project.findProperty("SigntoolPath")?.toString()
+    if (!customPath.isNullOrBlank()) {
+        val f = java.io.File(customPath)
+        if (f.exists()) return f
+    }
+    // 2. 自动在 Windows SDK 中查找
+    val sdkDirs = listOf(
+        System.getenv("WindowsSdkDir"),
+        "C:/Program Files (x86)/Windows Kits/10/bin",
+        "C:/Program Files/Windows Kits/10/bin",
+    ).filterNotNull()
+    for (sdkBase in sdkDirs) {
+        val binDir = java.io.File(sdkBase)
+        if (!binDir.exists()) continue
+        val latestSdk = binDir.listFiles()
+            ?.filter { it.isDirectory && it.name.startsWith("10.0.") }
+            ?.sortedByDescending { it.name }
+            ?.firstOrNull() ?: continue
+        val arch = if (System.getProperty("os.arch") == "amd64") "x64" else "x86"
+        val signtool = latestSdk.resolve("signtool.exe")
+        if (signtool.exists()) return signtool
+        val alt = latestSdk.resolve("$arch/signtool.exe")
+        if (alt.exists()) return alt
+    }
+    // 3. PATH 中查找
+    val which = try {
+        val p = ProcessBuilder("where", "signtool.exe").start()
+        val result = p.inputStream.bufferedReader().readLine()
+        p.waitFor()
+        if (p.exitValue() == 0) java.io.File(result) else null
+    } catch (_: Exception) { null }
+    return which
 }
