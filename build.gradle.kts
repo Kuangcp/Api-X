@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "com.github.kuangcp"
-version = "1.4.2"
+version = "1.4.3"
 
 val appIconPng = layout.projectDirectory.file("api.png").asFile
 val appIconIco = layout.projectDirectory.file("api.ico").asFile
@@ -139,14 +139,15 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
 
 // ---------- MSI 签名 ----------
 // 用法: gradle signMsi
-// 证书配置: 在 gradle.properties 中设置 signCertPfx / signCertPassword
-//   或者在项目根目录放 cert.pfx + gradle.properties 中写 signCertPassword=xxx
+// 证书配置: 项目根目录放 cert.pfx + gradle.properties 中写 signCertPassword=xxx
+// 签名工具: 使用 osslsigncode（下载: https://github.com/mtrojnar/osslsigncode/releases）
+//   放到 PATH 中，或在 gradle.properties 中设置 signToolPath=C:\\path\\to\\osslsigncode.exe
 val signCertPfx = layout.projectDirectory.file("cert.pfx").asFile
 val signCertPassword: String = project.findProperty("signCertPassword")?.toString() ?: ""
 
 val signMsi by tasks.registering {
     dependsOn("packageMsi")
-    description = "Sign the MSI package with a code signing certificate"
+    description = "Sign the MSI package with osslsigncode"
     group = "distribution"
 
     doLast {
@@ -163,22 +164,22 @@ val signMsi by tasks.registering {
         val msiFile = msiDir.listFiles()?.firstOrNull { it.extension == "msi" }
             ?: error("No MSI file found in $msiDir")
 
-        logger.lifecycle("Signing ${msiFile.name} ...")
-
-        val signtool = findSigntool()
-        if (signtool == null) {
-            logger.error("signtool.exe not found. Install Windows SDK or set SigntoolPath in gradle.properties")
+        val tool = findSignTool()
+        if (tool == null) {
+            logger.error("osslsigncode not found. Download from https://github.com/mtrojnar/osslsigncode/releases or set signToolPath in gradle.properties")
             return@doLast
         }
 
+        val signedFile = File(msiDir, msiFile.nameWithoutExtension + "-signed.msi")
+        logger.lifecycle("Signing ${msiFile.name} with ${tool.name} ...")
+
         val cmd = listOf(
-            signtool.absolutePath, "sign",
-            "/f", signCertPfx.absolutePath,
-            "/p", signCertPassword,
-            "/tr", "http://timestamp.digicert.com",
-            "/td", "sha256",
-            "/fd", "sha256",
-            msiFile.absolutePath
+            tool.absolutePath, "sign",
+            "-pkcs12", signCertPfx.absolutePath,
+            "-pass", signCertPassword,
+            "-h", "sha256",
+            "-in", msiFile.absolutePath,
+            "-out", signedFile.absolutePath,
         )
         logger.lifecycle("  > ${cmd.joinToString(" ") { if (it.contains(' ') || it.contains('\\')) "\"$it\"" else it }}")
 
@@ -188,47 +189,41 @@ val signMsi by tasks.registering {
         val output = proc.inputStream.bufferedReader().readText()
         proc.waitFor()
 
-        if (proc.exitValue() == 0) {
+        if (proc.exitValue() == 0 && signedFile.exists()) {
+            // 用签名后的文件替换原文件
+            val backupFile = File(msiDir, msiFile.name + ".unsigned")
+            msiFile.renameTo(backupFile)
+            signedFile.renameTo(msiFile)
+            backupFile.delete()
             logger.lifecycle("MSI signed successfully: ${msiFile.name}")
             logger.lifecycle(output)
         } else {
-            error("signtool failed (exit code ${proc.exitValue()}):\n$output")
+            signedFile.delete()
+            error("osslsigncode failed (exit code ${proc.exitValue()}):\n$output")
         }
     }
 }
 
-fun findSigntool(): java.io.File? {
+fun findSignTool(): File? {
     // 1. gradle.properties 中手动指定
-    val customPath = project.findProperty("SigntoolPath")?.toString()
+    val customPath = project.findProperty("signToolPath")?.toString()
     if (!customPath.isNullOrBlank()) {
-        val f = java.io.File(customPath)
+        val f = File(customPath)
         if (f.exists()) return f
     }
-    // 2. 自动在 Windows SDK 中查找
-    val sdkDirs = listOf(
-        System.getenv("WindowsSdkDir"),
-        "C:/Program Files (x86)/Windows Kits/10/bin",
-        "C:/Program Files/Windows Kits/10/bin",
-    ).filterNotNull()
-    for (sdkBase in sdkDirs) {
-        val binDir = java.io.File(sdkBase)
-        if (!binDir.exists()) continue
-        val latestSdk = binDir.listFiles()
-            ?.filter { it.isDirectory && it.name.startsWith("10.0.") }
-            ?.sortedByDescending { it.name }
-            ?.firstOrNull() ?: continue
-        val arch = if (System.getProperty("os.arch") == "amd64") "x64" else "x86"
-        val signtool = latestSdk.resolve("signtool.exe")
-        if (signtool.exists()) return signtool
-        val alt = latestSdk.resolve("$arch/signtool.exe")
-        if (alt.exists()) return alt
-    }
-    // 3. PATH 中查找
+    // 2. PATH 中查找 osslsigncode
     val which = try {
-        val p = ProcessBuilder("where", "signtool.exe").start()
+        val p = ProcessBuilder("where", "osslsigncode.exe").start()
         val result = p.inputStream.bufferedReader().readLine()
         p.waitFor()
-        if (p.exitValue() == 0) java.io.File(result) else null
+        if (p.exitValue() == 0 && result != null) File(result.trim()) else null
     } catch (_: Exception) { null }
-    return which
+    if (which != null) return which
+    // 3. 常见安装路径
+    val candidates = listOf(
+        System.getenv("LOCALAPPDATA") + "\\osslsigncode\\osslsigncode.exe",
+        "C:\\Program Files\\osslsigncode\\osslsigncode.exe",
+        System.getProperty("user.home") + "\\Downloads\\bin\\osslsigncode.exe",
+    )
+    return candidates.map { File(it) }.firstOrNull { it.exists() }
 }
