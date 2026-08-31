@@ -2,7 +2,7 @@
 
 [English](Readme.md)
 
-JDK 25 JBR + Gradle 9.4.1 + Kotlin 2.4.0 + Compose 1.11.1
+JDK 25 JBR + Gradle 9.4.1 + Kotlin 2.4.0 + Compose 1.12.0
 
 - `gradle run` 调试运行
 - `gradle createDistributable` 构建可分发应用目录
