@@ -105,6 +105,11 @@ class RequestEditorState(private val repository: CollectionRepository) {
         }
     }
 
+    fun removeTab(requestId: String) {
+        tabSessions.remove(requestId)
+        openTabIds.remove(requestId)
+    }
+
     fun applyRequestToEditor(reqId: String) {
         val r = repository.getRequest(reqId) ?: return
         saveCurrentTabSession(editorRequestId)
