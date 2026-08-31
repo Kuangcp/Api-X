@@ -21,6 +21,7 @@ data class AppSettings(
     val bypassRegexLines: String = "",
     val httpProtocolVersion: String = "",
     val responseSseTextRulePaths: List<String> = emptyList(),
+    val tabMultiLine: Boolean = true,
 ) {
     companion object {
         private const val KEY_FONT_FAMILY = "ui.fontFamily"
@@ -36,6 +37,7 @@ data class AppSettings(
         private const val KEY_BYPASS = "proxy.bypassRegex"
         private const val KEY_HTTP_PROTOCOL = "http.protocolVersion"
         private const val KEY_RESPONSE_SSE_TEXT_RULES = "response.sseTextRulePathsJson"
+        private const val KEY_TAB_MULTI_LINE = "ui.tabMultiLine"
 
         private val settingsJson = Json { ignoreUnknownKeys = true }
 
@@ -73,6 +75,7 @@ data class AppSettings(
                     responseSseTextRulePaths = decodeResponseSseTextRulePaths(
                         props.getProperty(KEY_RESPONSE_SSE_TEXT_RULES, ""),
                     ),
+                    tabMultiLine = props.getProperty(KEY_TAB_MULTI_LINE, "true").toBoolean(),
                 )
             }.getOrElse { AppSettings() }
         }
@@ -95,6 +98,7 @@ data class AppSettings(
                     KEY_RESPONSE_SSE_TEXT_RULES,
                     settingsJson.encodeToString(normalizeResponseSseTextRulePaths(settings.responseSseTextRulePaths)),
                 )
+                props.setProperty(KEY_TAB_MULTI_LINE, settings.tabMultiLine.toString())
                 Files.newOutputStream(path()).use { out ->
                     props.store(out, "api-x app settings")
                 }

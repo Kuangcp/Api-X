@@ -39,6 +39,7 @@ import mcp.parseMcpRequest
 import mcp.runMcpStdioDebug
 import mcp.runMcpSseDebug
 import tree.TreeSelection
+import tree.expandSetsForRequest
 import tree.firstRequestSelection
 import java.awt.EventQueue
 import kotlin.concurrent.thread
@@ -57,6 +58,16 @@ fun selectTreeNode(sel: TreeSelection, treeState: TreeState, editorState: Reques
         }
         else -> treeState.treeSelection = sel
     }
+}
+
+/** 展开并聚焦左侧目录树中的某个请求（与 Ctrl+Tab 切换行为一致）。 */
+fun focusTreeOnRequest(treeState: TreeState, editorState: RequestEditorState, requestId: String) {
+    expandSetsForRequest(treeState.tree, requestId)?.let { (cols, folders) ->
+        treeState.expandedCollectionIds = treeState.expandedCollectionIds + cols
+        treeState.expandedFolderIds = treeState.expandedFolderIds + folders
+    }
+    selectTreeNode(TreeSelection.Request(requestId), treeState, editorState)
+    treeState.treeScrollToRequestId = requestId
 }
 
 fun addRequestAt(at: TreeSelection, treeState: TreeState, editorState: RequestEditorState) {

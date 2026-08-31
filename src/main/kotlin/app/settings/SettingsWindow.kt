@@ -19,6 +19,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.Checkbox
+import androidx.compose.material.CheckboxDefaults
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
 import androidx.compose.material.Icon
@@ -119,6 +121,7 @@ private fun SettingsDialogBody(
     var responseRulePaths by remember {
         mutableStateOf(initial.responseSseTextRulePaths.ifEmpty { listOf("") })
     }
+    var tabMultiLine by remember { mutableStateOf(initial.tabMultiLine) }
     var errorText by remember { mutableStateOf<String?>(null) }
 
     val outlinedFieldColors = TextFieldDefaults.outlinedTextFieldColors(
@@ -277,6 +280,29 @@ private fun SettingsDialogBody(
                                 placeholder = { Text("#282923 或留空用主题默认") },
                                 singleLine = true,
                                 colors = outlinedFieldColors,
+                            )
+                        }
+                        Text(
+                            "标签栏",
+                            style = MaterialTheme.typography.subtitle2,
+                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().clickable { tabMultiLine = !tabMultiLine },
+                        ) {
+                            Checkbox(
+                                checked = tabMultiLine,
+                                onCheckedChange = { tabMultiLine = it },
+                                colors = CheckboxDefaults.colors(
+                                    checkedColor = MaterialTheme.colors.primary,
+                                    uncheckedColor = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                                ),
+                            )
+                            Text(
+                                "多行 Tab（标签过多时自动换行显示）",
+                                style = MaterialTheme.typography.body2,
+                                color = MaterialTheme.colors.onSurface,
                             )
                         }
                         DirectoryPathRow(
@@ -471,6 +497,7 @@ private fun SettingsDialogBody(
                             bypassRegexLines = bypassText.trimEnd(),
                             httpProtocolVersion = httpProtocolVersion,
                             responseSseTextRulePaths = AppSettings.normalizeResponseSseTextRulePaths(responseRulePaths),
+                            tabMultiLine = tabMultiLine,
                         ),
                     )
                 },

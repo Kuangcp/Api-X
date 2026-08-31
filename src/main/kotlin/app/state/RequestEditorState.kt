@@ -94,20 +94,46 @@ class RequestEditorState(private val repository: CollectionRepository) {
             } else {
                 activeTabId = null
                 editorRequestId = null
-                method = "GET"
-                url = ""
-                headersText = ""
-                bodyText = ""
-                paramsText = ""
-                auth = null
-                leftTabIndex = 0
+                resetEditorFields()
             }
+        }
+    }
+
+    fun closeAllTabs() {
+        saveEditorIfBound()
+        tabSessions.clear()
+        openTabIds.clear()
+        activeTabId = null
+        editorRequestId = null
+        resetEditorFields()
+    }
+
+    fun closeOthers(keepRequestId: String) {
+        if (keepRequestId !in openTabIds) return
+        saveEditorIfBound()
+        val others = openTabIds.filter { it != keepRequestId }
+        for (id in others) {
+            tabSessions.remove(id)
+            openTabIds.remove(id)
+        }
+        if (activeTabId != keepRequestId) {
+            selectTab(keepRequestId)
         }
     }
 
     fun removeTab(requestId: String) {
         tabSessions.remove(requestId)
         openTabIds.remove(requestId)
+    }
+
+    private fun resetEditorFields() {
+        method = "GET"
+        url = ""
+        headersText = ""
+        bodyText = ""
+        paramsText = ""
+        auth = null
+        leftTabIndex = 0
     }
 
     fun applyRequestToEditor(reqId: String) {

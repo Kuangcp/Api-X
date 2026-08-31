@@ -290,12 +290,7 @@ fun App(onExitRequest: () -> Unit) {
         if (list.isEmpty()) return
         val id = list[recentSwitcherState.index.coerceIn(0, list.lastIndex)]
         if (repository.getRequest(id) != null) {
-            expandSetsForRequest(treeState.tree, id)?.let { (cols, folders) ->
-                treeState.expandedCollectionIds = treeState.expandedCollectionIds + cols
-                treeState.expandedFolderIds = treeState.expandedFolderIds + folders
-            }
-            selectTreeNode(TreeSelection.Request(id), treeState, editorState)
-            treeState.treeScrollToRequestId = id
+            focusTreeOnRequest(treeState, editorState, id)
         }
     }
 
@@ -498,9 +493,12 @@ fun App(onExitRequest: () -> Unit) {
                                 RequestTabBar(
                                     openTabIds = editorState.openTabIds,
                                     activeTabId = editorState.activeTabId,
-                                    onTabSelected = { editorState.selectTab(it) },
+                                    onTabSelected = { focusTreeOnRequest(treeState, editorState, it) },
                                     onTabClosed = { editorState.closeTab(it) },
                                     tree = treeState.tree,
+                                    multiLine = appSettingsState.appSettings.tabMultiLine,
+                                    onCloseAll = { editorState.closeAllTabs() },
+                                    onCloseOthers = { editorState.closeOthers(it) },
                                 )
                             }
                             RequestSidePanel(
