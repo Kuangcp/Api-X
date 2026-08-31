@@ -61,7 +61,7 @@ fun RequestSidePanel(
         modifier = modifier
             .fillMaxHeight()
             .fillMaxWidth()
-            .padding(end = 6.dp),
+            .padding(end = 2.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Box(

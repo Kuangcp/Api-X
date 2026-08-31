@@ -233,7 +233,7 @@ fun ResponsePanel(
 
     // ── UI ──────────────────────────────────────────────────
     Column(
-        modifier = modifier.fillMaxHeight().fillMaxWidth().padding(start = 6.dp).onPreviewKeyEvent { event ->
+        modifier = modifier.fillMaxHeight().fillMaxWidth().padding(start = 2.dp).onPreviewKeyEvent { event ->
             if (event.type == KeyEventType.KeyDown && (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.F) {
                 searchActive = !searchActive
                 if (!searchActive) searchQuery = ""

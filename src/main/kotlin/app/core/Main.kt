@@ -36,6 +36,8 @@ import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
@@ -55,6 +57,7 @@ import androidx.compose.ui.window.rememberWindowState
 import com.github.kuangcp.api_x.generated.resources.Res
 import com.github.kuangcp.api_x.generated.resources.app_icon
 import org.jetbrains.compose.resources.painterResource
+import java.awt.Cursor
 import db.AppPaths
 import db.CollectionRepository
 import db.McpCatalogStore
@@ -758,6 +761,7 @@ private fun SplitHandle(
     val currentOnPositioned by rememberUpdatedState(onPositioned)
     Box(
         modifier = Modifier.width(10.dp).fillMaxSize()
+            .pointerHoverIcon(PointerIcon(Cursor.getPredefinedCursor(Cursor.E_RESIZE_CURSOR)))
             .onGloballyPositioned { currentOnPositioned(it) }
             .pointerInput(Unit) {
                 var totalDelta = 0f
