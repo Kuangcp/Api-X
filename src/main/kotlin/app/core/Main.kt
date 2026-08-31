@@ -392,6 +392,10 @@ fun App(onExitRequest: () -> Unit) {
                     var ghostDelta by remember { mutableStateOf(0f) }
                     var splitHandlePos by remember { mutableStateOf(Offset.Zero) }
                     var splitHandleH by remember { mutableStateOf(0) }
+                    var treeIsDragging by remember { mutableStateOf(false) }
+                    var treeGhostDelta by remember { mutableStateOf(0f) }
+                    var treeSplitHandlePos by remember { mutableStateOf(Offset.Zero) }
+                    var treeSplitHandleH by remember { mutableStateOf(0) }
                     Column(modifier = Modifier.fillMaxSize().background(MaterialTheme.colors.background).padding(start = 10.dp, end = 10.dp, bottom = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     RequestTopBar(
                         isLoading = currentSession?.isLoading ?: false,
@@ -474,9 +478,16 @@ fun App(onExitRequest: () -> Unit) {
                             var treeDragStartRatio by remember { mutableStateOf(0f) }
                             var treeDragStartWidth by remember { mutableStateOf(1f) }
                             SplitHandle(contentRowWidthPx,
-                                onDragStart = { treeDragStartRatio = treeState.treeSplitRatio; treeDragStartWidth = contentRowWidthPx },
-                                onDrag = { totalDelta -> treeState.treeSplitRatio = (treeDragStartRatio + totalDelta / treeDragStartWidth).coerceIn(0.02f, 0.98f) },
-                                onDragEnd = {},
+                                onDragStart = {
+                                    treeIsDragging = true; treeGhostDelta = 0f
+                                    treeDragStartRatio = treeState.treeSplitRatio; treeDragStartWidth = contentRowWidthPx
+                                },
+                                onDrag = { totalDelta -> treeGhostDelta = totalDelta },
+                                onDragEnd = {
+                                    treeState.treeSplitRatio = (treeDragStartRatio + treeGhostDelta / treeDragStartWidth).coerceIn(0.02f, 0.98f)
+                                    treeIsDragging = false; treeGhostDelta = 0f
+                                },
+                                onPositioned = { coords -> treeSplitHandlePos = coords.boundsInRoot().topLeft; treeSplitHandleH = coords.size.height },
                             )
                         }
                         var splitDragStartRatio by remember { mutableStateOf(0f) }
@@ -608,17 +619,10 @@ fun App(onExitRequest: () -> Unit) {
                     }
                 }
                 if (isDragging && splitHandlePos != Offset.Zero) {
-                    val density = LocalDensity.current
-                    val ghostH = with(density) { splitHandleH.toDp() }
-                    Box(
-                        modifier = Modifier
-                            .offset { IntOffset((splitHandlePos.x + ghostDelta).toInt(), splitHandlePos.y.toInt()) }
-                            .width(10.dp).height(ghostH)
-                            .zIndex(10f),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Box(Modifier.width(2.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.25f)))
-                    }
+                    GhostSplitLine(splitHandlePos, splitHandleH, ghostDelta)
+                }
+                if (treeIsDragging && treeSplitHandlePos != Offset.Zero) {
+                    GhostSplitLine(treeSplitHandlePos, treeSplitHandleH, treeGhostDelta)
                 }
                 val msg = toastState.toastMessage
                 if (msg != null) {
@@ -744,6 +748,21 @@ private fun AppDisposableEffect(
             mcpConnectionState.closeAll()
             repository.close()
         }
+    }
+}
+
+@Composable
+private fun GhostSplitLine(pos: Offset, heightPx: Int, delta: Float) {
+    val density = LocalDensity.current
+    val ghostH = with(density) { heightPx.toDp() }
+    Box(
+        modifier = Modifier
+            .offset { IntOffset((pos.x + delta).toInt(), pos.y.toInt()) }
+            .width(10.dp).height(ghostH)
+            .zIndex(10f),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.width(2.dp).fillMaxSize().background(MaterialTheme.colors.onSurface.copy(alpha = 0.25f)))
     }
 }
 
