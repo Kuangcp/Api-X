@@ -22,6 +22,7 @@ import kotlinx.serialization.json.put
 import tree.PortableCollection
 import tree.PortableFolder
 import tree.PortableRequest
+import tree.PostmanAuth
 
 private val openApiJson = Json {
     ignoreUnknownKeys = true
@@ -152,6 +153,7 @@ private fun operationToRequest(
         bodyText = body,
         sortOrder = sortOrder,
         metaJson = openApiRequestMetaJson(sourceUrl, tag, method, path, operationId),
+        auth = PostmanAuth(type = "inherit"),
     )
 }
 
