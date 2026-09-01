@@ -24,12 +24,11 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.AlertDialog
 import androidx.compose.material.ContentAlpha
 import androidx.compose.material.Divider
@@ -95,7 +94,6 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.LayoutCoordinates
-import kotlinx.coroutines.delay
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
@@ -296,8 +294,43 @@ fun CollectionTreeSidebar(
             modifier = Modifier.padding(vertical = 2.dp),
             color = MaterialTheme.colors.onSurface.copy(alpha = 0.08f)
         )
-        val scroll = rememberScrollState()
-        val scrollWhileNotDragging = treeDragPayload == null
+        val listState = rememberLazyListState()
+        val flatItems = remember(tree, expandedCollectionIds, expandedFolderIds) {
+            buildFlatTree(tree, expandedCollectionIds, expandedFolderIds)
+        }
+
+        LaunchedEffect(treeScrollToRequestId, flatItems) {
+            val id = treeScrollToRequestId ?: return@LaunchedEffect
+            val index = flatItems.indexOfFirst { it is FlatRequest && it.req.id == id }
+            if (index < 0) return@LaunchedEffect
+            listState.scrollToItem(index)
+            onTreeScrollToRequestHandled()
+        }
+
+        val dragActive = treeDragPayload != null
+        val onTreeDragStart: (TreeDragPayload, Offset) -> Unit = { payload, rootPos ->
+            treeDragPayload = payload
+            treeDragPointerRoot = rootPos
+        }
+        val onTreeDragMove: (Offset) -> Unit = { rootPos -> treeDragPointerRoot = rootPos }
+        val onTreeDragEnd: () -> Unit = {
+            val p = treeDragPayload
+            val hit = bestDropTarget(dropRegistry.zones, treeDragPointerRoot)
+            treeDragPayload = null
+            dropRegistry.zones.clear()
+            if (p != null && hit != null) {
+                onApplyTreeDrop(p, hit)
+            }
+        }
+        val onToggleMcpRequest: (String) -> Unit = { id ->
+            expandedMcpRequestIds = if (id in expandedMcpRequestIds) expandedMcpRequestIds - id else expandedMcpRequestIds + id
+        }
+        val onBeginTreeRename: (TreeSelection, String) -> Unit = { sel, name ->
+            renameTarget = sel
+            renameText = name
+        }
+        val onDeleteRequest: (TreeSelection) -> Unit = { deleteTarget = it }
+
         ContextMenuArea(
             items = {
                 buildList {
@@ -310,90 +343,109 @@ fun CollectionTreeSidebar(
                 .weight(1f)
                 .fillMaxWidth()
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(scroll, enabled = scrollWhileNotDragging)
-            ) {
-                if (tree.isEmpty()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(6.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Text(
-                            "暂无集合",
-                            fontSize = 14.sp,
-                            color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
-                        )
-                        TextButton(onClick = onAddCollection) {
-                            Text("新建集合", fontSize = 14.sp)
-                        }
-                    }
-                } else {
-                    tree.forEachIndexed { index, coll ->
-                        CollectionTreeBlock(
-                            collection = coll,
-                            depth = 0,
-                            selectedNode = selectedNode,
-                            showDivider = index != 0,
-                            treeScrollToRequestId = treeScrollToRequestId,
-                            onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
-                            editorBoundRequestId = editorBoundRequestId,
-                            expandedCollectionIds = expandedCollectionIds,
-                            expandedFolderIds = expandedFolderIds,
-                            runningRequestIds = runningRequestIds,
-                            mcpCatalogByRequestId = mcpCatalogByRequestId,
-                            onToggleCollection = onToggleCollection,
-                            onToggleFolder = onToggleFolder,
-                            onSelectNode = onSelectNode,
-                            onMcpToolSelected = onMcpToolSelected,
-                            onMcpResourceSelected = onMcpResourceSelected,
-                            onMcpPromptSelected = onMcpPromptSelected,
-                            expandedMcpRequestIds = expandedMcpRequestIds,
-                            onToggleMcpRequest = { id ->
-                                expandedMcpRequestIds = if (id in expandedMcpRequestIds) expandedMcpRequestIds - id else expandedMcpRequestIds + id
-                            },
-                            onBeginTreeRename = { sel, name ->
-                                renameTarget = sel
-                                renameText = name
-                            },
-                            onContextAddFolder = onContextAddFolder,
-                            onContextAddRequest = onContextAddRequest,
-                            onDeleteRequest = { deleteTarget = it },
-                            onSettings = onSettings,
-                            onExportRequestAsCurl = onExportRequestAsCurl,
-                            onExportRequestAsGo = onExportRequestAsGo,
-                            onExportPostmanCollection = onExportPostmanCollection,
-                            onRefreshOpenApiCollection = onRefreshOpenApiCollection,
-                            onDuplicateRequestBelow = onDuplicateRequestBelow,
-                            onImportCurlAt = onImportCurlAt,
-                            dragging = treeDragPayload,
-                            dropRegistry = dropRegistry,
-                            hoveredDropTarget = hoveredDropTarget,
-                            onTreeDragStart = { payload, rootPos ->
-                                treeDragPayload = payload
-                                treeDragPointerRoot = rootPos
-                            },
-                            onTreeDragMove = { rootPos -> treeDragPointerRoot = rootPos },
-                            onTreeDragEnd = {
-                                val p = treeDragPayload
-                                val hit = bestDropTarget(dropRegistry.zones, treeDragPointerRoot)
-                                treeDragPayload = null
-                                dropRegistry.zones.clear()
-                                if (p != null && hit != null) {
-                                    onApplyTreeDrop(p, hit)
-                                }
-                            },
-                        )
+            if (tree.isEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "暂无集合",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colors.onSurface.copy(alpha = ContentAlpha.medium),
+                    )
+                    TextButton(onClick = onAddCollection) {
+                        Text("新建集合", fontSize = 14.sp)
                     }
                 }
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    userScrollEnabled = !dragActive,
+                ) {
+                    items(flatItems, key = { it.key }) { item ->
+                        when (item) {
+                            is FlatCollection -> CollectionTreeBlock(
+                                collection = item.collection,
+                                depth = 0,
+                                selectedNode = selectedNode,
+                                showDivider = item.showDivider,
+                                expanded = item.collection.id in expandedCollectionIds,
+                                onToggleCollection = onToggleCollection,
+                                onSelectNode = onSelectNode,
+                                onBeginTreeRename = onBeginTreeRename,
+                                onContextAddFolder = onContextAddFolder,
+                                onContextAddRequest = onContextAddRequest,
+                                onSettings = onSettings,
+                                onExportPostmanCollection = onExportPostmanCollection,
+                                onRefreshOpenApiCollection = onRefreshOpenApiCollection,
+                                dragging = treeDragPayload,
+                                dropRegistry = dropRegistry,
+                                hoveredDropTarget = hoveredDropTarget,
+                            )
+                            is FlatFolder -> FolderTreeBlock(
+                                collectionId = item.collectionId,
+                                folder = item.folder,
+                                depth = item.depth,
+                                selectedNode = selectedNode,
+                                expanded = item.folder.id in expandedFolderIds,
+                                onToggleFolder = onToggleFolder,
+                                onSelectNode = onSelectNode,
+                                onBeginTreeRename = onBeginTreeRename,
+                                onContextAddFolder = onContextAddFolder,
+                                onContextAddRequest = onContextAddRequest,
+                                onDeleteRequest = onDeleteRequest,
+                                onSettings = onSettings,
+                                onImportCurlAt = onImportCurlAt,
+                                dragging = treeDragPayload,
+                                dropRegistry = dropRegistry,
+                                hoveredDropTarget = hoveredDropTarget,
+                                onTreeDragStart = onTreeDragStart,
+                                onTreeDragMove = onTreeDragMove,
+                                onTreeDragEnd = onTreeDragEnd,
+                                inheritedColor = item.inheritedColor,
+                            )
+                            is FlatRequest -> RequestTreeRow(
+                                req = item.req,
+                                depth = item.depth,
+                                selectedNode = selectedNode,
+                                editorBoundRequestId = editorBoundRequestId,
+                                runningRequestIds = runningRequestIds,
+                                mcpCatalog = mcpCatalogByRequestId[item.req.id] ?: McpCatalogSummary(),
+                                onSelectNode = onSelectNode,
+                                onMcpToolSelected = onMcpToolSelected,
+                                onMcpResourceSelected = onMcpResourceSelected,
+                                onMcpPromptSelected = onMcpPromptSelected,
+                                mcpExpanded = item.req.id in expandedMcpRequestIds,
+                                onToggleMcpRequest = onToggleMcpRequest,
+                                onBeginTreeRename = onBeginTreeRename,
+                                onExportRequestAsCurl = onExportRequestAsCurl,
+                                onExportRequestAsGo = onExportRequestAsGo,
+                                onDuplicateRequestBelow = onDuplicateRequestBelow,
+                                onImportCurlAt = onImportCurlAt,
+                                onDeleteRequest = onDeleteRequest,
+                                onTreeDragStart = onTreeDragStart,
+                                onTreeDragMove = onTreeDragMove,
+                                onTreeDragEnd = onTreeDragEnd,
+                                inheritedColor = item.inheritedColor,
+                            )
+                            is FlatDropGap -> TreeDropGap(
+                                active = dragActive,
+                                zoneKey = item.zoneKey,
+                                target = item.target,
+                                dropRegistry = dropRegistry,
+                                hovered = hoveredDropTarget,
+                            )
+                        }
+                    }
+                }
+                VerticalScrollbar(
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .fillMaxHeight(),
+                    adapter = rememberScrollbarAdapter(listState)
+                )
             }
-            VerticalScrollbar(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .fillMaxHeight(),
-                adapter = rememberScrollbarAdapter(scroll)
-            )
         }
         }
     }
@@ -484,42 +536,21 @@ private fun CollectionTreeBlock(
     collection: UiCollection,
     depth: Int,
     selectedNode: TreeSelection?,
-    treeScrollToRequestId: String?,
-    onTreeScrollToRequestHandled: () -> Unit,
     /** 是否在行上方绘制分隔线，用于区分多个 Collection。 */
     showDivider: Boolean = false,
-    editorBoundRequestId: String?,
-    expandedCollectionIds: Set<String>,
-    expandedFolderIds: Set<String>,
-    runningRequestIds: Set<String>,
-    mcpCatalogByRequestId: Map<String, McpCatalogSummary> = emptyMap(),
+    expanded: Boolean,
     onToggleCollection: (String) -> Unit,
-    onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
-    onMcpToolSelected: (String, McpToolSummary) -> Unit,
-    onMcpResourceSelected: (String, McpResourceSummary) -> Unit,
-    onMcpPromptSelected: (String, McpPromptSummary) -> Unit,
-    expandedMcpRequestIds: Set<String>,
-    onToggleMcpRequest: (String) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
-    onDeleteRequest: (TreeSelection) -> Unit,
     onSettings: (TreeSelection) -> Unit,
-    onExportRequestAsCurl: (String) -> Unit,
-    onExportRequestAsGo: (String) -> Unit,
     onExportPostmanCollection: (String) -> Unit,
     onRefreshOpenApiCollection: (String) -> Unit,
-    onDuplicateRequestBelow: (String) -> Unit,
-    onImportCurlAt: (TreeSelection) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
     hoveredDropTarget: TreeDropTarget?,
-    onTreeDragStart: (TreeDragPayload, Offset) -> Unit,
-    onTreeDragMove: (Offset) -> Unit,
-    onTreeDragEnd: () -> Unit,
 ) {
-    val expanded = expandedCollectionIds.contains(collection.id)
     val isSelected = selectedNode is TreeSelection.Collection && selectedNode.id == collection.id
     val dragActive = dragging != null
     val intoCollTarget = TreeDropTarget.IntoCollection(collection.id)
@@ -595,100 +626,6 @@ private fun CollectionTreeBlock(
             )
         }
     }
-    if (expanded) {
-        val cid = collection.id
-        TreeDropGap(
-            active = dragActive,
-            zoneKey = "fs-$cid-root-0",
-            target = TreeDropTarget.FolderSlot(cid, null, 0),
-            dropRegistry = dropRegistry,
-            hovered = hoveredDropTarget,
-        )
-        collection.folders.forEachIndexed { i, folder ->
-            FolderTreeBlock(
-                collectionId = cid,
-                folder = folder,
-                depth = depth + 1,
-                selectedNode = selectedNode,
-                treeScrollToRequestId = treeScrollToRequestId,
-                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
-                editorBoundRequestId = editorBoundRequestId,
-                expandedFolderIds = expandedFolderIds,
-                runningRequestIds = runningRequestIds,
-                mcpCatalogByRequestId = mcpCatalogByRequestId,
-                onToggleFolder = onToggleFolder,
-                onSelectNode = onSelectNode,
-                onMcpToolSelected = onMcpToolSelected,
-                onMcpResourceSelected = onMcpResourceSelected,
-                onMcpPromptSelected = onMcpPromptSelected,
-                expandedMcpRequestIds = expandedMcpRequestIds,
-                onToggleMcpRequest = onToggleMcpRequest,
-                onBeginTreeRename = onBeginTreeRename,
-                onContextAddFolder = onContextAddFolder,
-                onContextAddRequest = onContextAddRequest,
-                onDeleteRequest = onDeleteRequest,
-                onSettings = onSettings,
-                onExportRequestAsCurl = onExportRequestAsCurl,
-                onExportRequestAsGo = onExportRequestAsGo,
-                onDuplicateRequestBelow = onDuplicateRequestBelow,
-                onImportCurlAt = onImportCurlAt,
-                dragging = dragging,
-                dropRegistry = dropRegistry,
-                hoveredDropTarget = hoveredDropTarget,
-                onTreeDragStart = onTreeDragStart,
-                onTreeDragMove = onTreeDragMove,
-                onTreeDragEnd = onTreeDragEnd,
-            )
-            TreeDropGap(
-                active = dragActive,
-                zoneKey = "fs-$cid-root-${i + 1}",
-                target = TreeDropTarget.FolderSlot(cid, null, i + 1),
-                dropRegistry = dropRegistry,
-                hovered = hoveredDropTarget,
-            )
-        }
-        TreeDropGap(
-            active = dragActive,
-            zoneKey = "rs-$cid-root-0",
-            target = TreeDropTarget.RequestSlot(cid, null, 0),
-            dropRegistry = dropRegistry,
-            hovered = hoveredDropTarget,
-        )
-        collection.rootRequests.forEachIndexed { i, req ->
-            RequestTreeRow(
-                req = req,
-                depth = depth + 1,
-                selectedNode = selectedNode,
-                treeScrollToRequestId = treeScrollToRequestId,
-                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
-                editorBoundRequestId = editorBoundRequestId,
-                runningRequestIds = runningRequestIds,
-                mcpCatalog = mcpCatalogByRequestId[req.id] ?: McpCatalogSummary(),
-                onSelectNode = onSelectNode,
-                onMcpToolSelected = onMcpToolSelected,
-                onMcpResourceSelected = onMcpResourceSelected,
-                onMcpPromptSelected = onMcpPromptSelected,
-                mcpExpanded = req.id in expandedMcpRequestIds,
-                onToggleMcpRequest = onToggleMcpRequest,
-                onBeginTreeRename = onBeginTreeRename,
-                onExportRequestAsCurl = onExportRequestAsCurl,
-                onExportRequestAsGo = onExportRequestAsGo,
-                onDuplicateRequestBelow = onDuplicateRequestBelow,
-                onImportCurlAt = onImportCurlAt,
-                onDeleteRequest = onDeleteRequest,
-                onTreeDragStart = onTreeDragStart,
-                onTreeDragMove = onTreeDragMove,
-                onTreeDragEnd = onTreeDragEnd,
-            )
-            TreeDropGap(
-                active = dragActive,
-                zoneKey = "rs-$cid-root-${i + 1}",
-                target = TreeDropTarget.RequestSlot(cid, null, i + 1),
-                dropRegistry = dropRegistry,
-                hovered = hoveredDropTarget,
-            )
-        }
-    }
 }
 
 @Composable
@@ -697,27 +634,14 @@ private fun FolderTreeBlock(
     folder: UiFolder,
     depth: Int,
     selectedNode: TreeSelection?,
-    treeScrollToRequestId: String?,
-    onTreeScrollToRequestHandled: () -> Unit,
-    editorBoundRequestId: String?,
-    expandedFolderIds: Set<String>,
-    runningRequestIds: Set<String>,
-    mcpCatalogByRequestId: Map<String, McpCatalogSummary>,
+    expanded: Boolean,
     onToggleFolder: (String) -> Unit,
     onSelectNode: (TreeSelection) -> Unit,
-    onMcpToolSelected: (String, McpToolSummary) -> Unit,
-    onMcpResourceSelected: (String, McpResourceSummary) -> Unit,
-    onMcpPromptSelected: (String, McpPromptSummary) -> Unit,
-    expandedMcpRequestIds: Set<String>,
-    onToggleMcpRequest: (String) -> Unit,
     onBeginTreeRename: (TreeSelection, String) -> Unit,
     onContextAddFolder: (TreeSelection) -> Unit,
     onContextAddRequest: (TreeSelection) -> Unit,
     onDeleteRequest: (TreeSelection) -> Unit,
     onSettings: (TreeSelection) -> Unit,
-    onExportRequestAsCurl: (String) -> Unit,
-    onExportRequestAsGo: (String) -> Unit,
-    onDuplicateRequestBelow: (String) -> Unit,
     onImportCurlAt: (TreeSelection) -> Unit,
     dragging: TreeDragPayload?,
     dropRegistry: DropZoneRegistry,
@@ -728,7 +652,6 @@ private fun FolderTreeBlock(
     /** 从祖先文件夹继承下来的颜色（已解析），用于请求与未设置颜色的子文件夹。 */
     inheritedColor: Color? = null,
 ) {
-    val expanded = expandedFolderIds.contains(folder.id)
     val isSelected = selectedNode is TreeSelection.Folder && selectedNode.id == folder.id
     val dragActive = dragging != null
     val intoTarget = TreeDropTarget.IntoFolder(collectionId, folder.id)
@@ -808,102 +731,6 @@ private fun FolderTreeBlock(
             dropTargetHighlight = intoHighlight,
         )
     }
-    if (expanded) {
-        val fid = folder.id
-        TreeDropGap(
-            active = dragActive,
-            zoneKey = "fs-$collectionId-$fid-0",
-            target = TreeDropTarget.FolderSlot(collectionId, fid, 0),
-            dropRegistry = dropRegistry,
-            hovered = hoveredDropTarget,
-        )
-        folder.children.forEachIndexed { i, child ->
-            FolderTreeBlock(
-                collectionId = collectionId,
-                folder = child,
-                depth = depth + 1,
-                selectedNode = selectedNode,
-                treeScrollToRequestId = treeScrollToRequestId,
-                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
-                editorBoundRequestId = editorBoundRequestId,
-                expandedFolderIds = expandedFolderIds,
-                runningRequestIds = runningRequestIds,
-                mcpCatalogByRequestId = mcpCatalogByRequestId,
-                onToggleFolder = onToggleFolder,
-                onSelectNode = onSelectNode,
-                onMcpToolSelected = onMcpToolSelected,
-                onMcpResourceSelected = onMcpResourceSelected,
-                onMcpPromptSelected = onMcpPromptSelected,
-                expandedMcpRequestIds = expandedMcpRequestIds,
-                onToggleMcpRequest = onToggleMcpRequest,
-                onBeginTreeRename = onBeginTreeRename,
-                onContextAddFolder = onContextAddFolder,
-                onContextAddRequest = onContextAddRequest,
-                onDeleteRequest = onDeleteRequest,
-                onSettings = onSettings,
-                onExportRequestAsCurl = onExportRequestAsCurl,
-                onExportRequestAsGo = onExportRequestAsGo,
-                onDuplicateRequestBelow = onDuplicateRequestBelow,
-                onImportCurlAt = onImportCurlAt,
-                dragging = dragging,
-                dropRegistry = dropRegistry,
-                hoveredDropTarget = hoveredDropTarget,
-                onTreeDragStart = onTreeDragStart,
-                onTreeDragMove = onTreeDragMove,
-                onTreeDragEnd = onTreeDragEnd,
-                inheritedColor = nodeColor,
-            )
-            TreeDropGap(
-                active = dragActive,
-                zoneKey = "fs-$collectionId-$fid-${i + 1}",
-                target = TreeDropTarget.FolderSlot(collectionId, fid, i + 1),
-                dropRegistry = dropRegistry,
-                hovered = hoveredDropTarget,
-            )
-        }
-        TreeDropGap(
-            active = dragActive,
-            zoneKey = "rs-$collectionId-$fid-0",
-            target = TreeDropTarget.RequestSlot(collectionId, fid, 0),
-            dropRegistry = dropRegistry,
-            hovered = hoveredDropTarget,
-        )
-        folder.requests.forEachIndexed { i, req ->
-            RequestTreeRow(
-                req = req,
-                depth = depth + 1,
-                selectedNode = selectedNode,
-                treeScrollToRequestId = treeScrollToRequestId,
-                onTreeScrollToRequestHandled = onTreeScrollToRequestHandled,
-                editorBoundRequestId = editorBoundRequestId,
-                runningRequestIds = runningRequestIds,
-                mcpCatalog = mcpCatalogByRequestId[req.id] ?: McpCatalogSummary(),
-                onSelectNode = onSelectNode,
-                onMcpToolSelected = onMcpToolSelected,
-                onMcpResourceSelected = onMcpResourceSelected,
-                onMcpPromptSelected = onMcpPromptSelected,
-                mcpExpanded = req.id in expandedMcpRequestIds,
-                onToggleMcpRequest = onToggleMcpRequest,
-                onBeginTreeRename = onBeginTreeRename,
-                onExportRequestAsCurl = onExportRequestAsCurl,
-                onExportRequestAsGo = onExportRequestAsGo,
-                onDuplicateRequestBelow = onDuplicateRequestBelow,
-                onImportCurlAt = onImportCurlAt,
-                onDeleteRequest = onDeleteRequest,
-                onTreeDragStart = onTreeDragStart,
-                onTreeDragMove = onTreeDragMove,
-                onTreeDragEnd = onTreeDragEnd,
-                inheritedColor = nodeColor,
-            )
-            TreeDropGap(
-                active = dragActive,
-                zoneKey = "rs-$collectionId-$fid-${i + 1}",
-                target = TreeDropTarget.RequestSlot(collectionId, fid, i + 1),
-                dropRegistry = dropRegistry,
-                hovered = hoveredDropTarget,
-            )
-        }
-    }
 }
 
 @Composable
@@ -911,8 +738,6 @@ private fun RequestTreeRow(
     req: UiRequestSummary,
     depth: Int,
     selectedNode: TreeSelection?,
-    treeScrollToRequestId: String?,
-    onTreeScrollToRequestHandled: () -> Unit,
     editorBoundRequestId: String?,
     runningRequestIds: Set<String>,
     mcpCatalog: McpCatalogSummary,
@@ -940,14 +765,7 @@ private fun RequestTreeRow(
     val isMcp = req.method.uppercase() == "MCP"
     val hasMcpChildren = isMcp && !mcpCatalog.isEmpty
     val rowLc = remember(req.id) { LayoutCoordsHolder() }
-    val bringIntoViewRequester = remember(req.id) { BringIntoViewRequester() }
     val payload = TreeDragPayload.Request(req.id)
-    LaunchedEffect(treeScrollToRequestId, req.id) {
-        if (treeScrollToRequestId == null || treeScrollToRequestId != req.id) return@LaunchedEffect
-        delay(32)
-        runCatching { bringIntoViewRequester.bringIntoView() }
-        onTreeScrollToRequestHandled()
-    }
     ContextMenuArea(
         items = {
             listOf(
@@ -1031,7 +849,6 @@ private fun RequestTreeRow(
                 onBeginTreeRename(TreeSelection.Request(req.id), req.name)
             },
             rowExtraModifier = Modifier
-                .bringIntoViewRequester(bringIntoViewRequester)
                 .onGloballyPositioned { rowLc.coords = it },
             dragModifier = Modifier.pointerInput(payload) {
                 detectDragGestures(
@@ -1377,5 +1194,96 @@ private fun collectFolderIds(folders: List<UiFolder>, out: MutableSet<String>) {
     for (f in folders) {
         out += f.id
         collectFolderIds(f.children, out)
+    }
+}
+
+// ── LazyColumn 扁平化 ─────────────────────────────────────
+// 把递归树展平为一维可见行列表，供 LazyColumn 按需渲染。
+
+private sealed interface FlatItem {
+    val key: String
+}
+
+private data class FlatCollection(
+    val collection: UiCollection,
+    val showDivider: Boolean,
+) : FlatItem {
+    override val key = "coll:${collection.id}"
+}
+
+private data class FlatFolder(
+    val collectionId: String,
+    val folder: UiFolder,
+    val depth: Int,
+    val inheritedColor: Color?,
+) : FlatItem {
+    override val key = "folder:${folder.id}"
+}
+
+private data class FlatRequest(
+    val req: UiRequestSummary,
+    val depth: Int,
+    val inheritedColor: Color?,
+) : FlatItem {
+    override val key = "req:${req.id}"
+}
+
+private data class FlatDropGap(
+    val zoneKey: String,
+    val target: TreeDropTarget,
+) : FlatItem {
+    override val key = "gap:$zoneKey"
+}
+
+private fun buildFlatTree(
+    tree: List<UiCollection>,
+    expandedCollectionIds: Set<String>,
+    expandedFolderIds: Set<String>,
+): List<FlatItem> {
+    val out = mutableListOf<FlatItem>()
+    tree.forEachIndexed { index, collection ->
+        out += FlatCollection(collection, showDivider = index != 0)
+        if (collection.id in expandedCollectionIds) {
+            val cid = collection.id
+            out += FlatDropGap("fs-$cid-root-0", TreeDropTarget.FolderSlot(cid, null, 0))
+            collection.folders.forEachIndexed { i, folder ->
+                out += FlatFolder(cid, folder, depth = 1, inheritedColor = null)
+                if (folder.id in expandedFolderIds) {
+                    emitFolderContents(out, cid, folder, depth = 1, inheritedColor = null, expandedFolderIds)
+                }
+                out += FlatDropGap("fs-$cid-root-${i + 1}", TreeDropTarget.FolderSlot(cid, null, i + 1))
+            }
+            out += FlatDropGap("rs-$cid-root-0", TreeDropTarget.RequestSlot(cid, null, 0))
+            collection.rootRequests.forEachIndexed { i, req ->
+                out += FlatRequest(req, depth = 1, inheritedColor = null)
+                out += FlatDropGap("rs-$cid-root-${i + 1}", TreeDropTarget.RequestSlot(cid, null, i + 1))
+            }
+        }
+    }
+    return out
+}
+
+private fun emitFolderContents(
+    out: MutableList<FlatItem>,
+    collectionId: String,
+    folder: UiFolder,
+    depth: Int,
+    inheritedColor: Color?,
+    expandedFolderIds: Set<String>,
+) {
+    val nodeColor = parseHexColorOrNull(folder.color.orEmpty()) ?: inheritedColor
+    val fid = folder.id
+    out += FlatDropGap("fs-$collectionId-$fid-0", TreeDropTarget.FolderSlot(collectionId, fid, 0))
+    folder.children.forEachIndexed { i, child ->
+        out += FlatFolder(collectionId, child, depth + 1, inheritedColor = nodeColor)
+        if (child.id in expandedFolderIds) {
+            emitFolderContents(out, collectionId, child, depth + 1, nodeColor, expandedFolderIds)
+        }
+        out += FlatDropGap("fs-$collectionId-$fid-${i + 1}", TreeDropTarget.FolderSlot(collectionId, fid, i + 1))
+    }
+    out += FlatDropGap("rs-$collectionId-$fid-0", TreeDropTarget.RequestSlot(collectionId, fid, 0))
+    folder.requests.forEachIndexed { i, req ->
+        out += FlatRequest(req, depth + 1, inheritedColor = nodeColor)
+        out += FlatDropGap("rs-$collectionId-$fid-${i + 1}", TreeDropTarget.RequestSlot(collectionId, fid, i + 1))
     }
 }
