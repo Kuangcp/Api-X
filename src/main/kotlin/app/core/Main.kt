@@ -373,6 +373,7 @@ fun App(onExitRequest: () -> Unit) {
                     when {
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.K -> { dialogState.showGlobalSearch = true; true }
                         (event.isCtrlPressed || event.isMetaPressed) && event.key == Key.B -> { treeState.treeSidebarVisible = !treeState.treeSidebarVisible; true }
+                        event.isCtrlPressed && event.key == Key.D -> { treeState.requestDeleteSelection(); true }
                         event.isCtrlPressed && event.key == Key.Enter -> { startRequest(editorState, responseState, mcpConnectionState, mcpSelectionState, environmentState, repository); true }
                         event.key == Key.Escape -> { if (currentSession?.isLoading == true) { cancelActiveRequest(editorState, responseState, environmentState, repository); true } else false }
                         else -> false
@@ -469,6 +470,8 @@ fun App(onExitRequest: () -> Unit) {
                                 onDuplicateRequestBelow = { duplicateRequest(treeState, editorState, repository, it) },
                                 onImportCurlAt = { importCurl(treeState, editorState, responseState, toastState, repository, target = it) },
                                 onApplyTreeDrop = { payload, target -> applyTreeDrop(treeState, repository, payload, target) },
+                                externalDeleteRequest = treeState.deleteRequestTarget,
+                                onExternalDeleteRequestConsumed = { treeState.deleteRequestTarget = null },
                             )
                             var treeDragStartRatio by remember { mutableStateOf(0f) }
                             var treeDragStartWidth by remember { mutableStateOf(1f) }

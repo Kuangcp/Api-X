@@ -19,6 +19,7 @@ class TreeState(
     var treeSplitRatio by mutableStateOf(0.2f)
     var treeSidebarVisible by mutableStateOf(true)
     var treeScrollToRequestId by mutableStateOf<String?>(null)
+    var deleteRequestTarget by mutableStateOf<TreeSelection?>(null)
 
     fun refresh() {
         tree = repository.loadTree()
@@ -30,6 +31,12 @@ class TreeState(
 
     fun toggleFolder(id: String) {
         expandedFolderIds = if (id in expandedFolderIds) expandedFolderIds - id else expandedFolderIds + id
+    }
+
+    /** 快捷键删除请求/文件夹：把当前选中项作为待删除目标，交由侧栏弹出确认框。 */
+    fun requestDeleteSelection() {
+        val sel = treeSelection
+        deleteRequestTarget = if (sel is TreeSelection.Request || sel is TreeSelection.Folder) sel else null
     }
 
     fun addFolderAt(at: TreeSelection) {

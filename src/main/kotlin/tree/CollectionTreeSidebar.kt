@@ -200,6 +200,9 @@ fun CollectionTreeSidebar(
     folderAddEnabled: Boolean,
     requestAddEnabled: Boolean,
     modifier: Modifier = Modifier,
+    /** 外部（如 Ctrl+D 快捷键）请求删除当前选中项；非 null 时弹出删除确认框。 */
+    externalDeleteRequest: TreeSelection? = null,
+    onExternalDeleteRequestConsumed: () -> Unit = {},
 ) {
     var renameTarget by remember { mutableStateOf<TreeSelection?>(null) }
     var renameText by remember { mutableStateOf("") }
@@ -211,6 +214,13 @@ fun CollectionTreeSidebar(
         folderDeleteCounts = if (deleteTarget is TreeSelection.Folder && onCountFolderContents != null) {
             onCountFolderContents(deleteTarget as TreeSelection.Folder)
         } else null
+    }
+
+    LaunchedEffect(externalDeleteRequest) {
+        if (externalDeleteRequest != null) {
+            deleteTarget = externalDeleteRequest
+            onExternalDeleteRequestConsumed()
+        }
     }
 
     val dropRegistry = remember { DropZoneRegistry() }
@@ -512,6 +522,8 @@ fun CollectionTreeSidebar(
         } else {
             "删除「$label」？子项会一并删除。"
         }
+        val confirmFocus = remember { FocusRequester() }
+        LaunchedEffect(target) { confirmFocus.requestFocus() }
         AlertDialog(
             onDismissRequest = { deleteTarget = null },
             title = { Text("确认删除", fontSize = 16.sp) },
@@ -521,7 +533,8 @@ fun CollectionTreeSidebar(
                     onClick = {
                         onDelete(target)
                         deleteTarget = null
-                    }
+                    },
+                    modifier = Modifier.focusRequester(confirmFocus),
                 ) { Text("删除") }
             },
             dismissButton = {
