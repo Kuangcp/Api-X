@@ -420,6 +420,7 @@ fun applyTreeDrop(
             is TreeDropTarget.IntoCollection -> { treeState.expandedCollectionIds = treeState.expandedCollectionIds + target.collectionId }
             is TreeDropTarget.FolderSlot -> { treeState.expandedCollectionIds = treeState.expandedCollectionIds + target.collectionId; target.parentFolderId?.let { treeState.expandedFolderIds = treeState.expandedFolderIds + it } }
             is TreeDropTarget.RequestSlot -> { treeState.expandedCollectionIds = treeState.expandedCollectionIds + target.collectionId; target.folderId?.let { treeState.expandedFolderIds = treeState.expandedFolderIds + it } }
+            is TreeDropTarget.CollectionSlot -> {}
         }
     }
     return ok

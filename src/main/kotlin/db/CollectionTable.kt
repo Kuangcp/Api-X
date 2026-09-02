@@ -160,4 +160,22 @@ internal class CollectionTable(private val conn: Connection, private val lock: A
             }
         }
     }
+
+    /** 调整集合顺序：把 [id] 移动到第 [insertIndex] 个位置。 */
+    fun moveCollection(id: String, insertIndex: Int): Boolean = synchronized(lock) {
+        val ids = listCollectionIds().toMutableList()
+        if (!ids.remove(id)) return@synchronized false
+        val idx = insertIndex.coerceIn(0, ids.size)
+        ids.add(idx, id)
+        val now = System.currentTimeMillis()
+        ids.forEachIndexed { i, cid ->
+            conn.prepareStatement("UPDATE collections SET sort_order = ?, updated_at = ? WHERE id = ?").use { ps ->
+                ps.setInt(1, i)
+                ps.setLong(2, now)
+                ps.setString(3, cid)
+                ps.executeUpdate()
+            }
+        }
+        true
+    }
 }

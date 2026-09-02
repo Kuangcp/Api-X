@@ -57,14 +57,15 @@ sealed class TreeSelection {
     data class Request(val id: String) : TreeSelection()
 }
 
-/** 侧边栏拖拽源（仅 Folder / Request 可拖动） */
+/** 侧边栏拖拽源（Collection / Folder / Request 均可拖动） */
 sealed class TreeDragPayload {
+    data class Collection(val id: String) : TreeDragPayload()
     data class Folder(val id: String) : TreeDragPayload()
     data class Request(val id: String) : TreeDragPayload()
 }
 
 /**
- * 拖放目标：同级文件夹槽位、同级请求槽位、放入某文件夹内（末尾）。
+ * 拖放目标：同级文件夹槽位、同级请求槽位、放入某文件夹内（末尾）、集合排序槽位。
  * [insertIndex] 为当前父级下子项列表中的插入下标（0 表示最前）。
  */
 sealed class TreeDropTarget {
@@ -88,5 +89,10 @@ sealed class TreeDropTarget {
     /** 放入集合根（仅支持同一集合内：根下文件夹末尾或根下请求末尾） */
     data class IntoCollection(
         val collectionId: String,
+    ) : TreeDropTarget()
+
+    /** 集合排序：插入到第 [insertIndex] 个集合的位置。 */
+    data class CollectionSlot(
+        val insertIndex: Int,
     ) : TreeDropTarget()
 }

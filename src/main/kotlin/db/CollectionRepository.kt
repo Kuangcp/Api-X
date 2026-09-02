@@ -144,6 +144,10 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
 
     fun applyTreeDrop(payload: TreeDragPayload, target: TreeDropTarget): Boolean = synchronized(lock) {
         when (payload) {
+            is TreeDragPayload.Collection -> when (target) {
+                is TreeDropTarget.CollectionSlot -> collectionTable.moveCollection(payload.id, target.insertIndex)
+                else -> false
+            }
             is TreeDragPayload.Folder -> when (target) {
                 is TreeDropTarget.FolderSlot ->
                     folderTable.moveFolder(payload.id, target.parentFolderId, target.insertIndex, target.collectionId)
@@ -153,7 +157,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 }
                 is TreeDropTarget.IntoCollection ->
                     folderTable.moveFolder(payload.id, null, 0, target.collectionId)
-                is TreeDropTarget.RequestSlot -> false
+                else -> false
             }
             is TreeDragPayload.Request -> when (target) {
                 is TreeDropTarget.RequestSlot ->
@@ -164,7 +168,7 @@ class CollectionRepository(dbPath: Path) : AutoCloseable {
                 }
                 is TreeDropTarget.IntoCollection ->
                     requestTable.moveRequest(payload.id, null, 0, target.collectionId)
-                is TreeDropTarget.FolderSlot -> false
+                else -> false
             }
         }
     }
